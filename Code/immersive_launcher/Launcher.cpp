@@ -10,6 +10,7 @@
 #include "Utils/FileVersion.inl"
 
 #include "oobe/PathSelection.h"
+#include "SystemDllPreload.h"
 #include "oobe/PathArgument.h"
 #include "oobe/SupportChecks.h"
 #include "steam/SteamLoader.h"
@@ -70,6 +71,7 @@ void SetMaxstdio()
 
 int StartUp(int argc, char** argv)
 {
+    PreloadSystemDlls();
     bool askSelect = (GetAsyncKeyState(VK_SPACE) & 0x8000);
     if (!HandleArguments(argc, argv, askSelect))
         return -1;
