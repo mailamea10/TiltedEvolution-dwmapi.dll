@@ -1,0 +1,67 @@
+name: Legacy 1.5.97 build
+
+# Compiles the 1.5.x runtime (SKYRIM_TARGET_LEGACY) and the SKSE bootstrap plugin.
+# This is a compile check plus the two DLLs as a downloadable artifact; the release
+# package is assembled in a later step once this builds.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'feature/legacy-**'
+
+jobs:
+  build-legacy:
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # full history is needed to create the version string (BuildInfo.h)
+          fetch-depth: 0
+
+      - name: Checkout submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --force --recursive --depth=1
+
+      - name: Cache xmake dependencies
+        uses: actions/cache@v6
+        with:
+          path: ~/AppData/Local/.xmake/packages
+          key: ${{ runner.os }}-xmake-${{ hashFiles('**/xmake.lua') }}
+
+      - name: Setup xmake
+        uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: 3.1.0
+          actions-cache-folder: '.xmake-cache'
+          actions-cache-key: windows-2022
+
+      - name: Configure xmake and install dependencies
+        run: xmake config --plat=windows --arch=x64 --mode=releasedbg --yes -vD
+
+      - name: Build legacy runtime DLL
+        run: xmake build -y -vD SkyrimTogetherClientDllLegacy
+
+      - name: Build SKSE bootstrap plugin
+        run: xmake build -y -vD SkyrimTogetherSKSE
+
+      - name: List build outputs
+        if: always()
+        run: find build -maxdepth 5 \( -name 'SkyrimTogetherRuntime*' -o -name 'SkyrimTogetherSKSE*' \) | sort
+
+      - name: Upload legacy binaries
+        uses: actions/upload-artifact@v7
+        with:
+          name: SkyrimTogether-legacy-1.5.97-binaries
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            build/windows/x64/releasedbg/SkyrimTogetherRuntime_1_5.dll
+            build/windows/x64/releasedbg/SkyrimTogetherRuntime_1_5.pdb
+            build/windows/x64/releasedbg/SkyrimTogetherSKSE.dll
+            build/windows/x64/releasedbg/SkyrimTogetherSKSE.pdb
