@@ -53,4 +53,5 @@ private:
     ServerSettings m_serverSettings{};
 
     std::chrono::high_resolution_clock::time_point m_lastFrameTime;
+    bool m_hasTicked{false};
 };
