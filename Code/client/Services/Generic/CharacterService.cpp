@@ -545,6 +545,9 @@ void CharacterService::OnCharacterSpawn(const CharacterSpawnRequest& acMessage) 
             FaceGenSystem::Setup(m_world, *entity, acMessage.FaceTints);
         }
 
+        // The game builds the head during Actor creation/attach, which is before the
+        // WaitingFor3D component exists, so the window has to open here.
+        SetRemoteFaceGenForce(true);
         pActor = Actor::Create(pNpc);
     }
     else
@@ -1582,14 +1585,17 @@ void CharacterService::SetRemoteFaceGenForce(const bool aForce) const noexcept
 
     auto* pSetting = INISettingCollection::Get()->GetSetting("bUseFaceGenPreprocessedHeads:General");
     if (!pSetting)
+    {
+        spdlog::warn("{}: bUseFaceGenPreprocessedHeads not found, remote heads may not render", __FUNCTION__);
         return;
+    }
 
     if (aForce)
         m_faceGenPreprocessedBackup = pSetting->data;
 
     pSetting->data = aForce ? 0 : m_faceGenPreprocessedBackup;
     m_faceGenForced = aForce;
-    spdlog::debug("{}: bUseFaceGenPreprocessedHeads = {} (was {})", __FUNCTION__, pSetting->data, m_faceGenPreprocessedBackup);
+    spdlog::info("{}: bUseFaceGenPreprocessedHeads = {} (was {})", __FUNCTION__, pSetting->data, m_faceGenPreprocessedBackup);
 }
 
 void CharacterService::UpdateRemoteFaceGenWindow() noexcept
@@ -1651,6 +1657,7 @@ Actor* CharacterService::CreateCharacterForEntity(entt::entity aEntity) const no
             FaceGenSystem::Setup(m_world, aEntity, acMessage.FaceTints);
         }
 
+        SetRemoteFaceGenForce(true);
         pActor = Actor::Create(pNpc);
     }
 
