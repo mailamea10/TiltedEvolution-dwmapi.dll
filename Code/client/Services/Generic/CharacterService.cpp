@@ -1611,6 +1611,24 @@ void CharacterService::UpdateRemoteFaceGenWindow() noexcept
         }
     }
 
+    // After the 3D appears the face node can still be pending, so keep the window open briefly
+    // and report what the engine ended up with.
+    const auto now = std::chrono::steady_clock::now();
+    for (auto it = m_faceGenHolds.begin(); it != m_faceGenHolds.end();)
+    {
+        if (now < it->Deadline)
+        {
+            needsRuntimeFaceGen = true;
+            ++it;
+            continue;
+        }
+
+        auto* pActor = Cast<Actor>(TESForm::GetById(it->FormId));
+        spdlog::info("{}: actor {:X} face node {} after the window", __FUNCTION__, it->FormId,
+                     pActor && pActor->GetFaceGenNiNode() ? "present" : "MISSING");
+        it = m_faceGenHolds.erase(it);
+    }
+
     SetRemoteFaceGenForce(needsRuntimeFaceGen);
 }
 
@@ -2006,6 +2024,16 @@ void CharacterService::RunRemoteUpdates() noexcept
             pActor->FixVampireLordModel();
 
         readyEntities.push_back(entity);
+
+        if (waitingFor3D.SpawnRequest.FormId == GameId{})
+        {
+            // Head built from the wire: ask the engine for a runtime face rebuild while the window is open,
+            // and keep it open until the face node has had time to attach.
+            m_faceGenHolds.push_back({pActor->formID, std::chrono::steady_clock::now() + 3s});
+            SetRemoteFaceGenForce(true);
+            pActor->QueueUpdate();
+            spdlog::info("Queued runtime face rebuild for actor {:X}, face node {}", pActor->formID, pActor->GetFaceGenNiNode() ? "present" : "missing");
+        }
 
         spdlog::info("Applied 3D for actor, form id: {:X}, dead: {}", pActor->formID, pActor->IsDead());
     }
