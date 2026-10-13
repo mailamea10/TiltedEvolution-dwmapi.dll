@@ -6,6 +6,11 @@ name: Legacy 1.5.97 build
 
 on:
   workflow_dispatch:
+    inputs:
+      server_version:
+        description: 'Version string the server compares against (the STR server release this build must talk to)'
+        required: false
+        default: 'v1.8.5'
   push:
     branches:
       - 'feature/legacy-**'
@@ -22,6 +27,17 @@ jobs:
         with:
           # full history is needed to create the version string (BuildInfo.h)
           fetch-depth: 0
+
+      # The client reports xmake's GIT_TAG as its version and the server refuses
+      # any client whose string differs from its own ("expects version v1.8.5 but
+      # you are on version none"). This fork carries no release tags, so tag the
+      # build with the server version it is meant to talk to.
+      - name: Pin protocol version
+        env:
+          SERVER_VERSION: ${{ github.event.inputs.server_version || 'v1.8.5' }}
+        run: |
+          git tag -f "$SERVER_VERSION" HEAD
+          echo "client will report version: $(git describe --tags --abbrev=0)"
 
       - name: Checkout submodules
         run: |
@@ -65,6 +81,12 @@ jobs:
           # without downloading the full job log
           grep -E "error C[0-9]+|error LNK[0-9]+|fatal error|: error:" build-legacy.log | sort -u | head -40 | while IFS= read -r line; do echo "::error::${line:0:900}"; done
           exit $status
+
+      - name: Show reported version
+        if: always()
+        run: |
+          echo "::notice::$(grep -h BUILD_COMMIT build/BuildInfo.h 2>/dev/null | head -1)"
+          echo "::notice::$(find build -name BuildInfo.h -exec grep -H BUILD_COMMIT {} \; | head -3 | tr '\n' ' ')"
 
       - name: Build SKSE bootstrap plugin
         run: xmake build -y -vD SkyrimTogetherSKSE
