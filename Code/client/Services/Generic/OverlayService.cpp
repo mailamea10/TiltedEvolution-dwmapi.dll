@@ -404,6 +404,8 @@ void OverlayService::OnConnectionError(const ConnectionErrorEvent& acConnectedEv
 
 void OverlayService::OnPlayerJoined(const NotifyPlayerJoined& acMessage) noexcept
 {
+    spdlog::info("player joined: id {:x}, name '{}'", acMessage.PlayerId, acMessage.Username.c_str());
+
     auto pArguments = CefListValue::Create();
     pArguments->SetInt(0, acMessage.PlayerId);
     pArguments->SetString(1, acMessage.Username.c_str());

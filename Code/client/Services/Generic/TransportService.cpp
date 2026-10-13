@@ -287,6 +287,17 @@ void TransportService::OnConnected()
         request.Username = "Some dragon boi";
     }
 
+    // An empty name is accepted by the server but gives the player nothing to be
+    // listed or addressed by, so every other client shows "nobody here". Say what
+    // was read and never send an empty one.
+    if (request.Username.empty())
+    {
+        spdlog::warn("the player's name read back empty (base form {}), sending a placeholder instead",
+                     pNpc ? "is an NPC" : "is not an NPC");
+        request.Username = "Dragonborn";
+    }
+    spdlog::info("authenticating as '{}'", request.Username.c_str());
+
     auto* const cpModManager = ModManager::Get();
 
     for (auto* pMod : cpModManager->mods)
