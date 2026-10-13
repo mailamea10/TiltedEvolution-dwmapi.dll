@@ -106,3 +106,4 @@ jobs:
             build/windows/x64/releasedbg/SkyrimTogetherRuntime_1_5.pdb
             build/windows/x64/releasedbg/SkyrimTogetherSKSE.dll
             build/windows/x64/releasedbg/SkyrimTogetherSKSE.pdb
+            build/windows/x64/releasedbg/TPProcess.exe
