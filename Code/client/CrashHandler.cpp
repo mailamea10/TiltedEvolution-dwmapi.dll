@@ -2,6 +2,8 @@
 #include "CrashHandler.h"
 #include <DbgHelp.h>
 #include <Windows.h>
+#include <cstdio>
+#include <cstring>
 #include <chrono>
 #include <filesystem>
 #include <iomanip>
@@ -19,6 +21,27 @@ std::string SerializeTimePoint(const time_point& time, const std::string& format
     std::stringstream ss;
     ss << std::put_time(&tm, format.c_str());
     return ss.str();
+}
+
+// "<module>+0x<offset>" for an address that lies inside a loaded module,
+// "unmapped" otherwise; lets every logged address be tied back to an image.
+void FormatModuleOffset(uintptr_t apAddress, char (&aBuf)[MAX_PATH + 48])
+{
+    HMODULE hMod = nullptr;
+    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           reinterpret_cast<LPCWSTR>(apAddress), &hMod) &&
+        hMod)
+    {
+        char modName[MAX_PATH] = {};
+        if (GetModuleFileNameA(hMod, modName, MAX_PATH))
+        {
+            const char* base = strrchr(modName, '\\');
+            sprintf_s(aBuf, sizeof(aBuf), "%s+0x%llx", base ? base + 1 : modName,
+                      apAddress - reinterpret_cast<uintptr_t>(hMod));
+            return;
+        }
+    }
+    sprintf_s(aBuf, sizeof(aBuf), "unmapped 0x%llx", apAddress);
 }
 
 LONG WINAPI VectoredExceptionHandler(PEXCEPTION_POINTERS pExceptionInfo)
