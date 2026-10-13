@@ -28,11 +28,16 @@ jobs:
           git submodule sync --recursive
           git submodule update --init --force --recursive --depth=1
 
-      - name: Cache xmake dependencies
-        uses: actions/cache@v6
+      # restore + save are split so the dependency cache is also saved when a later
+      # step fails (the plain cache action only saves after a fully green job)
+      - name: Restore xmake packages
+        id: pkgcache
+        uses: actions/cache/restore@v6
         with:
           path: ~/AppData/Local/.xmake/packages
-          key: ${{ runner.os }}-xmake-${{ hashFiles('**/xmake.lua') }}
+          key: ${{ runner.os }}-xmake-pkgs-${{ hashFiles('**/xmake.lua') }}
+          restore-keys: |
+            ${{ runner.os }}-xmake-pkgs-
 
       - name: Setup xmake
         uses: xmake-io/github-action-setup-xmake@v1
@@ -43,6 +48,13 @@ jobs:
 
       - name: Configure xmake and install dependencies
         run: xmake config --plat=windows --arch=x64 --mode=releasedbg --yes -vD
+
+      - name: Save xmake packages
+        if: always() && steps.pkgcache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/AppData/Local/.xmake/packages
+          key: ${{ runner.os }}-xmake-pkgs-${{ hashFiles('**/xmake.lua') }}
 
       - name: Build legacy runtime DLL
         run: xmake build -y -vD SkyrimTogetherClientDllLegacy
