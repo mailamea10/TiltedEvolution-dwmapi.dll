@@ -122,15 +122,6 @@ private:
     mutable bool m_faceGenForced = false;
     mutable uint64_t m_faceGenPreprocessedBackup = 0;
 
-    // Remote actors whose head was built from the wire. The window stays open for a short
-    // while after their 3D appears: the engine finishes the face node after the body node.
-    struct FaceGenHold
-    {
-        uint32_t FormId;
-        std::chrono::steady_clock::time_point Deadline;
-    };
-    mutable Vector<FaceGenHold> m_faceGenHolds{};
-
     // TODO: revamp this, read the local anim var like vampire lord?
     struct WeaponDrawData
     {
