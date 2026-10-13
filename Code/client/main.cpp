@@ -8,6 +8,8 @@
 
 #include <base/dialogues/win/TaskDialog.h>
 
+#include <GameRoot.h>
+
 #ifndef SKYRIM_TARGET_LEGACY
 // 1 - Steam, 2 - GOG
 inline constexpr std::string_view kSupportedGameVersions[2] = {"1.6.1170.0", "1.6.1179.0"};
@@ -16,6 +18,16 @@ inline constexpr std::string_view kSupportedGameVersions[2] = {"1.6.1170.0", "1.
 std::unique_ptr<TiltedOnlineApp> g_appInstance{nullptr};
 
 extern HICON g_SharedWindowIcon;
+
+namespace
+{
+std::filesystem::path s_gameRoot;
+} // namespace
+
+const std::filesystem::path& GetGameRoot()
+{
+    return s_gameRoot;
+}
 
 static void ShowAddressLibraryError(const wchar_t* apGamePath)
 {
@@ -72,6 +84,8 @@ static void ShowIncompatibleVersionError(const char* apDetectedGameVersion, cons
 
 void RunTiltedInit(const std::filesystem::path& acGamePath, const String& aExeVersion)
 {
+    s_gameRoot = acGamePath;
+
     if (!VersionDb::Get().Load(acGamePath, aExeVersion))
     {
         ShowAddressLibraryError(acGamePath.c_str());
