@@ -116,6 +116,15 @@ private:
 
     float m_cachedExperience = 0.f;
 
+    // Remote actors built from the wire, to be inspected once their face node had time to attach.
+    struct HeadDiagnostic
+    {
+        uint32_t FormId;
+        std::chrono::steady_clock::time_point Deadline;
+    };
+    mutable Vector<HeadDiagnostic> m_headDiagnostics{};
+    void RunHeadDiagnostics() const noexcept;
+
     // TODO: revamp this, read the local anim var like vampire lord?
     struct WeaponDrawData
     {
