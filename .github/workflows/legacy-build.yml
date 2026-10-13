@@ -89,7 +89,9 @@ jobs:
           echo "::notice::$(find build -name BuildInfo.h -exec grep -H BUILD_COMMIT {} \; | head -3 | tr '\n' ' ')"
 
       - name: Build SKSE bootstrap plugin
-        run: xmake build -y -vD SkyrimTogetherSKSE
+        run: |
+          xmake build -y -vD SkyrimTogetherSKSE
+          xmake build -y -vD TPProcess
 
       - name: List build outputs
         if: always()
