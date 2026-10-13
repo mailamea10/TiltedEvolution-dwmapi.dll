@@ -297,6 +297,7 @@ void CharacterService::OnActorRemoved(const ActorRemovedEvent& acEvent) noexcept
 
 void CharacterService::OnUpdate(const UpdateEvent& acUpdateEvent) noexcept
 {
+    UpdateRemoteFaceGenWindow();
     RunSpawnUpdates();
     RunLocalUpdates();
     RunFactionsUpdates();
@@ -1572,6 +1573,39 @@ void CharacterService::CancelServerAssignment(const entt::entity aEntity, const 
 
         m_world.remove<LocalAnimationComponent, LocalComponent>(aEntity);
     }
+}
+
+void CharacterService::SetRemoteFaceGenForce(const bool aForce) const noexcept
+{
+    if (m_faceGenForced == aForce)
+        return;
+
+    auto* pSetting = INISettingCollection::Get()->GetSetting("bUseFaceGenPreprocessedHeads:General");
+    if (!pSetting)
+        return;
+
+    if (aForce)
+        m_faceGenPreprocessedBackup = pSetting->data;
+
+    pSetting->data = aForce ? 0 : m_faceGenPreprocessedBackup;
+    m_faceGenForced = aForce;
+    spdlog::debug("{}: bUseFaceGenPreprocessedHeads = {} (was {})", __FUNCTION__, pSetting->data, m_faceGenPreprocessedBackup);
+}
+
+void CharacterService::UpdateRemoteFaceGenWindow() noexcept
+{
+    bool needsRuntimeFaceGen = false;
+    const auto waitingView = m_world.view<WaitingFor3D, RemoteComponent>();
+    for (auto entity : waitingView)
+    {
+        if (waitingView.get<WaitingFor3D>(entity).SpawnRequest.FormId == GameId{})
+        {
+            needsRuntimeFaceGen = true;
+            break;
+        }
+    }
+
+    SetRemoteFaceGenForce(needsRuntimeFaceGen);
 }
 
 Actor* CharacterService::CreateCharacterForEntity(entt::entity aEntity) const noexcept

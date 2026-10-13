@@ -109,12 +109,18 @@ private:
     void RunSpawnUpdates() const noexcept;
     void RunExperienceUpdates() noexcept;
     void ApplyCachedWeaponDraws(const UpdateEvent& acUpdateEvent) noexcept;
+    void UpdateRemoteFaceGenWindow() noexcept;
+    void SetRemoteFaceGenForce(bool aForce) const noexcept;
 
     World& m_world;
     entt::dispatcher& m_dispatcher;
     TransportService& m_transport;
 
     float m_cachedExperience = 0.f;
+
+    // bUseFaceGenPreprocessedHeads must be 0 while wire-built (custom race) remote actors wait for 3D
+    mutable bool m_faceGenForced = false;
+    mutable uint64_t m_faceGenPreprocessedBackup = 0;
 
     // TODO: revamp this, read the local anim var like vampire lord?
     struct WeaponDrawData
