@@ -5,10 +5,6 @@ target("TPProcess")
 
     if is_plat("windows") then
         add_ldflags("/subsystem:windows")
-        -- libcef.dll is delay-loaded so WinMain can pin the genuine system DLLs
-        -- (see PinSystemLibraries) before Chromium pulls in anything by name
-        add_ldflags("/DELAYLOAD:libcef.dll")
-        add_syslinks("delayimp")
     end
 
     add_includedirs(
