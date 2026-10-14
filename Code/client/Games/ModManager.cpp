@@ -62,8 +62,46 @@ TESObjectREFR* ModManager::SpawnReference(TESBoundObject* apBaseForm, NiPoint3& 
     return TESObjectREFR::GetByHandle(refrHandle);
 }
 
+Vector<Mod*> ModManager::GetLoadedMods() const noexcept
+{
+    Vector<Mod*> result;
+
+    // The compiled arrays hold exactly the plugins in the load order. The raw file list can carry
+    // extra entries (seen on 1.5.97 with large load orders: ~1700 nameless entries that hid real
+    // plugins), so it is only the fallback.
+    const bool arraysLookValid = loadedMods.data && loadedMods.length > 0 && loadedMods.length <= 0xFF &&
+                                 loadedLiteMods.length <= 0x1000 && (loadedLiteMods.length == 0 || loadedLiteMods.data);
+
+    if (arraysLookValid)
+    {
+        for (uint32_t i = 0; i < loadedMods.length; ++i)
+            if (auto* pMod = loadedMods.data[i])
+                result.push_back(pMod);
+
+        for (uint32_t i = 0; i < loadedLiteMods.length; ++i)
+            if (auto* pMod = loadedLiteMods.data[i])
+                result.push_back(pMod);
+
+        return result;
+    }
+
+    for (auto* pMod : const_cast<GameList<Mod>&>(mods))
+    {
+        if (pMod && pMod->IsLoaded())
+            result.push_back(pMod);
+    }
+
+    return result;
+}
+
 Mod* ModManager::GetByName(const char* acpName) const noexcept
 {
+    for (auto* pMod : GetLoadedMods())
+    {
+        if (_stricmp(acpName, pMod->filename) == 0)
+            return pMod;
+    }
+
     auto pEntry = &mods.entry;
 
     while (pEntry && pEntry->data)

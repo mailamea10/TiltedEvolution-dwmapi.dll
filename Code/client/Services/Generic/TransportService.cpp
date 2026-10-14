@@ -301,16 +301,25 @@ void TransportService::OnConnected()
 
     auto* const cpModManager = ModManager::Get();
 
-    for (auto* pMod : cpModManager->mods)
+    const auto loadedMods = cpModManager->GetLoadedMods();
+    uint32_t namelessMods = 0;
+    for (auto* pMod : loadedMods)
     {
-        if (!pMod->IsLoaded())
+        if (pMod->filename[0] == '\0')
+        {
+            if (namelessMods++ < 5)
+                spdlog::warn("load order entry without a file name: id {:X}, lite {}, flags {:X}", pMod->GetId(), pMod->IsLite(), pMod->flags);
             continue;
+        }
 
         auto& entry = request.UserMods.ModList.emplace_back();
         entry.Id = pMod->GetId();
         entry.IsLite = pMod->IsLite();
         entry.Filename = pMod->filename;
     }
+
+    spdlog::info("sending {} plugins ({} standard, {} light compiled; {} in the file list; {} skipped without a name)", request.UserMods.ModList.size(),
+                 cpModManager->loadedMods.length, cpModManager->loadedLiteMods.length, cpModManager->mods.Size(), namelessMods);
 
     auto& modSystem = m_world.GetModSystem();
     if (pPlayer->GetWorldSpace())

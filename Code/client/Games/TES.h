@@ -111,6 +111,10 @@ struct ModManager
     uint32_t Spawn(NiPoint3& aPosition, NiPoint3& aRotation, TESObjectCELL* apParentCell, TESWorldSpace* apWorldSpace, Actor* apCharacter) noexcept;
     TESObjectREFR* SpawnReference(TESBoundObject* apBaseForm, NiPoint3& aPosition, NiPoint3& aRotation, TESObjectCELL* apParentCell, TESWorldSpace* apWorldSpace) noexcept;
     Mod* GetByName(const char* acpName) const noexcept;
+
+    // The plugins the engine actually compiled into the load order: standard ones first,
+    // then light ones. Falls back to the raw file list when the compiled arrays look wrong.
+    Vector<Mod*> GetLoadedMods() const noexcept;
     TESObjectCELL* GetCellFromCoordinates(int32_t aX, int32_t aY, TESWorldSpace* aWorldSpace, bool aSpawnCell) noexcept;
 
     // Form arrays start at 0x10 and are indexed by FormType, 0x18 bytes each.
@@ -120,11 +124,15 @@ struct ModManager
     GameArray<TESQuest*> quests;
     uint8_t pad760[0xD60 - 0x760];
     GameList<Mod> mods;
+    GameArray<Mod*> loadedMods;     // compiled standard plugins, indexed by compile index
+    GameArray<Mod*> loadedLiteMods; // compiled light plugins, indexed by light index
 };
 
 static_assert(offsetof(ModManager, factions) == 0x118);
 static_assert(offsetof(ModManager, quests) == 0x748);
 static_assert(offsetof(ModManager, mods) == 0xD60);
+static_assert(offsetof(ModManager, loadedMods) == 0xD70);
+static_assert(offsetof(ModManager, loadedLiteMods) == 0xD88);
 
 struct Setting
 {
