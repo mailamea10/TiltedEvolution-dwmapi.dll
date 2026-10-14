@@ -49,7 +49,11 @@ struct Projectile : TESObjectREFR
         bool bForceConeOfFire;       // unsure // usually false
     };
 
-    uint8_t unkA0[0x120 - sizeof(TESObjectREFR)];
+    // Projectile's own data starts right after TESObjectREFR, which is 8 bytes smaller on
+    // 1.5.x, so every field below sits 8 bytes earlier there (fPower: 0x190 on 1.6.x,
+    // 0x188 on 1.5.97). Fixed absolute offsets made 1.5.97 write the power into the
+    // range field, so remote spell projectiles expired as soon as they were launched.
+    uint8_t unkA0[0x80];
     void* pActorCause;
     uint32_t hShooter;
     uint8_t unk[0x190 - 0x12C];
@@ -63,4 +67,7 @@ struct Projectile : TESObjectREFR
 };
 
 static_assert(sizeof(Projectile::LaunchData) == 0xA8);
+static_assert(offsetof(Projectile, fPower) == sizeof(TESObjectREFR) + 0xF0);
+#ifndef SKYRIM_TARGET_LEGACY
 static_assert(offsetof(Projectile, fPower) == 0x190);
+#endif

@@ -62,6 +62,17 @@ void AnimationSystem::Update(World& aWorld, Actor* apActor, RemoteAnimationCompo
 
         const auto result = ActorMediator::Get()->ForceAction(&actionData);
 
+        // Temporary: remote casting animations are unreliable on 1.5.97, log what the magic actions do.
+        {
+            const std::string_view cEventName = first.EventName.c_str();
+            if (cEventName.find("Cast") != std::string_view::npos || cEventName.find("Spell") != std::string_view::npos ||
+                cEventName.find("Magic") != std::string_view::npos || cEventName.find("MLh") != std::string_view::npos ||
+                cEventName.find("MRh") != std::string_view::npos)
+            {
+                spdlog::info("[magicdiag] remote {:X} action {:X} event '{}' -> {}", apActor->formID, actionId, first.EventName.c_str(), result);
+            }
+        }
+
         if (aAnimationComponent.ReplayCount > 0)
             aAnimationComponent.ReplayCount--;
 

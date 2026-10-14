@@ -231,7 +231,8 @@ void MagicService::OnNotifySpellCast(const NotifySpellCast& acMessage) const noe
 
     pCaster->CastSpellImmediate(pSpell, false, pDesiredTarget, 1.0f, false, 0.0f);
 
-    spdlog::debug("Successfully casted remote spell");
+    spdlog::info("[magicdiag] remote cast {:X} spell {:X} source {} target {:X}", pActor->formID, pSpell->formID, acMessage.CastingSource,
+                 pDesiredTarget ? pDesiredTarget->formID : 0u);
 }
 
 void MagicService::OnInterruptCastEvent(const InterruptCastEvent& acEvent) const noexcept
