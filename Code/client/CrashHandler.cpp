@@ -44,6 +44,21 @@ void FormatModuleOffset(uintptr_t apAddress, char (&aBuf)[MAX_PATH + 48])
     sprintf_s(aBuf, sizeof(aBuf), "unmapped 0x%llx", apAddress);
 }
 
+// SEH guard kept in its own function: __try cannot live in a function that
+// needs C++ object unwinding.
+static bool TryReadStackSlot(const uintptr_t* apSlot, uintptr_t& aValue)
+{
+    __try
+    {
+        aValue = *apSlot;
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return false;
+    }
+}
+
 LONG WINAPI VectoredExceptionHandler(PEXCEPTION_POINTERS pExceptionInfo)
 {
     static int alreadyCrashed = 0;
@@ -63,6 +78,38 @@ LONG WINAPI VectoredExceptionHandler(PEXCEPTION_POINTERS pExceptionInfo)
                       pExceptionInfo->ExceptionRecord->ExceptionCode,
                       pExceptionInfo->ExceptionRecord->ExceptionAddress,
                       pExceptionInfo->ExceptionRecord->ExceptionFlags);
+
+        {
+            // Name the module the fault happened in and the address it tried to touch,
+            // so a crash can be attributed without the (large) minidump.
+            char where[MAX_PATH + 48];
+            FormatModuleOffset(reinterpret_cast<uintptr_t>(pExceptionInfo->ExceptionRecord->ExceptionAddress), where);
+            const auto* rec = pExceptionInfo->ExceptionRecord;
+            const char* access = rec->NumberParameters >= 2 ? (rec->ExceptionInformation[0] == 1 ? "write" : rec->ExceptionInformation[0] == 8 ? "execute" : "read") : "?";
+            spdlog::error(__FUNCTION__ ": faulting module {}, {} of 0x{:x}", where, access,
+                          rec->NumberParameters >= 2 ? rec->ExceptionInformation[1] : 0);
+
+            // Heuristic stack scan: values on the stack that point into a loaded
+            // module are mostly return addresses. Good enough to see who called in.
+            const auto* pStack = reinterpret_cast<const uintptr_t*>(pExceptionInfo->ContextRecord->Rsp);
+            int logged = 0;
+            for (int i = 0; i < 256 && logged < 24; ++i)
+            {
+                uintptr_t value = 0;
+                if (!TryReadStackSlot(pStack + i, value))
+                    break;
+
+                HMODULE hMod = nullptr;
+                if (value < 0x10000 || !GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                                           reinterpret_cast<LPCWSTR>(value), &hMod))
+                    continue;
+
+                char frame[MAX_PATH + 48];
+                FormatModuleOffset(value, frame);
+                spdlog::error(__FUNCTION__ ":   stack[rsp+0x{:x}] {}", i * 8, frame);
+                ++logged;
+            }
+        }
 
 #if (IS_MASTER)
         volatile static bool bMiniDump = false;
