@@ -18,6 +18,8 @@ on:
 jobs:
   build-legacy:
     runs-on: windows-2022
+    permissions:
+      contents: write
     defaults:
       run:
         shell: bash
@@ -109,3 +111,18 @@ jobs:
             build/windows/x64/releasedbg/SkyrimTogetherSKSE.dll
             build/windows/x64/releasedbg/SkyrimTogetherSKSE.pdb
             build/windows/x64/releasedbg/TPProcess.exe
+
+      # Testing convenience: a rolling pre-release whose files download without a
+      # GitHub login (workflow artifacts need one). Replaced on every push.
+      - name: Publish rolling test pre-release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          out=build/windows/x64/releasedbg
+          mkdir -p publish
+          cp "$out/SkyrimTogetherRuntime_1_5.dll" "$out/SkyrimTogetherSKSE.dll" "$out/TPProcess.exe" publish/
+          gh release delete legacy-test --yes --cleanup-tag || true
+          gh release create legacy-test publish/* --prerelease --target "$GITHUB_SHA" \
+            --title "Legacy 1.5.97 test build (${GITHUB_SHA::8})" \
+            --notes "Rolling test build of ${GITHUB_REF_NAME} at ${GITHUB_SHA}. Not a release."
