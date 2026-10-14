@@ -117,10 +117,22 @@ void RunTiltedInit(const std::filesystem::path& acGamePath, const String& aExeVe
     TiltedOnlineApp::InstallHooks2();
     TP_HOOK_COMMIT;
 
+#ifndef SKYRIM_TARGET_LEGACY
     LoadScriptExtender();
+#endif
 }
 
 void RunTiltedApp()
 {
+#ifdef SKYRIM_TARGET_LEGACY
+    // SKSE 2.0.x (pre-AE) loads its plugins as soon as StartSKSE runs. Under the
+    // immersive launcher, RunTiltedInit runs before the game's C runtime has
+    // built its static objects, and plugins that touch those during load
+    // (CBPC: cbp.dll) crash in ntdll. RunTiltedApp runs from the launcher's
+    // GetStartupInfoW hook, after static initialization and before WinMain, which
+    // matches where skse64_loader starts SKSE. When the game was launched through
+    // skse64_loader, LoadScriptExtender sees SKSE already loaded and does nothing.
+    LoadScriptExtender();
+#endif
     g_appInstance->BeginMain();
 }
