@@ -16,7 +16,9 @@ static TInterruptCast* RealInterruptCast = nullptr;
 
 void TP_MAKE_THISCALL(HookSpellCast, ActorMagicCaster, bool abSuccess, int32_t auiTargetCount, MagicItem* apSpell)
 {
-    spdlog::debug("HookSpellCast, abSuccess: {}, auiTargetCount: {}, apSpell: {:X}", abSuccess, auiTargetCount, (uint64_t)apSpell);
+    spdlog::info("[magicdiag] HookSpellCast actor {:X} success {} targets {} spell {:X} current {:X} source {}",
+                 apThis->pCasterActor ? apThis->pCasterActor->formID : 0u, abSuccess, auiTargetCount, apSpell ? apSpell->formID : 0u,
+                 apThis->pCurrentSpell ? apThis->pCurrentSpell->formID : 0u, static_cast<int>(apThis->eCastingSource));
 
     // Note: these if guards is how the game does it too
     if (!apThis->pCasterActor)
