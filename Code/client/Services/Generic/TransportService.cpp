@@ -151,7 +151,9 @@ bool TransportService::Send(const ClientMessage& acMessage, const TiltedPhoques:
 {
     std::lock_guard<std::recursive_mutex> lock(m_clientMutex);
 
-    static thread_local ScratchAllocator s_allocator(1 << 18);
+    // Large enough for the authentication request of a ~4000 plugin load order (filenames alone
+    // exceed 64 KiB there; anything past the end of the buffer was silently dropped).
+    static thread_local ScratchAllocator s_allocator(1 << 21);
 
     struct ScopedReset
     {
@@ -162,7 +164,7 @@ bool TransportService::Send(const ClientMessage& acMessage, const TiltedPhoques:
     {
         ScopedAllocator _{s_allocator};
 
-        Buffer buffer(1 << 16);
+        Buffer buffer(1 << 20);
         Buffer::Writer writer(&buffer);
         writer.WriteBits(0, 8); // Write first byte as packet needs it
 
