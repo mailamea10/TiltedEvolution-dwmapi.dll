@@ -118,11 +118,8 @@ void ActorMagicCaster::VerifyHooks(ActorMagicCaster* apCaster) noexcept
     spdlog::info("[magicdiag] ActorMagicCaster vtable: SpellCast slot {:X} (hooked {:X}), InterruptCast slot {:X} (hooked {:X})", ModuleRva(pSpellCast),
                  ModuleRva(s_spellCastTarget), ModuleRva(pInterruptCast), ModuleRva(s_interruptCastTarget));
 
-#ifndef SKYRIM_TARGET_LEGACY
     // Only the 1.5.97 id translation is in question; leave the verified 1.6.x hooks alone.
-    return;
-#endif
-
+#ifdef SKYRIM_TARGET_LEGACY
     if (pSpellCast != s_spellCastTarget)
     {
         if (void* pOriginal = SwapVirtual(pVTable, kSpellCastSlot, reinterpret_cast<void*>(&HookSpellCast)))
@@ -140,4 +137,5 @@ void ActorMagicCaster::VerifyHooks(ActorMagicCaster* apCaster) noexcept
             spdlog::warn("ActorMagicCaster::InterruptCast hook was on the wrong function, redirected through the vtable");
         }
     }
+#endif
 }
