@@ -276,7 +276,7 @@ void MagicService::OnInterruptCastEvent(const InterruptCastEvent& acEvent) const
     request.CasterId = localComponent.Id;
     request.CastingSource = acEvent.CastingSource;
 
-    spdlog::debug("Sending out interrupt cast");
+    spdlog::info("[magicdiag] interrupt sync sent: caster {:X} source {}", request.CasterId, request.CastingSource);
 
     m_transport.Send(request);
 }
@@ -314,7 +314,7 @@ void MagicService::OnNotifyInterruptCast(const NotifyInterruptCast& acMessage) c
 
     pCaster->InterruptCast();
 
-    spdlog::debug("Interrupt remote cast successful");
+    spdlog::info("[magicdiag] interrupt sync applied: actor {:X} source {}", pActor->formID, acMessage.CastingSource);
 }
 
 void MagicService::OnAddTargetEvent(const AddTargetEvent& acEvent) noexcept

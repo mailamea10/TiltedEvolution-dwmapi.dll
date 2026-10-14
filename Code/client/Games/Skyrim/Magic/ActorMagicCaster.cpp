@@ -56,6 +56,9 @@ void TP_MAKE_THISCALL(HookInterruptCast, ActorMagicCaster, bool abRefund)
 {
     ActorExtension* pExtended = apThis->pCasterActor->GetExtension();
 
+    spdlog::info("[magicdiag] HookInterruptCast actor {:X} local {} source {}", apThis->pCasterActor->formID, pExtended->IsLocal(),
+                 static_cast<int>(apThis->eCastingSource));
+
     if (pExtended->IsLocal())
         World::Get().GetRunner().Trigger(InterruptCastEvent(apThis->pCasterActor->formID, apThis->eCastingSource));
 
