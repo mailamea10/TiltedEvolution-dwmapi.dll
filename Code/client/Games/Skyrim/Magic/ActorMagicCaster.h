@@ -15,6 +15,9 @@ struct ActorMagicCaster : MagicCaster
 
     virtual void sub_1D(float aUnk1);
 
+    // Checks the spell cast hooks against the vtable of a live caster (see the .cpp).
+    static void VerifyHooks(ActorMagicCaster* apCaster) noexcept;
+
     uint8_t unk48[0x70];
     Actor* pCasterActor;
     NiNode* pMagicNode;

@@ -14,6 +14,10 @@ TP_THIS_FUNCTION(TInterruptCast, void, ActorMagicCaster, bool);
 static TSpellCast* RealSpellCast = nullptr;
 static TInterruptCast* RealInterruptCast = nullptr;
 
+// What the address library said the two functions are, before hooking moved the pointers to trampolines.
+static void* s_spellCastTarget = nullptr;
+static void* s_interruptCastTarget = nullptr;
+
 void TP_MAKE_THISCALL(HookSpellCast, ActorMagicCaster, bool abSuccess, int32_t auiTargetCount, MagicItem* apSpell)
 {
     spdlog::info("[magicdiag] HookSpellCast actor {:X} success {} targets {} spell {:X} current {:X} source {}",
@@ -66,7 +70,74 @@ static TiltedPhoques::Initializer s_actorMagicCasterHooks(
 
         RealSpellCast = s_spellCast.Get();
         RealInterruptCast = s_interruptCast.Get();
+        s_spellCastTarget = reinterpret_cast<void*>(RealSpellCast);
+        s_interruptCastTarget = reinterpret_cast<void*>(RealInterruptCast);
 
         TP_HOOK(&RealSpellCast, HookSpellCast);
         TP_HOOK(&RealInterruptCast, HookInterruptCast);
     });
+
+namespace
+{
+uintptr_t ModuleRva(const void* apAddress) noexcept
+{
+    return reinterpret_cast<uintptr_t>(apAddress) - reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
+}
+
+// Points a virtual slot of the ActorMagicCaster vtable at our hook and returns the function it held.
+void* SwapVirtual(void** apVTable, size_t aSlot, void* apHook) noexcept
+{
+    DWORD oldProtect = 0;
+    if (!VirtualProtect(&apVTable[aSlot], sizeof(void*), PAGE_EXECUTE_READWRITE, &oldProtect))
+        return nullptr;
+
+    void* pOriginal = apVTable[aSlot];
+    apVTable[aSlot] = apHook;
+    VirtualProtect(&apVTable[aSlot], sizeof(void*), oldProtect, &oldProtect);
+    return pOriginal;
+}
+} // namespace
+
+// The spell cast hooks are installed by address library id. On 1.5.97 the id translation can land on
+// a neighbouring function, in which case the hook never fires and no concentration spell is synced.
+// The vtable of a live caster is the ground truth, so check it once and redirect the slots if needed.
+void ActorMagicCaster::VerifyHooks(ActorMagicCaster* apCaster) noexcept
+{
+    static bool s_verified = false;
+    if (s_verified || !apCaster)
+        return;
+    s_verified = true;
+
+    auto** pVTable = *reinterpret_cast<void***>(apCaster);
+    constexpr size_t kInterruptCastSlot = 8;
+    constexpr size_t kSpellCastSlot = 9;
+
+    void* pSpellCast = pVTable[kSpellCastSlot];
+    void* pInterruptCast = pVTable[kInterruptCastSlot];
+
+    spdlog::info("[magicdiag] ActorMagicCaster vtable: SpellCast slot {:X} (hooked {:X}), InterruptCast slot {:X} (hooked {:X})", ModuleRva(pSpellCast),
+                 ModuleRva(s_spellCastTarget), ModuleRva(pInterruptCast), ModuleRva(s_interruptCastTarget));
+
+#ifndef SKYRIM_TARGET_LEGACY
+    // Only the 1.5.97 id translation is in question; leave the verified 1.6.x hooks alone.
+    return;
+#endif
+
+    if (pSpellCast != s_spellCastTarget)
+    {
+        if (void* pOriginal = SwapVirtual(pVTable, kSpellCastSlot, reinterpret_cast<void*>(&HookSpellCast)))
+        {
+            RealSpellCast = reinterpret_cast<TSpellCast*>(pOriginal);
+            spdlog::warn("ActorMagicCaster::SpellCast hook was on the wrong function, redirected through the vtable");
+        }
+    }
+
+    if (pInterruptCast != s_interruptCastTarget)
+    {
+        if (void* pOriginal = SwapVirtual(pVTable, kInterruptCastSlot, reinterpret_cast<void*>(&HookInterruptCast)))
+        {
+            RealInterruptCast = reinterpret_cast<TInterruptCast*>(pOriginal);
+            spdlog::warn("ActorMagicCaster::InterruptCast hook was on the wrong function, redirected through the vtable");
+        }
+    }
+}

@@ -52,6 +52,18 @@ void MagicService::OnUpdate(const UpdateEvent& acEvent) noexcept
     if (!m_transport.IsConnected())
         return;
 
+    if (auto* pPlayer = PlayerCharacter::Get())
+    {
+        for (auto* pCaster : pPlayer->casters)
+        {
+            if (pCaster)
+            {
+                ActorMagicCaster::VerifyHooks(pCaster);
+                break;
+            }
+        }
+    }
+
     ApplyQueuedEffects();
 
     UpdateRevealOtherPlayersEffect();
