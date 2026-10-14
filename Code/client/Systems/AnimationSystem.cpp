@@ -19,6 +19,7 @@
 
 #include <Forms/TESObjectCELL.h>
 #include <Forms/TESWorldSpace.h>
+#include <Magic/ActorMagicCaster.h>
 
 void AnimationSystem::Update(World& aWorld, Actor* apActor, RemoteAnimationComponent& aAnimationComponent, const uint64_t aTick) noexcept
 {
@@ -69,7 +70,13 @@ void AnimationSystem::Update(World& aWorld, Actor* apActor, RemoteAnimationCompo
                 cEventName.find("Magic") != std::string_view::npos || cEventName.find("MLh") != std::string_view::npos ||
                 cEventName.find("MRh") != std::string_view::npos)
             {
-                spdlog::info("[magicdiag] remote {:X} action {:X} event '{}' -> {}", apActor->formID, actionId, first.EventName.c_str(), result);
+                const auto casterState = [apActor](int aSlot) -> int
+                {
+                    auto* pCaster = apActor->casters[aSlot];
+                    return pCaster ? static_cast<int>(pCaster->eState) : -1;
+                };
+                spdlog::info("[magicdiag] remote {:X} action {:X} event '{}' -> {} (state1 {:X} state2 {:X} idle {:X} type {} casters L{} R{})", apActor->formID,
+                             actionId, first.EventName.c_str(), result, first.State1, first.State2, first.IdleId, first.Type, casterState(0), casterState(1));
             }
         }
 
