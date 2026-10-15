@@ -21,6 +21,7 @@
 #include <Services/PlayerService.h>
 #include <Services/CombatService.h>
 #include <Services/WeatherService.h>
+#include <Services/RaceMenuSyncService.h>
 #include <Services/MapService.h>
 #include <Services/DroppedItemService.h>
 
@@ -56,6 +57,7 @@ World::World()
     ctx().emplace<StringCacheService>(m_dispatcher);
     ctx().emplace<CombatService>(*this, m_transport, m_dispatcher);
     ctx().emplace<WeatherService>(*this, m_transport, m_dispatcher);
+    ctx().emplace<RaceMenuSyncService>(*this, m_transport, m_dispatcher);
     ctx().emplace<MapService>(*this, m_dispatcher, m_transport);
     ctx().emplace<DroppedItemService>(*this, m_dispatcher, m_transport);
 
