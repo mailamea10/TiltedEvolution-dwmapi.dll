@@ -551,6 +551,13 @@ __declspec(dllexport) bool SKSEPlugin_Query(const void*, SksePluginInfo* apInfo)
 
 __declspec(dllexport) bool SKSEPlugin_Load(const void*)
 {
+    // Under the immersive launcher (SkyrimTogether.exe) the client is already
+    // part of the process; deploying and loading the runtime dll as well would
+    // start a second client and copy files into the game folder. The launcher
+    // always imports EarlyLoad.dll, so its presence identifies that process.
+    if (GetModuleHandleW(L"EarlyLoad.dll") != nullptr)
+        return true;
+
     _setmaxstdio(8192);
 
     const auto gameRoot = GetGameRoot();
