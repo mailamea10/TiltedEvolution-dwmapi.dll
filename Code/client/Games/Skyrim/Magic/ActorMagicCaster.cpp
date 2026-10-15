@@ -20,7 +20,7 @@ static void* s_interruptCastTarget = nullptr;
 
 void TP_MAKE_THISCALL(HookSpellCast, ActorMagicCaster, bool abSuccess, int32_t auiTargetCount, MagicItem* apSpell)
 {
-    spdlog::info("[magicdiag] HookSpellCast actor {:X} success {} targets {} spell {:X} current {:X} source {}",
+    spdlog::debug("[magicdiag] HookSpellCast actor {:X} success {} targets {} spell {:X} current {:X} source {}",
                  apThis->pCasterActor ? apThis->pCasterActor->formID : 0u, abSuccess, auiTargetCount, apSpell ? apSpell->formID : 0u,
                  apThis->pCurrentSpell ? apThis->pCurrentSpell->formID : 0u, static_cast<int>(apThis->eCastingSource));
 
@@ -56,7 +56,7 @@ void TP_MAKE_THISCALL(HookInterruptCast, ActorMagicCaster, bool abRefund)
 {
     ActorExtension* pExtended = apThis->pCasterActor->GetExtension();
 
-    spdlog::info("[magicdiag] HookInterruptCast actor {:X} local {} source {}", apThis->pCasterActor->formID, pExtended->IsLocal(),
+    spdlog::debug("[magicdiag] HookInterruptCast actor {:X} local {} source {}", apThis->pCasterActor->formID, pExtended->IsLocal(),
                  static_cast<int>(apThis->eCastingSource));
 
     if (pExtended->IsLocal())
@@ -118,7 +118,7 @@ void ActorMagicCaster::VerifyHooks(ActorMagicCaster* apCaster) noexcept
     void* pSpellCast = pVTable[kSpellCastSlot];
     void* pInterruptCast = pVTable[kInterruptCastSlot];
 
-    spdlog::info("[magicdiag] ActorMagicCaster vtable: SpellCast slot {:X} (hooked {:X}), InterruptCast slot {:X} (hooked {:X})", ModuleRva(pSpellCast),
+    spdlog::debug("[magicdiag] ActorMagicCaster vtable: SpellCast slot {:X} (hooked {:X}), InterruptCast slot {:X} (hooked {:X})", ModuleRva(pSpellCast),
                  ModuleRva(s_spellCastTarget), ModuleRva(pInterruptCast), ModuleRva(s_interruptCastTarget));
 
     // Only the 1.5.97 id translation is in question; leave the verified 1.6.x hooks alone.

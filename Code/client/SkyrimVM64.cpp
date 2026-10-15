@@ -130,7 +130,7 @@ int TP_MAKE_THISCALL(HookVMUpdate, GameVM, float a2)
 
     if (cAnnounce)
     {
-        spdlog::info("vm tick heartbeat: tick {}, client update ran {} times and was gated {} times, this build reads "
+        spdlog::debug("vm tick heartbeat: tick {}, client update ran {} times and was gated {} times, this build reads "
                      "inactive at {:#x}, where the value is {}; offset {:#x} holds {} and offset {:#x} holds {}",
                      cTick, s_updates.load(), s_skipped.load(), static_cast<int>(SkyrimVM::kInactiveOffset),
                      apThis->inactive, 0x680, DescribeOffset(cAtLegacy), 0x690, DescribeOffset(cAtModern));
@@ -149,7 +149,7 @@ short TP_MAKE_THISCALL(HookMainLoop, Main)
     const uint64_t cTick = s_mainLoopTicks.fetch_add(1) + 1;
     if (cTick == 1 || cTick % kTickHeartbeatEvery == 0)
     {
-        spdlog::info("main loop heartbeat: tick {}, vm ticks {} so far, client update ran {} times", cTick,
+        spdlog::debug("main loop heartbeat: tick {}, vm ticks {} so far, client update ran {} times", cTick,
                      s_ticks.load(), s_updates.load());
     }
 

@@ -437,7 +437,7 @@ void TransportService::PumpHeartbeat() noexcept
 
     m_lastPumpHeartbeat = cNow;
 
-    spdlog::info("transport pump heartbeat: update events {}, handshake pending {}, connected {}, owned by handshake "
+    spdlog::debug("transport pump heartbeat: update events {}, handshake pending {}, connected {}, owned by handshake "
                  "pump {}",
                  m_pumpTicks.load(), m_handshakePending.load(), m_connected.load(), m_handshakeThreadActive.load());
 }

@@ -159,7 +159,7 @@ void CombatService::OnNotifyProjectileLaunch(const NotifyProjectileLaunch& acMes
 
     Projectile::Launch(&result, launchData);
 
-    spdlog::info("[magicdiag] remote projectile base {:X} spell {:X} weapon {:X} power {} -> handle {:X}", cProjectileBaseId, cSpellId, cFromWeaponId,
+    spdlog::debug("[magicdiag] remote projectile base {:X} spell {:X} weapon {:X} power {} -> handle {:X}", cProjectileBaseId, cSpellId, cFromWeaponId,
                  launchData.fPower, result.handle.iBits);
 }
 

@@ -76,7 +76,7 @@ void AnimationSystem::Update(World& aWorld, Actor* apActor, RemoteAnimationCompo
                     auto* pCaster = apActor->casters[aSlot];
                     return pCaster ? static_cast<int>(pCaster->eState) : -1;
                 };
-                spdlog::info("[magicdiag] remote {:X} action {:X} event '{}' -> {} (state1 {:X} state2 {:X} idle {:X} type {} casters L{} R{})", apActor->formID,
+                spdlog::debug("[magicdiag] remote {:X} action {:X} event '{}' -> {} (state1 {:X} state2 {:X} idle {:X} type {} casters L{} R{})", apActor->formID,
                              actionId, first.EventName.c_str(), result, first.State1, first.State2, first.IdleId, first.Type, casterState(0), casterState(1));
             }
         }

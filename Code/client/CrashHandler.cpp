@@ -1,4 +1,5 @@
 #include <BranchInfo.h>
+#include <TiltedCore/Filesystem.hpp>
 #include "CrashHandler.h"
 #include <DbgHelp.h>
 #include <Windows.h>
@@ -132,9 +133,12 @@ LONG WINAPI VectoredExceptionHandler(PEXCEPTION_POINTERS pExceptionInfo)
                 oss << "crash_" << SerializeTimePoint(std::chrono::system_clock::now(), "UTC_%Y-%m-%d_%H-%M-%S")
                     << ".dmp";
 
-                GetModuleFileNameA(NULL, dumpPath, sizeof(dumpPath));
-                std::filesystem::path modulePath(dumpPath);
-                auto subPath = modulePath.parent_path();
+                // Next to the logs (the launcher's folder), never in the game's
+                // install folder, and only the latest one is kept.
+                (void)dumpPath;
+                auto subPath = TiltedPhoques::GetPath() / "logs";
+                std::error_code ec;
+                std::filesystem::create_directories(subPath, ec);
 
                 CrashHandler::RemovePreviousDump(subPath);
 
@@ -217,7 +221,8 @@ void CrashHandler::RemovePreviousDump(std::filesystem::path path)
 {
     for (auto& entry : std::filesystem::directory_iterator(path))
     {
-        if (entry.path().string().find("crash") != std::string::npos)
+        const auto name = entry.path().filename().string();
+        if (name.rfind("crash_", 0) == 0 && entry.path().extension() == ".dmp")
         {
             DeleteFileA(entry.path().string().c_str());
         }

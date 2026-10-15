@@ -309,11 +309,11 @@ void LogHeadDiagnostics(const char* acLabel, Actor* apActor) noexcept
     auto* pNpc = Cast<TESNPC>(apActor->baseForm);
     if (!pNpc)
     {
-        spdlog::info("[headdiag] {} actor {:X} has no NPC base", acLabel, apActor->formID);
+        spdlog::debug("[headdiag] {} actor {:X} has no NPC base", acLabel, apActor->formID);
         return;
     }
 
-    spdlog::info("[headdiag] {} actor {:X} base {:X} race {:X} originalRace {:X} faceNPC {:X} headparts {}", acLabel, apActor->formID,
+    spdlog::debug("[headdiag] {} actor {:X} base {:X} race {:X} originalRace {:X} faceNPC {:X} headparts {}", acLabel, apActor->formID,
                  pNpc->formID, pNpc->raceForm.race ? pNpc->raceForm.race->formID : 0u, pNpc->originalRace ? pNpc->originalRace->formID : 0u,
                  pNpc->faceNPC ? pNpc->faceNPC->formID : 0u, static_cast<uint32_t>(pNpc->headpartsCount));
 
@@ -324,36 +324,36 @@ void LogHeadDiagnostics(const char* acLabel, Actor* apActor) noexcept
             const auto* pPart = pNpc->headparts[i];
             if (!pPart)
             {
-                spdlog::info("[headdiag] {}   part {} = null", acLabel, i);
+                spdlog::debug("[headdiag] {}   part {} = null", acLabel, i);
                 continue;
             }
 
-            spdlog::info("[headdiag] {}   part {} = {:X} type {} name '{}'", acLabel, i, pPart->formID, pPart->type, pPart->name.data ? pPart->name.data : "");
+            spdlog::debug("[headdiag] {}   part {} = {:X} type {} name '{}'", acLabel, i, pPart->formID, pPart->type, pPart->name.data ? pPart->name.data : "");
         }
     }
 
     auto* pFace = apActor->GetFaceGenNiNode();
     if (!pFace)
     {
-        spdlog::info("[headdiag] {}   no face node", acLabel);
+        spdlog::debug("[headdiag] {}   no face node", acLabel);
         return;
     }
 
-    spdlog::info("[headdiag] {}   face node {} children {}", acLabel, static_cast<const void*>(pFace), static_cast<uint32_t>(pFace->children.length));
+    spdlog::debug("[headdiag] {}   face node {} children {}", acLabel, static_cast<const void*>(pFace), static_cast<uint32_t>(pFace->children.length));
 
     for (uint32_t i = 0; i < pFace->children.length && i < 16; ++i)
     {
         const auto* pChild = pFace->children.data ? pFace->children.data[i] : nullptr;
         if (!pChild)
         {
-            spdlog::info("[headdiag] {}   child {} = null", acLabel, i);
+            spdlog::debug("[headdiag] {}   child {} = null", acLabel, i);
             continue;
         }
 
         const auto* pBytes = reinterpret_cast<const uint8_t*>(pChild);
         const char* pName = *reinterpret_cast<const char* const*>(pBytes + 0x10);
         const uint64_t flags = *reinterpret_cast<const uint64_t*>(pBytes + 0x108);
-        spdlog::info("[headdiag] {}   child {} = '{}' flags {:X} hidden {}", acLabel, i, pName ? pName : "", flags, (flags & 1) != 0);
+        spdlog::debug("[headdiag] {}   child {} = '{}' flags {:X} hidden {}", acLabel, i, pName ? pName : "", flags, (flags & 1) != 0);
     }
 }
 } // namespace

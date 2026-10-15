@@ -537,7 +537,7 @@ LRESULT CALLBACK InputService::WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPAR
             const uint64_t cTick = s_timerTicks.fetch_add(1) + 1;
             if (cTick == 1 || cTick % 300 == 0)
             {
-                spdlog::info("timer-driven update heartbeat: tick {}, thread id {}", cTick, ::GetCurrentThreadId());
+                spdlog::debug("timer-driven update heartbeat: tick {}, thread id {}", cTick, ::GetCurrentThreadId());
             }
 
             // The game's own frame hooks only run the update while the VM is

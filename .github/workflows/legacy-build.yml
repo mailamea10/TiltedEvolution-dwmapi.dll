@@ -11,6 +11,11 @@ on:
         description: 'Version string the server compares against (the STR server release this build must talk to)'
         required: false
         default: 'v1.8.5'
+      public_release:
+        description: 'Build as a public release (no launcher console window)'
+        type: boolean
+        required: false
+        default: false
   push:
     branches:
       - 'feature/legacy-**'
@@ -65,6 +70,8 @@ jobs:
           actions-cache-key: windows-2022
 
       - name: Configure xmake and install dependencies
+        env:
+          STR_PUBLIC_RELEASE: ${{ github.event.inputs.public_release == 'true' && '1' || '0' }}
         run: xmake config --plat=windows --arch=x64 --mode=releasedbg --yes -vD
 
       - name: Save xmake packages
