@@ -3698,3 +3698,5 @@
 414660 0x31d11a0
 414675 0x31d1af8
 415542 0x3497408
+# manual: AIProcess::GetCharController (SE id 38826: middleHigh->charController at +0x250), verified by disassembly
+39856 0x67bdf0
