@@ -3715,3 +3715,7 @@
 389089 0x1e083a8
 # manual: GarbageCollector singleton (SE id 514180: written by the GarbageCollector constructor, SE id 35490)
 400329 0x1ebeb30
+# manual: BSRandom generator getter (SE id 13576: returns the function-static Mersenne twister; 213 of the callers of SE 67018 take their generator from it), verified by disassembly
+14774 0x165f60
+# manual: BSRandom::UnsignedInt(generator, max) (SE id 67018: seeds on first use, returns 0 for max 0, else MT19937 output in range), AE/SE id offset 1258 as for 68261
+68276 0xc081a0

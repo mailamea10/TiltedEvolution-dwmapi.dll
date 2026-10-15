@@ -22,6 +22,9 @@
 #pragma comment(lib, "imm32.lib")
 
 static OverlayService* s_pOverlay = nullptr;
+
+// SkyrimVM64.cpp: runs World::Update() unless the vm tick is driving it.
+bool TryRunWorldUpdateFromTimer();
 static UINT s_currentACP = CP_ACP;
 
 // True while the active input method is in the middle of composing a character.
@@ -30,14 +33,12 @@ static UINT s_currentACP = CP_ACP;
 // as individual letters next to the composed result.
 static bool s_imeComposing = false;
 
-// The frame loop cannot be left to the game's own hooks: on 1.5.97 neither
-// SkyrimVM::Update nor MainLoop is ever reached through them (both heartbeat
-// counters stay at zero across a whole session), so World::Update() would never
-// run and nothing would synchronise once connected. A timer on the game's own
-// window is the one cadence we can force without knowing any game address, and
-// the message pump that drives it is guaranteed alive because the window
-// responds at all. On runtimes where the hooks do fire this is simply an extra
-// update per interval; World::Update() is idempotent and measures its own delta.
+// Fallback frame driver. World::Update() normally runs from the SkyrimVM::Update
+// hook, as upstream. Early 1.5.97 builds read the vm's inactive flag at the wrong
+// offset and that tick never ran the update, so a timer on the game's own window
+// was added as a cadence that needs no game address. It now only runs the update
+// when the vm tick has not done so recently, and never at the same time (the
+// two run on different threads).
 static constexpr UINT_PTR kWorldUpdateTimerId = 0x5A17;
 // SetTimer quantises to the 15.625 ms system tick, so the interval is rounded
 // *up* to a multiple of it. 16 ms therefore becomes two ticks (31.25 ms, about
@@ -551,7 +552,7 @@ LRESULT CALLBACK InputService::WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPAR
             // true once the player has a 3D node, i.e. we are actually in game.
             if (s_pOverlay && s_pOverlay->GetInGame())
             {
-                World::Get().Update();
+                TryRunWorldUpdateFromTimer();
             }
         }
 

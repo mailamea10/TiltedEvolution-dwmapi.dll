@@ -1,9 +1,12 @@
 #include <atomic>
+#include <chrono>
 #include <cstring>
+#include <mutex>
 
 #include <TiltedOnlinePCH.h>
 #include "TiltedOnlineApp.h"
 #include <Misc/GameVM.h>
+#include <World.h>
 
 extern std::unique_ptr<TiltedOnlineApp> g_appInstance;
 
@@ -35,6 +38,42 @@ static std::atomic<uint64_t> s_ticks{0};
 static std::atomic<uint64_t> s_updates{0};
 static std::atomic<uint64_t> s_skipped{0};
 static std::atomic<uint64_t> s_mainLoopTicks{0};
+
+// World::Update() has two drivers: the vm tick below (as upstream), and the
+// window-timer fallback in InputService. They run on different threads (the vm
+// tick is not on the window thread on 1.5.97), so they must never overlap, and
+// the timer only fills in while the vm tick is not driving updates.
+static std::mutex s_worldUpdateLock;
+static std::atomic<int64_t> s_lastVmUpdateMs{0};
+static constexpr int64_t kVmDrivingWindowMs = 250;
+
+static int64_t NowMs() noexcept
+{
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+}
+
+static void RunUpdateFromVm()
+{
+    std::scoped_lock lock(s_worldUpdateLock);
+    s_lastVmUpdateMs = NowMs();
+    g_appInstance->Update();
+}
+
+// Called by the window-timer fallback. Returns false when the vm tick drove an
+// update recently or one is running right now.
+bool TryRunWorldUpdateFromTimer()
+{
+    if (NowMs() - s_lastVmUpdateMs.load() < kVmDrivingWindowMs)
+        return false;
+
+    std::unique_lock lock(s_worldUpdateLock, std::try_to_lock);
+    if (!lock.owns_lock())
+        return false;
+
+    World::Get().Update();
+    return true;
+}
 
 struct RawOffset
 {
@@ -104,7 +143,7 @@ int TP_MAKE_THISCALL(HookVMUpdate, GameVM, float a2)
     {
         s_inactiveFrames = 0;
         ++s_updates;
-        g_appInstance->Update();
+        RunUpdateFromVm();
     }
     else if (++s_inactiveFrames >= kInactiveFrameLimit)
     {
@@ -121,7 +160,7 @@ int TP_MAKE_THISCALL(HookVMUpdate, GameVM, float a2)
         }
 
         ++s_updates;
-        g_appInstance->Update();
+        RunUpdateFromVm();
     }
     else
     {
