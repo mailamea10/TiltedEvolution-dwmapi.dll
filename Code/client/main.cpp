@@ -82,6 +82,10 @@ static void ShowIncompatibleVersionError(const char* apDetectedGameVersion, cons
     exit(4);
 }
 
+#ifdef SKYRIM_TARGET_LEGACY
+void InstallTweenCameraGuard() noexcept;
+#endif
+
 void RunTiltedInit(const std::filesystem::path& acGamePath, const String& aExeVersion)
 {
     s_gameRoot = acGamePath;
@@ -116,6 +120,10 @@ void RunTiltedInit(const std::filesystem::path& acGamePath, const String& aExeVe
 
     TiltedOnlineApp::InstallHooks2();
     TP_HOOK_COMMIT;
+
+#ifdef SKYRIM_TARGET_LEGACY
+    InstallTweenCameraGuard();
+#endif
 
 #ifndef SKYRIM_TARGET_LEGACY
     LoadScriptExtender();

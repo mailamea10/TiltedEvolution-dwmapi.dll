@@ -212,8 +212,11 @@ void* SwapSlot(void** apVTable, size_t aSlot, void* apHook)
 }
 } // namespace
 
-static TiltedPhoques::Initializer s_tweenCameraGuard(
-    []()
+// Called from RunTiltedInit; an explicit call keeps this translation unit from
+// being dropped by the linker (a self-registering static initializer was not
+// enough for the runtime DLL).
+void InstallTweenCameraGuard() noexcept
+{
     {
         void** pVTable = FindVTableByTypeName(".?AVTweenMenuCameraState@@");
         if (!pVTable)
@@ -233,6 +236,7 @@ static TiltedPhoques::Initializer s_tweenCameraGuard(
         }
 
         spdlog::info("tween camera guard: installed on TweenMenuCameraState vtable at {}", fmt::ptr(pVTable));
-    });
+    }
+}
 
 #endif
