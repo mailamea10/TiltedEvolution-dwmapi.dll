@@ -123,7 +123,15 @@ static TiltedPhoques::Initializer s_s(
 
         // Ignore startup movie
         // TODO: Move me later.
-        if (auto* pMainInit = GamePatch::Anchor(36548, "skip startup movie"))
+        if (VersionDb::Get().IsLegacyFormat())
+        {
+            // 1.5.97 has no entry for Main init (AE 36548). The intro movie is played
+            // by the function that reads sIntroMovie:General (RVA 0x5B5280); its
+            // "setting is empty" branch at RVA 0x5B52BA becomes unconditional.
+            GamePatch::Put<uint8_t>(GamePatch::AtLegacyRva(0x5B52BA, {0x74, 0x1C}, "1.5.97", "skip startup movie"),
+                                    0xEB, "skip startup movie");
+        }
+        else if (auto* pMainInit = GamePatch::Anchor(36548, "skip startup movie"))
             GamePatch::Put<uint8_t>(GamePatch::At(pMainInit, {0xFE}, "skip startup movie"), 0xEB,
                                     "skip startup movie");
 

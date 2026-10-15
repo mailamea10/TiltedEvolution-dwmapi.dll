@@ -178,7 +178,15 @@ static TiltedPhoques::Initializer s_viewportHooks(
     {
         auto* pRendererInit = GamePatch::Anchor(77226, "renderer init");
 
-        if (pRendererInit)
+        if (VersionDb::Get().IsLegacyFormat())
+        {
+            // On 1.5.97 the windowed dwStyle is loaded at RVA 0xD71FA9 as
+            // "mov eax, WS_CAPTION" (followed by a cmovne to WS_POPUP for
+            // borderless); widen the immediate the same way the 1.6 patch does.
+            GamePatch::Put<uint32_t>(GamePatch::AtLegacyRva(0xD71FAA, {0x00, 0x00, 0xC0, 0x00}, "1.5.97", "window style"),
+                                     WS_OVERLAPPEDWINDOW, "window style");
+        }
+        else if (pRendererInit)
         {
             // patch dwStyle in BSGraphics::InitWindows so windowed mode keeps
             // its close button. 1.5.97 stores it from a different function

@@ -25,6 +25,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
 
 #include <mem/mem.h>
 #include <mem/protect.h>
@@ -109,6 +110,28 @@ inline uint8_t* At(uint8_t* apAnchor, const Site& acSite, const char* acpWhat) n
     }
 
     return apAnchor + acSite.legacy;
+}
+
+// A 1.5.x patch site given directly as an RVA into the game image, for patches
+// whose 1.6 anchor has no counterpart in the AE->SE id map. The site is only
+// returned on the exact build it was measured on, and only when the bytes there
+// are still the ones that were measured, so another 1.5.x build or a site
+// already patched by a mod is skipped and logged, not overwritten.
+inline uint8_t* AtLegacyRva(const uint32_t acRva, std::initializer_list<uint8_t> acExpected, const char* acpMeasuredOn,
+                            const char* acpWhat) noexcept
+{
+    if (!IsMeasuredFor(acpMeasuredOn))
+        return nullptr;
+
+    auto* pSite = reinterpret_cast<uint8_t*>(GetModuleHandleW(nullptr)) + acRva;
+    if (std::memcmp(pSite, acExpected.begin(), acExpected.size()) != 0)
+    {
+        spdlog::warn("patch '{}' skipped: the bytes at RVA {:#x} are not the ones measured on {}", acpWhat, acRva,
+                     acpMeasuredOn);
+        return nullptr;
+    }
+
+    return pSite;
 }
 
 inline bool WriteBytes(void* apAddress, const void* acpData, const size_t acSize, const char* acpWhat) noexcept
