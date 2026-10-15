@@ -14,6 +14,7 @@
 #include <Misc/BSFixedString.h>
 
 #include <World.h>
+#include <CastProbe.h>
 
 TP_THIS_FUNCTION(TPerformAction, uint8_t, ActorMediator, TESActionData* apAction);
 static TPerformAction* RealPerformAction;
@@ -69,7 +70,7 @@ uint8_t TP_MAKE_THISCALL(HookPerformAction, ActorMediator, TESActionData* apActi
                 if (s_logged < 300)
                 {
                     ++s_logged;
-                    spdlog::info("[castprobe] local '{}' -> {} (action {:X}, state2 {:X}, hands L{:X} R{:X})", action.EventName.c_str(), res, action.ActionId,
+                    CastProbeLog("local '{}' -> {} (action {:X}, state2 {:X}, hands L{:X} R{:X})", action.EventName.c_str(), res, action.ActionId,
                                  action.State2, pActor->magicItems[0] ? pActor->magicItems[0]->formID : 0u,
                                  pActor->magicItems[1] ? pActor->magicItems[1]->formID : 0u);
                 }

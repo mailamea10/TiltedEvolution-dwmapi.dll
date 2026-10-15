@@ -20,6 +20,7 @@
 #include <Forms/TESObjectCELL.h>
 #include <Forms/TESWorldSpace.h>
 #include <Magic/ActorMagicCaster.h>
+#include <CastProbe.h>
 #include <Games/ActorExtension.h>
 #include <Forms/MagicItem.h>
 #include <intrin.h>
@@ -52,6 +53,10 @@ void** s_probedVTable = nullptr;
 
 bool IsCastingRelatedEvent(std::string_view aName) noexcept
 {
+    // moveStart/moveStop arrive every frame while walking and would use up the line budget.
+    if (aName.size() >= 4 && _strnicmp(aName.data(), "move", 4) == 0)
+        return false;
+
     static constexpr std::string_view kKeys[] = {"cast", "spell", "mrh", "mlh", "magic", "equip", "draw", "sheath", "interrupt", "dual", "stop"};
     for (auto key : kKeys)
     {
@@ -82,7 +87,7 @@ bool HookGraphNotify(void* apHolder, BSFixedString* apEvent)
         if (s_logged < 600)
         {
             ++s_logged;
-            spdlog::info("[castprobe] graph event '{}' on {:X} -> {} (sent from SkyrimSE+{:X}, hands L{:X} R{:X})", apEvent->data, pActor->formID, cResult,
+            CastProbeLog("graph event '{}' on {:X} -> {} (sent from SkyrimSE+{:X}, hands L{:X} R{:X})", apEvent->data, pActor->formID, cResult,
                          GameRva(_ReturnAddress()), pActor->magicItems[0] ? pActor->magicItems[0]->formID : 0u,
                          pActor->magicItems[1] ? pActor->magicItems[1]->formID : 0u);
         }
@@ -109,7 +114,7 @@ void InstallGraphProbe(Actor* apActor) noexcept
     VirtualProtect(&pVTable[kNotifySlot], sizeof(void*), oldProtect, &oldProtect);
 
     s_probedVTable = pVTable;
-    spdlog::info("[castprobe] watching graph events of remote players (holder at +{:X}, notify was SkyrimSE+{:X})", s_graphHolderOffset,
+    CastProbeLog("watching graph events of remote players (holder at +{:X}, notify was SkyrimSE+{:X})", s_graphHolderOffset,
                  GameRva(reinterpret_cast<void*>(s_realGraphNotify)));
 }
 } // namespace
@@ -120,6 +125,19 @@ void AnimationSystem::Update(World& aWorld, Actor* apActor, RemoteAnimationCompo
 
     if (apActor->GetExtension()->IsRemotePlayer() && apActor->formType == FormType::Character)
         InstallGraphProbe(apActor);
+
+    {
+        // Shows whether remote actors are updated at all, and why the probe would not have been installed.
+        static uint64_t s_lastBeat = 0;
+        const uint64_t cNow = GetTickCount64();
+        if (cNow - s_lastBeat > 10000)
+        {
+            s_lastBeat = cNow;
+            CastProbeLog("heartbeat: updating remote {:X}, remote player {}, form type {}, queued actions {}, probe installed {}", apActor->formID,
+                         apActor->GetExtension()->IsRemotePlayer(), static_cast<int>(apActor->formType), aAnimationComponent.TimePoints.size(),
+                         s_probedVTable != nullptr);
+        }
+    }
 
     const auto it = std::begin(actions);
     if (it != std::end(actions) && it->Tick <= aTick)
@@ -207,7 +225,7 @@ void AnimationSystem::Update(World& aWorld, Actor* apActor, RemoteAnimationCompo
             if (s_replayed < 300)
             {
                 ++s_replayed;
-                spdlog::info("[castprobe] replayed '{}' on {:X} -> {} (owner hands state2 {:X}, remote hands L{:X} R{:X})", first.EventName.c_str(), apActor->formID,
+                CastProbeLog("replayed '{}' on {:X} -> {} (owner hands state2 {:X}, remote hands L{:X} R{:X})", first.EventName.c_str(), apActor->formID,
                              result, first.State2, apActor->magicItems[0] ? apActor->magicItems[0]->formID : 0u,
                              apActor->magicItems[1] ? apActor->magicItems[1]->formID : 0u);
             }
