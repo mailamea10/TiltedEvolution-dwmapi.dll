@@ -29,7 +29,7 @@ namespace
 {
 // How long a refused magic hand action is retried before it is dropped. Long enough to cover a draw or
 // equip transition, short enough that the actions queued behind it are not visibly late.
-constexpr uint64_t kMagicRetryWindowMs = 400;
+constexpr uint64_t kMagicRetryWindowMs = 250;
 
 // Behavior events of the casting hands: MRh_ (right), MLh_/MLH_ (left) and DualMagic_ (both).
 bool IsMagicHandEvent(std::string_view aEventName) noexcept
@@ -195,7 +195,11 @@ void AnimationSystem::Update(World& aWorld, Actor* apActor, RemoteAnimationCompo
         // cast, so keep it at the head of the queue and try again on the next frames for a short while.
         // Replays rebuild state in one go and are never held up.
         const uint64_t cNowMs = GetTickCount64();
-        if (!result && cMagicHandEvent && aAnimationComponent.ReplayCount == 0)
+        // Never hold back an action that is already due behind this one: holding a refused tap made the
+        // following casts arrive in a burst.
+        const auto cNext = std::next(it);
+        const bool cNextDue = cNext != std::end(actions) && cNext->Tick <= aTick;
+        if (!result && cMagicHandEvent && aAnimationComponent.ReplayCount == 0 && !cNextDue)
         {
             if (aAnimationComponent.MagicRetryStartMs == 0)
                 aAnimationComponent.MagicRetryStartMs = cNowMs;
