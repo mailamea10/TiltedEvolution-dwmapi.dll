@@ -11,11 +11,6 @@ on:
         description: 'Version string the server compares against (the STR server release this build must talk to)'
         required: false
         default: 'v1.8.5'
-      public_release:
-        description: 'Build as a public release (no launcher console window)'
-        type: boolean
-        required: false
-        default: false
   push:
     branches:
       - 'feature/legacy-**'
@@ -70,8 +65,6 @@ jobs:
           actions-cache-key: windows-2022
 
       - name: Configure xmake and install dependencies
-        env:
-          STR_PUBLIC_RELEASE: ${{ github.event.inputs.public_release == 'true' && '1' || '0' }}
         run: xmake config --plat=windows --arch=x64 --mode=releasedbg --yes -vD
 
       - name: Save xmake packages
@@ -109,6 +102,10 @@ jobs:
           set +e
           xmake build -y -vD SkyrimImmersiveLauncherLegacy 2>&1 | tee build-launcher.log
           status=${PIPESTATUS[0]}
+          if [ $status -eq 0 ]; then
+            xmake build -y -vD SkyrimImmersiveLauncherLegacyNoConsole 2>&1 | tee -a build-launcher.log
+            status=${PIPESTATUS[0]}
+          fi
           grep -E "error C[0-9]+|error LNK[0-9]+|fatal error|: error:" build-launcher.log | sort -u | head -40 | while IFS= read -r line; do echo "::error::${line:0:900}"; done
           exit $status
 
@@ -131,6 +128,7 @@ jobs:
             build/windows/x64/releasedbg/EarlyLoad.dll
             build/windows/x64/releasedbg/legacy/SkyrimTogether.exe
             build/windows/x64/releasedbg/legacy/SkyrimTogether.pdb
+            build/windows/x64/releasedbg/legacy-noconsole/SkyrimTogether.exe
             GameFiles/Skyrim/SKSE/Plugins/versionlib-ae-to-se-1-5-97-0.map
 
       # The release overlay: the files that turn an STR 1.8.5 install into the
@@ -138,14 +136,18 @@ jobs:
       - name: Package release overlay
         run: |
           out=build/windows/x64/releasedbg
-          pkg=package/SkyrimTogetherRuntime
-          mkdir -p "$pkg"
-          cp "$out/legacy/SkyrimTogether.exe" "$out/EarlyLoad.dll" "$out/TPProcess.exe" "$pkg/"
-          cp GameFiles/Skyrim/SKSE/Plugins/versionlib-ae-to-se-1-5-97-0.map "$pkg/"
-          cp Packaging/legacy/README-1.5.97.txt package/
-          cp LICENSE package/LICENSE.txt 2>/dev/null || true
-          (cd package && 7z a -tzip ../SkyrimTogetherReborn-1.8.5-SE-1.5.97.zip . > /dev/null)
-          ls -la SkyrimTogetherReborn-1.8.5-SE-1.5.97.zip
+          make_pkg() {
+            local launcher_dir=$1 zip=$2
+            rm -rf package && mkdir -p package/SkyrimTogetherRuntime
+            cp "$out/$launcher_dir/SkyrimTogether.exe" "$out/EarlyLoad.dll" "$out/TPProcess.exe" package/SkyrimTogetherRuntime/
+            cp GameFiles/Skyrim/SKSE/Plugins/versionlib-ae-to-se-1-5-97-0.map package/SkyrimTogetherRuntime/
+            cp Packaging/legacy/README-1.5.97.txt package/
+            cp LICENSE package/LICENSE.txt
+            (cd package && 7z a -tzip "../$zip" . > /dev/null)
+            ls -la "$zip"
+          }
+          make_pkg legacy-noconsole SkyrimTogetherReborn-1.8.5-SE-1.5.97.zip
+          make_pkg legacy SkyrimTogetherReborn-1.8.5-SE-1.5.97-console.zip
 
       - name: Upload release overlay
         uses: actions/upload-artifact@v7
@@ -153,7 +155,9 @@ jobs:
           name: SkyrimTogetherReborn-1.8.5-SE-1.5.97
           retention-days: 30
           if-no-files-found: error
-          path: SkyrimTogetherReborn-1.8.5-SE-1.5.97.zip
+          path: |
+            SkyrimTogetherReborn-1.8.5-SE-1.5.97.zip
+            SkyrimTogetherReborn-1.8.5-SE-1.5.97-console.zip
 
       # Testing convenience: a rolling pre-release whose files download without a
       # GitHub login (workflow artifacts need one). Replaced on every push.
@@ -165,7 +169,7 @@ jobs:
           out=build/windows/x64/releasedbg
           mkdir -p publish
           cp "$out/SkyrimTogetherRuntime_1_5.dll" "$out/SkyrimTogetherSKSE.dll" "$out/TPProcess.exe" "$out/EarlyLoad.dll" "$out/legacy/SkyrimTogether.exe" publish/
-          cp GameFiles/Skyrim/SKSE/Plugins/versionlib-ae-to-se-1-5-97-0.map SkyrimTogetherReborn-1.8.5-SE-1.5.97.zip publish/
+          cp GameFiles/Skyrim/SKSE/Plugins/versionlib-ae-to-se-1-5-97-0.map SkyrimTogetherReborn-1.8.5-SE-1.5.97.zip SkyrimTogetherReborn-1.8.5-SE-1.5.97-console.zip publish/
           gh release delete legacy-test --yes --cleanup-tag || true
           gh release create legacy-test publish/* --prerelease --target "$GITHUB_SHA" \
             --title "Legacy 1.5.97 test build (${GITHUB_SHA::8})" \

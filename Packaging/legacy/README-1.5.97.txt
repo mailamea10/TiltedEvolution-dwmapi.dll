@@ -14,6 +14,13 @@ Requirements
 - The Skyrim Together Reborn 1.8.5 mod files (esp, scripts, behaviours, the
   SkyrimTogetherRuntime folder with its UI) installed as usual
 
+Two downloads
+-------------
+- SkyrimTogetherReborn-1.8.5-SE-1.5.97.zip: the launcher without a console.
+- SkyrimTogetherReborn-1.8.5-SE-1.5.97-console.zip: the same launcher with a
+  console window showing the log as it runs, for troubleshooting.
+Install one of them; the other files are identical.
+
 Install
 -------
 1. Install Skyrim Together Reborn 1.8.5 as a mod in your mod manager.

@@ -98,12 +98,6 @@ if is_mode("debug") then
     add_defines("DEBUG")
 end
 
--- Packaged public builds (STR_PUBLIC_RELEASE=1 in the environment at configure
--- time): no launcher console window.
-if os.getenv("STR_PUBLIC_RELEASE") == "1" then
-    add_defines("STR_PUBLIC_RELEASE=1")
-end
-
 if is_plat("windows") then
     add_defines("NOMINMAX")
 end
