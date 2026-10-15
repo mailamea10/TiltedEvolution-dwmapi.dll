@@ -267,7 +267,7 @@ void RaceMenuSyncService::ApplyPending() noexcept
         if (it == m_remotePresets.end())
             continue;
 
-        auto& preset = it->second;
+        auto& preset = it.value(); // hopscotch_map: second is read-only
         if (preset.FailedAttempts >= kMaxApplyAttempts)
             continue;
 
