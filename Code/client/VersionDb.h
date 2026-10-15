@@ -570,8 +570,8 @@ template <class T> struct VersionDbPtr
                 // The map knows how many ids are missing, but only the running
                 // game knows which ones a session actually reaches. Naming
                 // them here is what turns "1.5.x is missing something" into a
-                // list that can be worked through - see
-                // Tools/missing_1_5_97_ids.txt for what each one costs.
+                // list that can be worked through. Ids found by hand go into the
+                // map as "# manual:" entries.
                 spdlog::warn("address library id {} is not mapped on game {}; every call through it returns zero "
                              "instead of running",
                              m_id, VersionDb::Get().GetLoadedVersionString());

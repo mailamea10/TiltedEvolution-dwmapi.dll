@@ -63,8 +63,9 @@ struct TESObjectCELL : TESForm
 #ifdef SKYRIM_TARGET_LEGACY
     // 1.5.x layout (pre-AE reconstruction): the AE build models ExtraDataList
     // and cell-data members between cellFlags and refData that the 1.5.x
-    // engine does not have (it keeps them as padding), and there is no
-    // loadedCellData member -- callers must not touch loadedCellData on 1.5.x.
+    // engine does not have (it keeps them as padding). loadedCellData follows
+    // the worldspace, as in TESObjectCELL::GetEncounterZone (RVA 0x262290),
+    // which reads it at +0x128 and its encounter zone at +0x160.
     uint8_t pad20[0x40 - 0x20];
     // Spelled the way 1.6.x spells it instead of as one 5 byte run, because
     // IsAttached() and the cellFlags bit tests upstream added read these as
@@ -78,6 +79,9 @@ struct TESObjectCELL : TESForm
     uint8_t unkB0[0x118 - 0xB0];
     BSRecursiveLock lock;
     TESWorldSpace* worldspace;
+    LoadedCellData* loadedCellData;
+    void* pLightingTemplate;
+    uint64_t unk138;
 #else
     uint8_t pad20[0x40 - 0x20];
     uint16_t cellFlags;
@@ -111,7 +115,8 @@ static_assert(offsetof(TESObjectCELL, cellGameFlags) == 0x42);
 static_assert(offsetof(TESObjectCELL, cellState) == 0x44);
 static_assert(offsetof(TESObjectCELL, refData) == 0x88);
 static_assert(offsetof(TESObjectCELL, worldspace) == 0x120);
-static_assert(sizeof(TESObjectCELL) == 0x128);
+static_assert(offsetof(TESObjectCELL, loadedCellData) == 0x128);
+static_assert(sizeof(TESObjectCELL) == 0x140);
 static_assert(sizeof(TESObjectCELL::ReferenceData) == 0x28);
 #else
 static_assert(offsetof(TESObjectCELL, cellFlags) == 0x40);

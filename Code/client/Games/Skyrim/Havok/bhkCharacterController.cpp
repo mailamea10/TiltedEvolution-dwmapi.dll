@@ -2,10 +2,9 @@
 
 namespace
 {
-    // 389089 is a *data* id - the float global holding the physics timestep -
-    // and it has no mapping in the 1.5.97 address library.
-    //
-    // Reading it through POINTER_SKYRIMSE would be wrong there even though the
+    // 389089 is a *data* id - the float global holding the physics timestep.
+    // The 1.5.97 map carries it as a manual entry (SE id 512261); on a runtime
+    // whose map lacks it, reading it through POINTER_SKYRIMSE would be wrong even though the
     // result happens to be harmless: an unmapped id on a legacy runtime resolves
     // to the shared zero-returning stub, which is executable memory, so
     // dereferencing it as a float reads the stub's own opcodes. Those bytes

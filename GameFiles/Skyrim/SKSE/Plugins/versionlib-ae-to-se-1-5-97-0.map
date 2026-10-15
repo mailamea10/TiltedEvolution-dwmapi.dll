@@ -3700,3 +3700,18 @@
 415542 0x3497408
 # manual: AIProcess::GetCharController (SE id 38826: middleHigh->charController at +0x250), verified by disassembly
 39856 0x67bdf0
+# manual: TESObjectREFR::SetLeveledCreature (SE id 19826: checks base type 0x2B, marks change 0x40000, sets the ExtraLeveledCreature on the list at +0x70), verified by disassembly
+20231 0x2a77a0
+# manual: IAnimationGraphManagerHolder::RevertAnimationGraphManager (SE id 32139: (this) -> bool, gets the manager through vtable +0x10 and reverts its graphs), verified by disassembly
+32883 0x4f0620
+# manual: AlchemyItem manager AddPotion / AddPoison (SE ids 35265 / 35266: list at +0x38 flag 0 / list at +0x68 flag 1), verified by disassembly
+36167 0x59f230
+36168 0x59f2e0
+# manual: GarbageCollector::Add(TESBoundObject*) (SE id 35493: deletes through TESDataHandler at once, or defers to the set at +0x20), verified by disassembly
+36460 0x5aa2b0
+# manual: UI::CloseAllMenus (SE id 79951: sets closingAllMenus at +0x1C1 and walks the menu stack), AE/SE id offset 8137 as for 82074 and 82082
+82088 0xebfb70
+# manual: physics timestep float (SE id 512261: read into bhkCharacterController stepInfo deltaTime/invDeltaTime at +0x88/+0x8C), verified by disassembly
+389089 0x1e083a8
+# manual: GarbageCollector singleton (SE id 514180: written by the GarbageCollector constructor, SE id 35490)
+400329 0x1ebeb30
