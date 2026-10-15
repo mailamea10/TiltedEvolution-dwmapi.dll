@@ -20,6 +20,9 @@
 #include <Forms/TESObjectCELL.h>
 #include <Forms/TESWorldSpace.h>
 #include <Magic/ActorMagicCaster.h>
+#include <Games/ActorExtension.h>
+#include <Forms/MagicItem.h>
+#include <intrin.h>
 
 namespace
 {
@@ -36,11 +39,87 @@ bool IsMagicHandEvent(std::string_view aEventName) noexcept
     };
     return startsWith("MRh_") || startsWith("MLh_") || startsWith("DualMagic_");
 }
+
+// ---- Remote casting probe (temporary) -------------------------------------------------------------
+// The remote copy of a casting player often stands with its arms down while the owner's flames come out
+// of its hand, even though every replayed casting action was accepted. Something on the remote side takes
+// the graph back out of the cast. This logs, for remote players only, the casting related events that
+// reach the behavior graph and which game function sent them, so one test session shows the culprit.
+using TGraphNotify = bool(void* apHolder, BSFixedString* apEvent);
+TGraphNotify* s_realGraphNotify = nullptr;
+ptrdiff_t s_graphHolderOffset = 0;
+void** s_probedVTable = nullptr;
+
+bool IsCastingRelatedEvent(std::string_view aName) noexcept
+{
+    static constexpr std::string_view kKeys[] = {"cast", "spell", "mrh", "mlh", "magic", "equip", "draw", "sheath", "interrupt", "dual", "stop"};
+    for (auto key : kKeys)
+    {
+        if (aName.size() < key.size())
+            continue;
+        for (size_t i = 0; i + key.size() <= aName.size(); ++i)
+        {
+            if (_strnicmp(aName.data() + i, key.data(), key.size()) == 0)
+                return true;
+        }
+    }
+    return false;
+}
+
+uintptr_t GameRva(const void* apAddress) noexcept
+{
+    return reinterpret_cast<uintptr_t>(apAddress) - reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
+}
+
+bool HookGraphNotify(void* apHolder, BSFixedString* apEvent)
+{
+    const bool cResult = s_realGraphNotify(apHolder, apEvent);
+
+    auto* pActor = reinterpret_cast<Actor*>(static_cast<uint8_t*>(apHolder) - s_graphHolderOffset);
+    if (apEvent && apEvent->data && pActor->GetExtension()->IsRemotePlayer() && IsCastingRelatedEvent(apEvent->data))
+    {
+        static uint32_t s_logged = 0;
+        if (s_logged < 600)
+        {
+            ++s_logged;
+            spdlog::info("[castprobe] graph event '{}' on {:X} -> {} (sent from SkyrimSE+{:X}, hands L{:X} R{:X})", apEvent->data, pActor->formID, cResult,
+                         GameRva(_ReturnAddress()), pActor->magicItems[0] ? pActor->magicItems[0]->formID : 0u,
+                         pActor->magicItems[1] ? pActor->magicItems[1]->formID : 0u);
+        }
+    }
+
+    return cResult;
+}
+
+void InstallGraphProbe(Actor* apActor) noexcept
+{
+    if (s_probedVTable)
+        return;
+
+    auto* pHolder = &apActor->animationGraphHolder;
+    auto** pVTable = *reinterpret_cast<void***>(pHolder);
+    s_graphHolderOffset = reinterpret_cast<uint8_t*>(pHolder) - reinterpret_cast<uint8_t*>(apActor);
+
+    constexpr size_t kNotifySlot = 1;
+    DWORD oldProtect = 0;
+    if (!VirtualProtect(&pVTable[kNotifySlot], sizeof(void*), PAGE_EXECUTE_READWRITE, &oldProtect))
+        return;
+    s_realGraphNotify = reinterpret_cast<TGraphNotify*>(pVTable[kNotifySlot]);
+    pVTable[kNotifySlot] = reinterpret_cast<void*>(&HookGraphNotify);
+    VirtualProtect(&pVTable[kNotifySlot], sizeof(void*), oldProtect, &oldProtect);
+
+    s_probedVTable = pVTable;
+    spdlog::info("[castprobe] watching graph events of remote players (holder at +{:X}, notify was SkyrimSE+{:X})", s_graphHolderOffset,
+                 GameRva(reinterpret_cast<void*>(s_realGraphNotify)));
+}
 } // namespace
 
 void AnimationSystem::Update(World& aWorld, Actor* apActor, RemoteAnimationComponent& aAnimationComponent, const uint64_t aTick) noexcept
 {
     auto& actions = aAnimationComponent.TimePoints;
+
+    if (apActor->GetExtension()->IsRemotePlayer() && apActor->formType == FormType::Character)
+        InstallGraphProbe(apActor);
 
     const auto it = std::begin(actions);
     if (it != std::end(actions) && it->Tick <= aTick)
@@ -119,6 +198,18 @@ void AnimationSystem::Update(World& aWorld, Actor* apActor, RemoteAnimationCompo
                 spdlog::info("remote magic action '{}' on {:X}: {} (idle refused{}, {} retries over {} ms)", first.EventName.c_str(), apActor->formID,
                              result ? "played" : "dropped", sentToGraph ? ", graph took the event" : "", aAnimationComponent.MagicRetryAttempts,
                              aAnimationComponent.MagicRetryStartMs ? cNowMs - aAnimationComponent.MagicRetryStartMs : 0);
+            }
+        }
+
+        if (cMagicHandEvent && apActor->GetExtension()->IsRemotePlayer())
+        {
+            static uint32_t s_replayed = 0;
+            if (s_replayed < 300)
+            {
+                ++s_replayed;
+                spdlog::info("[castprobe] replayed '{}' on {:X} -> {} (owner hands state2 {:X}, remote hands L{:X} R{:X})", first.EventName.c_str(), apActor->formID,
+                             result, first.State2, apActor->magicItems[0] ? apActor->magicItems[0]->formID : 0u,
+                             apActor->magicItems[1] ? apActor->magicItems[1]->formID : 0u);
             }
         }
 
