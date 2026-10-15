@@ -59,7 +59,8 @@ target(name)
         "entt",
         "glm",
         "mem",
-        "xbyak")
+        "xbyak",
+        "zlib")
 
     if has_config("vivox") then
         add_files("Services/Vivox/**.cpp")
