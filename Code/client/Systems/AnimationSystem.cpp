@@ -191,6 +191,41 @@ void AnimationSystem::Update(World& aWorld, Actor* apActor, RemoteAnimationCompo
             result = sentToGraph;
         }
 
+        // A refused cast start leaves that hand stuck: in test logs every following start, release and
+        // equipped event for the same hand was refused too until the other hand cast. Put the hand back into
+        // its magic-equipped state, as the owner's game does when a spell is equipped, then try once more.
+        if (!result && cMagicHandEvent && aAnimationComponent.MagicRetryAttempts == 0 && cEventName.find("Start") != std::string_view::npos)
+        {
+            const bool cDual = _strnicmp(cEventName.data(), "DualMagic_", 10) == 0;
+            const bool cLeft = cDual || _strnicmp(cEventName.data(), "MLh_", 4) == 0;
+            const bool cRight = cDual || _strnicmp(cEventName.data(), "MRh_", 4) == 0;
+
+            bool nudged = false;
+            if (cLeft)
+            {
+                BSFixedString equip("MagicForceEquipLeft");
+                nudged |= apActor->SendAnimationEvent(&equip);
+                equip.Release();
+            }
+            if (cRight)
+            {
+                BSFixedString equip("MagicForceEquipRight");
+                nudged |= apActor->SendAnimationEvent(&equip);
+                equip.Release();
+            }
+
+            result = ActorMediator::Get()->ForceAction(&actionData);
+            if (!result)
+            {
+                BSFixedString eventName(first.EventName.c_str());
+                sentToGraph = apActor->SendAnimationEvent(&eventName);
+                eventName.Release();
+                result = sentToGraph;
+            }
+
+            CastProbeLog("refused '{}' on {:X}: re-equipped hand {} -> start now {}", first.EventName.c_str(), apActor->formID, nudged, result);
+        }
+
         // Still refused: the graph is mid-transition. Dropping the action leaves the hands idle for the whole
         // cast, so keep it at the head of the queue and try again on the next frames for a short while.
         // Replays rebuild state in one go and are never held up.
@@ -229,9 +264,10 @@ void AnimationSystem::Update(World& aWorld, Actor* apActor, RemoteAnimationCompo
             if (s_replayed < 300)
             {
                 ++s_replayed;
-                CastProbeLog("replayed '{}' on {:X} -> {} (owner hands state2 {:X}, remote hands L{:X} R{:X})", first.EventName.c_str(), apActor->formID,
-                             result, first.State2, apActor->magicItems[0] ? apActor->magicItems[0]->formID : 0u,
-                             apActor->magicItems[1] ? apActor->magicItems[1]->formID : 0u);
+                CastProbeLog("replayed '{}' on {:X} -> {} (remote hands L{:X} R{:X}, casters L{} R{})", first.EventName.c_str(), apActor->formID, result,
+                             apActor->magicItems[0] ? apActor->magicItems[0]->formID : 0u, apActor->magicItems[1] ? apActor->magicItems[1]->formID : 0u,
+                             apActor->casters[0] ? static_cast<int>(apActor->casters[0]->eState) : -1,
+                             apActor->casters[1] ? static_cast<int>(apActor->casters[1]->eState) : -1);
             }
         }
 
