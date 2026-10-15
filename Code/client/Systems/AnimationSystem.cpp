@@ -21,6 +21,23 @@
 #include <Forms/TESWorldSpace.h>
 #include <Magic/ActorMagicCaster.h>
 
+namespace
+{
+// How long a refused magic hand action is retried before it is dropped. Long enough to cover a draw or
+// equip transition, short enough that the actions queued behind it are not visibly late.
+constexpr uint64_t kMagicRetryWindowMs = 400;
+
+// Behavior events of the casting hands: MRh_ (right), MLh_/MLH_ (left) and DualMagic_ (both).
+bool IsMagicHandEvent(std::string_view aEventName) noexcept
+{
+    const auto startsWith = [aEventName](std::string_view aPrefix)
+    {
+        return aEventName.size() >= aPrefix.size() && _strnicmp(aEventName.data(), aPrefix.data(), aPrefix.size()) == 0;
+    };
+    return startsWith("MRh_") || startsWith("MLh_") || startsWith("DualMagic_");
+}
+} // namespace
+
 void AnimationSystem::Update(World& aWorld, Actor* apActor, RemoteAnimationComponent& aAnimationComponent, const uint64_t aTick) noexcept
 {
     auto& actions = aAnimationComponent.TimePoints;
@@ -61,15 +78,55 @@ void AnimationSystem::Update(World& aWorld, Actor* apActor, RemoteAnimationCompo
         actionData.idleForm = Cast<TESIdleForm>(TESForm::GetById(first.IdleId));
         actionData.someFlag = ((first.Type & 0x4) != 0) ? 1 : 0;
 
-        const auto result = ActorMediator::Get()->ForceAction(&actionData);
+        bool result = ActorMediator::Get()->ForceAction(&actionData);
+        const std::string_view cEventName = first.EventName.c_str();
+        const bool cMagicHandEvent = IsMagicHandEvent(cEventName);
+        bool sentToGraph = false;
 
-        // Temporary: remote casting animations are unreliable on 1.5.97, log what the magic actions do.
+        // ForceAction plays the owner's idle through the actor's AI, which refuses it while the remote copy
+        // is still finishing an idle or transition the owner had already left. The behavior graph itself
+        // usually takes the event at that point, so hand it the event directly, as SendAnimEvent would.
+        if (!result && cMagicHandEvent)
         {
-            const std::string_view cEventName = first.EventName.c_str();
-            if (!result || cEventName.find("Cast") != std::string_view::npos || cEventName.find("Spell") != std::string_view::npos ||
-                cEventName.find("Magic") != std::string_view::npos || cEventName.find("MLh") != std::string_view::npos ||
-                cEventName.find("MRh") != std::string_view::npos || cEventName.find("eap") != std::string_view::npos ||
-                cEventName.find("raw") != std::string_view::npos)
+            BSFixedString eventName(first.EventName.c_str());
+            sentToGraph = apActor->SendAnimationEvent(&eventName);
+            eventName.Release();
+            result = sentToGraph;
+        }
+
+        // Still refused: the graph is mid-transition. Dropping the action leaves the hands idle for the whole
+        // cast, so keep it at the head of the queue and try again on the next frames for a short while.
+        // Replays rebuild state in one go and are never held up.
+        const uint64_t cNowMs = GetTickCount64();
+        if (!result && cMagicHandEvent && aAnimationComponent.ReplayCount == 0)
+        {
+            if (aAnimationComponent.MagicRetryStartMs == 0)
+                aAnimationComponent.MagicRetryStartMs = cNowMs;
+
+            if (cNowMs - aAnimationComponent.MagicRetryStartMs < kMagicRetryWindowMs)
+            {
+                ++aAnimationComponent.MagicRetryAttempts;
+                return;
+            }
+        }
+
+        if (cMagicHandEvent && (!result || sentToGraph || aAnimationComponent.MagicRetryAttempts > 0))
+        {
+            static uint32_t s_logged = 0;
+            if (s_logged < 60)
+            {
+                ++s_logged;
+                spdlog::info("remote magic action '{}' on {:X}: {} (idle refused{}, {} retries over {} ms)", first.EventName.c_str(), apActor->formID,
+                             result ? "played" : "dropped", sentToGraph ? ", graph took the event" : "", aAnimationComponent.MagicRetryAttempts,
+                             aAnimationComponent.MagicRetryStartMs ? cNowMs - aAnimationComponent.MagicRetryStartMs : 0);
+            }
+        }
+
+        aAnimationComponent.MagicRetryStartMs = 0;
+        aAnimationComponent.MagicRetryAttempts = 0;
+
+        {
+            if (!result || cMagicHandEvent || cEventName.find("Magic") != std::string_view::npos || cEventName.find("raw") != std::string_view::npos)
             {
                 const auto casterState = [apActor](int aSlot) -> int
                 {
