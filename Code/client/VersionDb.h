@@ -9,6 +9,7 @@
 #include <stdio.h>
 
 #include <spdlog/spdlog.h>
+#include <TiltedCore/Filesystem.hpp>
 
 #pragma comment(lib, "version.lib")
 
@@ -403,7 +404,18 @@ public:
             char mapName[256];
             _snprintf_s(mapName, 256, "versionlib-ae-to-se-%d-%d-%d-%d.map", major, minor, revision, build);
 
-            if (!LoadAeToSeMap(pluginsPath / mapName, mappedCount) || mappedCount == 0)
+            // The map ships with the client, next to the launcher, so a
+            // packaged release needs nothing in the game's Data folder beyond
+            // the Address Library itself. A copy under Data/SKSE/Plugins is
+            // the fallback (the SKSE-loaded runtime, older test installs).
+            bool mapLoaded = LoadAeToSeMap(TiltedPhoques::GetPath() / mapName, mappedCount) && mappedCount != 0;
+            if (!mapLoaded)
+            {
+                mappedCount = 0;
+                mapLoaded = LoadAeToSeMap(pluginsPath / mapName, mappedCount) && mappedCount != 0;
+            }
+
+            if (!mapLoaded)
             {
                 mappedCount = 0;
                 if (!LoadAeToSeMap(pluginsPath / "versionlib-ae-to-se.map", mappedCount) || mappedCount == 0)
