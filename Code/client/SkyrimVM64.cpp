@@ -2,6 +2,7 @@
 #include <chrono>
 #include <cstring>
 #include <mutex>
+#include <thread>
 
 #include <TiltedOnlinePCH.h>
 #include "TiltedOnlineApp.h"
@@ -39,13 +40,21 @@ static std::atomic<uint64_t> s_updates{0};
 static std::atomic<uint64_t> s_skipped{0};
 static std::atomic<uint64_t> s_mainLoopTicks{0};
 
-// World::Update() has two drivers: the vm tick below (as upstream), and the
-// window-timer fallback in InputService. They run on different threads (the vm
-// tick is not on the window thread on 1.5.97), so they must never overlap, and
-// the timer only fills in while the vm tick is not driving updates.
+// Where World::Update() runs.
+//
+// Upstream runs it from the SkyrimVM::Update hook, which on 1.6 is called on the
+// game's main thread. On 1.5.97 the vm tick runs on another thread, while the
+// client (TransportService above all) treats the thread that built World - the
+// main thread - as the only one allowed to dispatch server messages. So a vm tick
+// that arrives off the main thread only asks for an update, and the next
+// Main::Update (main thread, once per frame) runs it. The window timer in
+// InputService stays as a fallback for when neither hook drives the update, and
+// all paths share one lock so two updates never overlap.
 static std::mutex s_worldUpdateLock;
-static std::atomic<int64_t> s_lastVmUpdateMs{0};
-static constexpr int64_t kVmDrivingWindowMs = 250;
+static std::atomic<int64_t> s_lastDrivenUpdateMs{0};
+static std::atomic<bool> s_updateRequested{false};
+static std::atomic<std::thread::id> s_mainLoopThread{};
+static constexpr int64_t kHookDrivingWindowMs = 250;
 
 static int64_t NowMs() noexcept
 {
@@ -53,18 +62,26 @@ static int64_t NowMs() noexcept
     return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
 }
 
-static void RunUpdateFromVm()
+static void RunDrivenUpdate()
 {
     std::scoped_lock lock(s_worldUpdateLock);
-    s_lastVmUpdateMs = NowMs();
+    s_lastDrivenUpdateMs = NowMs();
     g_appInstance->Update();
 }
 
-// Called by the window-timer fallback. Returns false when the vm tick drove an
+static void RunUpdateFromVm()
+{
+    if (std::this_thread::get_id() == s_mainLoopThread.load())
+        RunDrivenUpdate();
+    else
+        s_updateRequested = true;
+}
+
+// Called by the window-timer fallback. Returns false when a game hook drove an
 // update recently or one is running right now.
 bool TryRunWorldUpdateFromTimer()
 {
-    if (NowMs() - s_lastVmUpdateMs.load() < kVmDrivingWindowMs)
+    if (NowMs() - s_lastDrivenUpdateMs.load() < kHookDrivingWindowMs)
         return false;
 
     std::unique_lock lock(s_worldUpdateLock, std::try_to_lock);
@@ -180,11 +197,12 @@ int TP_MAKE_THISCALL(HookVMUpdate, GameVM, float a2)
 
 short TP_MAKE_THISCALL(HookMainLoop, Main)
 {
-    // Instrumented for the same reason HookVMUpdate is. On 1.5.97 the vm tick
-    // has not reached us once in any session logged so far, so if the frame loop
-    // is being driven at all it is from somewhere else - and this is the other
-    // entry point the client already hooks. Counting both says which one the
-    // game actually calls, without either of them changing what it does yet.
+    // Runs on the game's main thread once per frame. Carries out the update a vm
+    // tick asked for from another thread (see RunUpdateFromVm).
+    s_mainLoopThread = std::this_thread::get_id();
+    if (s_updateRequested.exchange(false))
+        RunDrivenUpdate();
+
     const uint64_t cTick = s_mainLoopTicks.fetch_add(1) + 1;
     if (cTick == 1 || cTick % kTickHeartbeatEvery == 0)
     {
