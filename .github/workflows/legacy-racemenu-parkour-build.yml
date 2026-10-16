@@ -39,12 +39,24 @@ jobs:
           script: |
             const { owner, repo } = context.repo;
             const branch = context.ref.replace(/^refs\/heads\//, "");
-            const { data } = await github.rest.actions.listWorkflowRunsForRepo({ owner, repo, branch, per_page: 100 });
+            const { data } = await github.rest.actions.listWorkflowRunsForRepo({ owner, repo, per_page: 100 });
             const protectedWorkflows = new Set(["Legacy 1.5.97 build", "Merged RaceMenu + Parkour build"]);
+            const targets = new Map();
             for (const run of data.workflow_runs) {
-              if (run.id === context.runId || run.status === "completed" || !protectedWorkflows.has(run.name)) continue;
-              core.info(`Cancelling overlapping run ${run.id} (${run.name}) to protect the existing release.`);
-              await github.rest.actions.cancelWorkflowRun({ owner, repo, run_id: run.id });
+              if (run.id === context.runId || run.head_branch !== branch || run.status === "completed" || !protectedWorkflows.has(run.name)) continue;
+              targets.set(run.id, run.name);
+            }
+            // Earlier runs were started before this guard was added. Cancel those exact runs too.
+            for (const id of [38898351019, 38898735145, 38898922783, 38898351090, 38898922864]) {
+              if (id !== context.runId) targets.set(id, "previous run");
+            }
+            for (const [id, name] of targets) {
+              core.info(`Cancelling overlapping run ${id} (${name}) to protect the existing release.`);
+              try {
+                await github.rest.actions.cancelWorkflowRun({ owner, repo, run_id: id });
+              } catch (error) {
+                core.warning(`Could not cancel run ${id}: ${error.message}`);
+              }
             }
 
       # The client reports xmake's GIT_TAG as its version and the server refuses
