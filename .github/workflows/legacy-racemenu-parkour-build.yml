@@ -34,16 +34,18 @@ jobs:
       # This branch must not replace the existing rolling legacy-test release.
       # Cancel overlapping runs from this branch before doing the combined build.
       - name: Protect existing release and avoid duplicate builds
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api "repos/$GITHUB_REPOSITORY/actions/runs" -f branch="$GITHUB_REF_NAME" -F per_page=100 \
-            --jq ".workflow_runs[] | select(.id != $GITHUB_RUN_ID and .status != \"completed\") | select(.name == \"Legacy 1.5.97 build\" or .name == \"Merged RaceMenu + Parkour build\") | .id" |
-          while IFS= read -r run_id; do
-            [ -n "$run_id" ] || continue
-            echo "Cancelling overlapping run $run_id to protect the existing release."
-            gh run cancel "$run_id" --repo "$GITHUB_REPOSITORY" || true
-          done
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const branch = context.ref.replace(/^refs\/heads\//, "");
+            const { data } = await github.rest.actions.listWorkflowRunsForRepo({ owner, repo, branch, per_page: 100 });
+            const protectedWorkflows = new Set(["Legacy 1.5.97 build", "Merged RaceMenu + Parkour build"]);
+            for (const run of data.workflow_runs) {
+              if (run.id === context.runId || run.status === "completed" || !protectedWorkflows.has(run.name)) continue;
+              core.info(`Cancelling overlapping run ${run.id} (${run.name}) to protect the existing release.`);
+              await github.rest.actions.cancelWorkflowRun({ owner, repo, run_id: run.id });
+            }
 
       # The client reports xmake's GIT_TAG as its version and the server refuses
       # any client whose string differs from its own ("expects version v1.8.5 but
