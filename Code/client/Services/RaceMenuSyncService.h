@@ -9,6 +9,7 @@ struct ConnectedEvent;
 struct DisconnectedEvent;
 struct NotifyRaceMenuPreset;
 struct Actor;
+struct BGSColorForm;
 
 /**
  * @brief Syncs what RaceMenu adds on top of the vanilla face: sculpting (including heads imported on the
@@ -38,6 +39,11 @@ private:
         uint32_t Revision{};
         String Json{};
         Tints FaceTints{};
+
+        // LoadCharacterPresetEx mutates this form's RGB value and assigns it to the remote NPC.
+        // Keep a distinct engine-created temporary form per remote character to avoid shared hair colors.
+        BGSColorForm* HairColorForm{};
+        uint32_t HairColorBaseFormId{};
 
         // What the preset was last put on, so a respawned actor or a reloaded body gets it again.
         uint32_t AppliedFormId{};

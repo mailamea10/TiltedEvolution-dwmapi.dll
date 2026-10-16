@@ -14,6 +14,9 @@ on:
   push:
     branches:
       - 'feature/legacy-1.5.97-on-1.8.5-racemenu-parkour'
+      - 'fix/racemenu-per-character-sync'
+    tags:
+      - 'racemenu-parkour-combined-fomod-test'
 
 jobs:
   build-legacy:
@@ -34,6 +37,7 @@ jobs:
       # This branch must not replace the existing rolling legacy-test release.
       # Cancel overlapping runs from this branch before doing the combined build.
       - name: Protect existing release and avoid duplicate builds
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/')
         uses: actions/github-script@v7
         with:
           script: |
@@ -67,6 +71,9 @@ jobs:
         env:
           SERVER_VERSION: ${{ github.event.inputs.server_version || 'v1.8.5' }}
         run: |
+          # On a tag-triggered full release, remove that tag locally so git describe
+          # cannot report the release tag instead of the server protocol version.
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then git tag -d "$GITHUB_REF_NAME" || true; fi
           git tag -f "$SERVER_VERSION" HEAD
           echo "client will report version: $(git describe --tags --abbrev=0)"
 
@@ -151,8 +158,43 @@ jobs:
         if: always()
         run: find build -maxdepth 6 \( -name 'SkyrimTogetherRuntime*' -o -name 'SkyrimTogetherSKSE*' -o -name 'SkyrimTogether.exe' -o -name 'EarlyLoad.dll' -o -name 'STServer.dll' -o -name 'SkyrimTogetherServer.exe' \) | sort
 
+      - name: Package full FOMOD client and matching server
+        run: |
+          out=build/windows/x64/releasedbg
+          rm -rf package
+          mkdir -p package/client/"00 Core" package/client/"01 Standard Launcher"/SkyrimTogetherRuntime package/client/"02 Console Launcher"/SkyrimTogetherRuntime package/client/fomod package/server
+
+          # GameFiles/Skyrim is the complete Data-folder payload tracked by this repo.
+          cp -R GameFiles/Skyrim/. package/client/"00 Core"/
+          mkdir -p package/client/"00 Core"/SKSE/Plugins package/client/"00 Core"/SkyrimTogetherRuntime
+          cp "$out/SkyrimTogetherRuntime_1_5.dll" "$out/SkyrimTogetherSKSE.dll" package/client/"00 Core"/SKSE/Plugins/
+          cp "$out/EarlyLoad.dll" "$out/TPProcess.exe" package/client/"00 Core"/SkyrimTogetherRuntime/
+          cp "$out/legacy-noconsole/SkyrimTogether.exe" package/client/"01 Standard Launcher"/SkyrimTogetherRuntime/SkyrimTogether.exe
+          cp "$out/legacy/SkyrimTogether.exe" package/client/"02 Console Launcher"/SkyrimTogetherRuntime/SkyrimTogether.exe
+          cp Packaging/combined/fomod/ModuleConfig.xml Packaging/combined/fomod/info.xml package/client/fomod/
+          cp Packaging/combined/README-client.txt package/client/README.txt
+          cp LICENSE package/client/LICENSE.txt
+
+          cp "$out/STServer.dll" "$out/SkyrimTogetherServer.exe" package/server/
+          cp Packaging/combined/README-server.txt package/server/README.txt
+          cp LICENSE package/server/LICENSE.txt
+
+          (cd package/client && 7z a -tzip ../../TiltedEvolution-RaceMenu-Parkour-1.5.97-FOMOD.zip . > /dev/null)
+          (cd package/server && 7z a -tzip ../../TiltedEvolution-RaceMenu-Parkour-Server-1.8.5.zip . > /dev/null)
+          ls -lh TiltedEvolution-RaceMenu-Parkour-1.5.97-FOMOD.zip TiltedEvolution-RaceMenu-Parkour-Server-1.8.5.zip
+
+      - name: Upload full FOMOD package artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: TiltedEvolution-RaceMenu-Parkour-1.5.97-FOMOD
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            TiltedEvolution-RaceMenu-Parkour-1.5.97-FOMOD.zip
+            TiltedEvolution-RaceMenu-Parkour-Server-1.8.5.zip
+
       - name: Publish merged RaceMenu + Parkour pre-release
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/feature/legacy-1.5.97-on-1.8.5-racemenu-parkour'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -166,3 +208,10 @@ jobs:
           gh release create racemenu-parkour-combined-test publish/* --prerelease --target "$GITHUB_SHA" \
             --title "RaceMenu + Parkour combined test build (${GITHUB_SHA::8})" \
             --notes "Combined legacy 1.5.97 build of ${GITHUB_REF_NAME} at ${GITHUB_SHA}: RaceMenu appearance sync and SkyParkour animation sync. Separate pre-release; the existing main build and feature test releases are unchanged."
+
+      - name: Publish full FOMOD pre-release without replacing the existing test tag
+        if: github.event_name == 'push' && github.ref == 'refs/tags/racemenu-parkour-combined-fomod-test'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create racemenu-parkour-combined-fomod-test TiltedEvolution-RaceMenu-Parkour-1.5.97-FOMOD.zip TiltedEvolution-RaceMenu-Parkour-Server-1.8.5.zip --verify-tag --prerelease --title "RaceMenu + Parkour combined FOMOD test build (${GITHUB_SHA::8})" --notes "Complete mod-manager package for the combined Skyrim SE 1.5.97 RaceMenu appearance-sync and Parkour-sync build at ${GITHUB_SHA}. This is a separate pre-release and does not replace racemenu-parkour-combined-test or the main build."

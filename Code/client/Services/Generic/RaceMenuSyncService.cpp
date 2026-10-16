@@ -16,7 +16,9 @@
 
 #include <Actor.h>
 #include <PlayerCharacter.h>
+#include <Forms/BGSColorForm.h>
 #include <Forms/TESNPC.h>
+#include <Games/IFormFactory.h>
 #include <Games/ActorExtension.h>
 #include <Interface/UI.h>
 #include <Misc/BSFixedString.h>
@@ -50,6 +52,7 @@ constexpr uint32_t kMaxApplyAttempts = 5;
 // releases: the string handed over below carries its own reference for that.
 using TSaveCharacterPreset = void (*)(void* apTag, Actor* apActor, BSFixedString* apName);
 using TLoadCharacterPresetEx = bool (*)(void* apTag, Actor* apActor, BSFixedString* apName, void* apHairColor, uint32_t aFlags);
+using TRemoveOverlays = void (*)(void* apTag, Actor* apActor);
 
 std::filesystem::path PresetPath(const std::string& acName)
 {
@@ -230,8 +233,12 @@ void RaceMenuSyncService::SendLocalPreset(const char* acpReason) noexcept
     request.UncompressedSize = static_cast<uint32_t>(json.size());
     request.FaceTints = CaptureLocalTints();
 
+    const bool cHasBodyMorphs = json.find("\"bodyMorphs\"") != std::string::npos || json.find("\"bodyMorphData\"") != std::string::npos;
+    const bool cHasTransforms = json.find("\"transforms\"") != std::string::npos || json.find("\"transformData\"") != std::string::npos;
+    const bool cHasOverlays = json.find("[Ovl") != std::string::npos || json.find("[SOvl") != std::string::npos;
     spdlog::info("RaceMenu sync: sending the player's appearance ({}), revision {}, {} bytes ({} compressed)", acpReason, request.Revision, json.size(),
                  request.Preset.size());
+    spdlog::info("RaceMenu sync: exported preset fields: body morphs={}, transforms={}, overlay nodes={}", cHasBodyMorphs, cHasTransforms, cHasOverlays);
     m_transport.Send(request);
 }
 
@@ -315,9 +322,55 @@ bool RaceMenuSyncService::ApplyPreset(uint32_t aPlayerId, Actor* apActor, Remote
         return false;
     }
 
+    const bool cHasOverlayNodes = aPreset.Json.find("[Ovl") != String::npos || aPreset.Json.find("[SOvl") != String::npos;
+    // RaceMenu's HasOverlays is a registry check, not a check for live overlay geometry. If an actor is
+    // registered but its Body/Hands/Feet [Ovl#] nodes are missing, preset loading skips AddOverlays and the
+    // node overrides have nowhere to render. Reset the registry/geometry before loading so RaceMenu can
+    // provision the required overlay nodes, then clear any default overlays if the preset has none.
+    const TRemoveOverlays cRemoveOverlays =
+        reinterpret_cast<TRemoveOverlays>(const_cast<void*>(m_world.ctx().at<PapyrusService>().Get("NiOverride", "RemoveOverlays")));
+    if (cRemoveOverlays)
+        cRemoveOverlays(nullptr, apActor);
+    else
+        spdlog::warn("RaceMenu sync: NiOverride.RemoveOverlays is unavailable; overlay state may not match for player {:X}", aPlayerId);
+
+    const bool cHasHairColor = aPreset.Json.find("\"hairColor\"") != String::npos;
+    auto* pNpc = Cast<TESNPC>(apActor->baseForm);
+    BGSColorForm* pHairColor = nullptr;
+    if (cHasHairColor && pNpc && (!aPreset.HairColorForm || aPreset.HairColorBaseFormId != pNpc->formID))
+    {
+        // BGSColorForm is CLFM (form type 0x85). Use Skyrim's own form factory rather than copying a form
+        // or sharing RaceMenu's global color form: LoadCharacterPresetEx changes the supplied form's RGB
+        // and assigns it to this NPC. Like the temporary TESNPC objects created by this project, keep the
+        // engine-created form alive for the session because the remote NPC retains the pointer.
+        aPreset.HairColorForm = nullptr;
+        aPreset.HairColorBaseFormId = 0;
+
+        auto* pColorFactory = IFormFactory::GetForType(static_cast<FormType>(0x85));
+        if (pColorFactory)
+        {
+            auto* pHairColor = static_cast<BGSColorForm*>(pColorFactory->Create());
+            if (pHairColor)
+            {
+                pHairColor->InitializeComponents();
+                pHairColor->color.alpha = 0xFF;
+                aPreset.HairColorForm = pHairColor;
+                aPreset.HairColorBaseFormId = pNpc->formID;
+            }
+        }
+
+        if (!aPreset.HairColorForm)
+            spdlog::warn("RaceMenu sync: could not create a per-character hair color form for player {:X}; hair color may remain shared", aPlayerId);
+    }
+    if (cHasHairColor && pNpc && aPreset.HairColorBaseFormId == pNpc->formID)
+        pHairColor = aPreset.HairColorForm;
+
     BSFixedString name(cName.c_str()); // released by the callee
-    const bool cLoaded = cLoad(nullptr, apActor, &name, nullptr, kPresetApplyAll);
+    const bool cLoaded = cLoad(nullptr, apActor, &name, pHairColor, kPresetApplyAll);
     RemoveFile(cPath);
+
+    if (cLoaded && !cHasOverlayNodes && cRemoveOverlays)
+        cRemoveOverlays(nullptr, apActor);
 
     spdlog::info("RaceMenu sync: appearance revision {} of player {:X} {} on {:X}", aPreset.Revision, aPlayerId, cLoaded ? "applied" : "was refused by RaceMenu",
                  apActor->formID);

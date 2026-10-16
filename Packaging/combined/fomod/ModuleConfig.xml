@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config>
+  <moduleName>TiltedEvolution - RaceMenu + Parkour (Skyrim SE 1.5.97)</moduleName>
+  <requiredInstallFiles>
+    <folder source="00 Core" destination="" />
+  </requiredInstallFiles>
+  <installSteps order="Explicit">
+    <installStep name="Launcher">
+      <optionalFileGroups order="Explicit">
+        <group name="Console window" type="SelectExactlyOne" order="Explicit">
+          <plugins order="Explicit">
+            <plugin name="Standard launcher (recommended)" type="Recommended">
+              <description>Launches Skyrim Together without an extra console window.</description>
+              <files><folder source="01 Standard Launcher" destination="" /></files>
+            </plugin>
+            <plugin name="Console launcher (troubleshooting)" type="Optional">
+              <description>Shows the launcher log in a console window to help diagnose startup problems.</description>
+              <files><folder source="02 Console Launcher" destination="" /></files>
+            </plugin>
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
+  </installSteps>
+</config>
