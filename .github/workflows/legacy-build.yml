@@ -162,7 +162,7 @@ jobs:
       # Testing convenience: a rolling pre-release whose files download without a
       # GitHub login (workflow artifacts need one). Replaced on every push.
       - name: Publish rolling test pre-release
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && github.ref_name != 'feature/legacy-1.5.97-on-1.8.5-racemenu-parkour'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
