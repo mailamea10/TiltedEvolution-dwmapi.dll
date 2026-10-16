@@ -1,4 +1,4 @@
-name: Parkour sync build (side project)
+name: Merged RaceMenu + Parkour build
 
 # Compiles the 1.5.x runtime (SKYRIM_TARGET_LEGACY) and the SKSE bootstrap plugin.
 # This is a compile check plus the two DLLs as a downloadable artifact; the release
@@ -13,7 +13,7 @@ on:
         default: 'v1.8.5'
   push:
     branches:
-      - 'feature/parkour-**'
+      - 'feature/legacy-1.5.97-on-1.8.5-racemenu-parkour'
 
 jobs:
   build-legacy:
@@ -109,11 +109,20 @@ jobs:
           grep -E "error C[0-9]+|error LNK[0-9]+|fatal error|: error:" build-launcher.log | sort -u | head -40 | while IFS= read -r line; do echo "::error::${line:0:900}"; done
           exit $status
 
+      # RaceMenu sync adds a message type the server has to relay, so this branch ships its server too.
+      - name: Build server
+        run: |
+          set +e
+          xmake build -y -vD SkyrimServerRunner 2>&1 | tee build-server.log
+          status=${PIPESTATUS[0]}
+          grep -E "error C[0-9]+|error LNK[0-9]+|fatal error|: error:" build-server.log | sort -u | head -40 | while IFS= read -r line; do echo "::error::${line:0:900}"; done
+          exit $status
+
       - name: List build outputs
         if: always()
-        run: find build -maxdepth 6 \( -name 'SkyrimTogetherRuntime*' -o -name 'SkyrimTogetherSKSE*' -o -name 'SkyrimTogether.exe' -o -name 'EarlyLoad.dll' \) | sort
+        run: find build -maxdepth 6 \( -name 'SkyrimTogetherRuntime*' -o -name 'SkyrimTogetherSKSE*' -o -name 'SkyrimTogether.exe' -o -name 'EarlyLoad.dll' -o -name 'STServer.dll' -o -name 'SkyrimTogetherServer.exe' \) | sort
 
-      - name: Publish rolling parkour sync pre-release
+      - name: Publish merged RaceMenu + Parkour pre-release
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -121,8 +130,10 @@ jobs:
           out=build/windows/x64/releasedbg
           mkdir -p publish
           cp "$out/SkyrimTogetherRuntime_1_5.dll" "$out/SkyrimTogetherSKSE.dll" "$out/TPProcess.exe" "$out/EarlyLoad.dll" "$out/legacy/SkyrimTogether.exe" publish/
+          cp "$out/STServer.dll" "$out/SkyrimTogetherServer.exe" publish/
           cp GameFiles/Skyrim/SKSE/Plugins/versionlib-ae-to-se-1-5-97-0.map publish/
-          gh release delete parkour-sync-test --yes --cleanup-tag || true
-          gh release create parkour-sync-test publish/* --prerelease --target "$GITHUB_SHA" \
-            --title "Parkour sync test build (${GITHUB_SHA::8})" \
-            --notes "Side-project build of ${GITHUB_REF_NAME} at ${GITHUB_SHA}: SkyParkour animation sync. Not a release."
+          ls -la publish
+          gh release delete racemenu-parkour-combined-test --yes --cleanup-tag || true
+          gh release create racemenu-parkour-combined-test publish/* --prerelease --target "$GITHUB_SHA" \
+            --title "RaceMenu + Parkour combined test build (${GITHUB_SHA::8})" \
+            --notes "Combined legacy 1.5.97 build of ${GITHUB_REF_NAME} at ${GITHUB_SHA}: RaceMenu appearance sync and SkyParkour animation sync. Separate pre-release; the existing main build and feature test releases are unchanged."
