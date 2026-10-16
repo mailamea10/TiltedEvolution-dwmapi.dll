@@ -18,6 +18,7 @@
 #include <Messages/NotifyLockChange.h>
 #include <Messages/ScriptAnimationRequest.h>
 #include <Messages/NotifyScriptAnimation.h>
+#include <Services/GraphEventSyncService.h>
 #include <Messages/NotifyRemoveObjects.h>
 
 #include <PlayerCharacter.h>
@@ -478,6 +479,32 @@ void ObjectService::OnNotifyScriptAnimation(const NotifyScriptAnimation& acMessa
     TESObjectREFR* pObject = Utils::GetByServerId<TESObjectREFR>(acMessage.FormID);
     if (!pObject)
         return;
+
+    // A graph variable that a synced mod animation reads (see GraphEventSyncService), sent just ahead of the
+    // event: "STRGV:<i|b|f>:<name>:<value>".
+    if (acMessage.EventName.rfind(GraphEventSyncService::kVariablePrefix, 0) == 0)
+    {
+        const std::string cSpec = acMessage.EventName.c_str() + strlen(GraphEventSyncService::kVariablePrefix);
+        const auto cFirst = cSpec.find(':');
+        const auto cLast = cSpec.rfind(':');
+        if (cFirst != 1 || cLast == std::string::npos || cLast <= cFirst + 1)
+            return;
+
+        const char cType = cSpec[0];
+        const std::string cName = cSpec.substr(cFirst + 1, cLast - cFirst - 1);
+        const char* pcValue = cSpec.c_str() + cLast + 1;
+
+        BSFixedString variable(cName.c_str());
+        auto& holder = pObject->animationGraphHolder;
+        if (cType == 'i')
+            holder.SetVariableInt(&variable, static_cast<int32_t>(strtol(pcValue, nullptr, 10)));
+        else if (cType == 'b')
+            holder.SetVariableBool(&variable, *pcValue == '1');
+        else if (cType == 'f')
+            holder.SetVariableFloat(&variable, strtof(pcValue, nullptr));
+        variable.Release();
+        return;
+    }
 
     BSFixedString eventName(acMessage.EventName.c_str());
     if (acMessage.Animation == String{})
