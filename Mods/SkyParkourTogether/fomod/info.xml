@@ -4,7 +4,7 @@
   <Author>mailamea10</Author>
   <Version MachineVersion="1.0.0">1.0.0</Version>
   <Website>https://github.com/mailamea10/TiltedEvolution-dwmapi.dll</Website>
-  <Description>Shares SkyParkour's vaults, climbs, ledge grabs, slides and landing rolls between Skyrim Together Reborn players, so everyone sees the same animation you play. Supports Skyrim 1.5.97, 1.6.1170/1.6.1179 and 1.7.104.</Description>
+  <Description>Shares SkyParkour's vaults, climbs, ledge grabs, slides and landing rolls between Skyrim Together Reborn players, so everyone sees the same animation you play. Supports Skyrim Together Reborn 1.8.3 from Nexus (Skyrim 1.7.104 and 1.6.1170/1.6.1179) and Skyrim Together Reborn 1.8.5 (Skyrim 1.7.104, 1.6.1170/1.6.1179 and 1.5.97).</Description>
   <Groups>
     <element>Animation</element>
     <element>Multiplayer</element>

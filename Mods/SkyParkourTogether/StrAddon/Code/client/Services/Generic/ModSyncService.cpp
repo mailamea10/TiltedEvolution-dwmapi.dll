@@ -28,10 +28,14 @@ extern "C" __declspec(dllexport) uint32_t STRModSync_HostApiVersion()
 
 namespace
 {
-// "STRMS1|<sender's server id, hex>|<event>|<type>:<name>:<value>|...", relayed as a script animation for a
-// server id that cannot exist, so clients without the add-on look it up, find nothing and drop it.
+// "STRMS1|<sender's server id, hex>|<event>|<type>:<name>:<value>|...", relayed as a script animation for an
+// object id that the stock client drops without playing anything. 1.8.5 resolves that id as a server id, so
+// one that cannot exist is used; 1.8.3 skips id 0 outright (apply_addon.py --protocol 1.8.3 defines it).
+#ifndef STR_MODSYNC_NO_OBJECT
+#define STR_MODSYNC_NO_OBJECT 0xFFFFFFFFu
+#endif
 constexpr const char* kWirePrefix = "STRMS1|";
-constexpr uint32_t kNoObject = 0xFFFFFFFF;
+constexpr uint32_t kNoObject = STR_MODSYNC_NO_OBJECT;
 constexpr size_t kMaxWireLength = 480;
 
 // Plugins can load late (some are loaded by other plugins), so keep looking for a while.

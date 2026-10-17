@@ -2,47 +2,63 @@ name: SkyParkour Together release
 
 # Builds the SkyParkour Together FOMOD:
 # - the SKSE plugin (one DLL for every runtime; it touches no game memory),
-# - the Skyrim Together launcher with the STR Mod Sync add-on, once per game version, each from that
-#   version's Skyrim Together Reborn 1.8.5 source with nothing else changed,
-# and publishes the archive as a GitHub release.
+# - the Skyrim Together launcher with the STR Mod Sync add-on, once per Skyrim Together release and game
+#   version, each from that release's source with nothing else changed:
+#   official 1.8.3 (Nexus main file 1.7.104, optional file 1.6.1170/1.6.1179) and
+#   absol89's 1.8.5 (1.7.104, 1.6.1170/1.6.1179, and the 1.5.97 port),
+# and adds the archive to the GitHub release, next to any archives already there.
 
 on:
   workflow_dispatch:
-    inputs:
-      server_version:
-        description: 'Version string the STR server compares against'
-        required: false
-        default: 'v1.8.5'
   push:
     branches:
       - 'release/skyparkour-**'
 
 env:
   MOD_VERSION: '1.0.0'
-  SERVER_VERSION: ${{ github.event.inputs.server_version || 'v1.8.5' }}
 
 jobs:
   str-addon:
-    name: STR add-on (${{ matrix.game }})
+    name: STR add-on (${{ matrix.id }})
     runs-on: windows-2022
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Skyrim Together Reborn 1.8.5 for 1.7.104
-          - game: '1.7.104'
+          # Official Skyrim Together Reborn 1.8.3 (Nexus main file), Skyrim 1.7.104
+          - id: 183-1.7.104
+            base: 4917189f6ac382e874f9ee735c4fef6a350e449e
+            folder: '10 STR 1.8.3 - 1.7.104'
+            version: v1.8.3
+            protocol: '1.8.3'
+            legacy: false
+          # Official 1.8.3 for 1.6.1170 / 1.6.1179 (Nexus optional file): 1.8.3 with the 1.6 runtime layouts
+          - id: 183-1.6.1170
+            base: db8af2cf2758ccb6412b71ac1dcadc8c3a5ad0aa
+            folder: '11 STR 1.8.3 - 1.6.1170'
+            version: v1.8.3
+            protocol: '1.8.3'
+            legacy: false
+          # Skyrim Together Reborn 1.8.5 (absol89), Skyrim 1.7.104
+          - id: 185-1.7.104
             base: 0f1876e692310959b5c67ae148357e9d4c7ed9ff
-            folder: '10 STR Add-on 1.7.104'
+            folder: '20 STR 1.8.5 - 1.7.104'
+            version: v1.8.5
+            protocol: '1.8.5'
             legacy: false
-          # Skyrim Together Reborn 1.8.5 for 1.6.1170 / 1.6.1179
-          - game: '1.6.1170'
+          # 1.8.5 for 1.6.1170 / 1.6.1179
+          - id: 185-1.6.1170
             base: 043dad02c086c158a4b1e24d136e2c97c8a6d15f
-            folder: '11 STR Add-on 1.6.1170'
+            folder: '21 STR 1.8.5 - 1.6.1170'
+            version: v1.8.5
+            protocol: '1.8.5'
             legacy: false
-          # Skyrim Together Reborn 1.8.5 for 1.5.97 (before any of this fork's feature work)
-          - game: '1.5.97'
+          # 1.8.5 for 1.5.97 (before any of this fork's feature work)
+          - id: 185-1.5.97
             base: e6a097e1915a58d53343b167c24367f92303bcc0
-            folder: '12 STR Add-on 1.5.97'
+            folder: '22 STR 1.8.5 - 1.5.97'
+            version: v1.8.5
+            protocol: '1.8.5'
             legacy: true
     defaults:
       run:
@@ -54,7 +70,7 @@ jobs:
         with:
           path: release
 
-      - name: Checkout Skyrim Together source for ${{ matrix.game }}
+      - name: Checkout Skyrim Together source for ${{ matrix.id }}
         uses: actions/checkout@v7
         with:
           path: str
@@ -65,13 +81,13 @@ jobs:
         run: |
           git checkout --force "${{ matrix.base }}"
           git log -1 --format='base: %H %s'
-          git tag -f "$SERVER_VERSION" HEAD
+          git tag -f "${{ matrix.version }}" HEAD
           echo "client will report version: $(git describe --tags --abbrev=0)"
           git submodule sync --recursive
           git submodule update --init --force --recursive --depth=1
 
       - name: Apply the STR Mod Sync add-on
-        run: python release/Mods/SkyParkourTogether/StrAddon/apply_addon.py str
+        run: python release/Mods/SkyParkourTogether/StrAddon/apply_addon.py str --protocol "${{ matrix.protocol }}"
 
       - name: Restore xmake packages
         id: pkgcache
@@ -98,7 +114,7 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: ~/AppData/Local/.xmake/packages
-          key: ${{ runner.os }}-xmake-pkgs-${{ hashFiles('str/**/xmake.lua') }}-${{ matrix.game }}
+          key: ${{ runner.os }}-xmake-pkgs-${{ hashFiles('str/**/xmake.lua') }}-${{ matrix.id }}
 
       - name: Build the launcher
         working-directory: str
@@ -133,7 +149,7 @@ jobs:
       - name: Upload the add-on
         uses: actions/upload-artifact@v7
         with:
-          name: addon-${{ matrix.game }}
+          name: addon-${{ matrix.id }}
           retention-days: 14
           if-no-files-found: error
           path: addon
@@ -188,11 +204,11 @@ jobs:
           cp artifacts/plugin/SkyParkourTogether.dll "$pkg/00 Core/SKSE/Plugins/"
           cp "$root/README.txt" "$pkg/00 Core/Docs/SkyParkour Together - README.txt"
           cp LICENSE "$pkg/00 Core/Docs/SkyParkour Together - LICENSE.txt"
-          for game in 1.7.104 1.6.1170 1.5.97; do
-            cp -r artifacts/addon-$game/* "$pkg/"
+          for addon in artifacts/addon-*; do
+            cp -r "$addon"/* "$pkg/"
           done
           find "$pkg" -type f | sort
-          name="SkyParkour_Together_Parkour_Animations_Sync-${MOD_VERSION}.zip"
+          name="SkyParkour_Together_Parkour_Animations_Sync-${MOD_VERSION}-STR-1.8.3-and-1.8.5.zip"
           (cd "$pkg" && zip -r -q "../$name" .)
           ls -la "$name"
           echo "ARCHIVE=$name" >> "$GITHUB_ENV"
@@ -205,13 +221,16 @@ jobs:
           if-no-files-found: error
           path: ${{ env.ARCHIVE }}
 
-      - name: Publish the release
+      - name: Add the archive to the release
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="skyparkour-together-v${MOD_VERSION}"
-          gh release delete "$tag" --yes --cleanup-tag || true
-          gh release create "$tag" "$ARCHIVE" --prerelease --target "$GITHUB_SHA" \
-            --title "SkyParkour Together (Parkour Animations Sync) ${MOD_VERSION}" \
-            --notes-file Mods/SkyParkourTogether/RELEASE_NOTES.md
+          # Archives already on the release stay as they are; this one is added (or replaced on a rebuild).
+          if ! gh release view "$tag" > /dev/null 2>&1; then
+            gh release create "$tag" --prerelease --target "$GITHUB_SHA" \
+              --title "SkyParkour Together (Parkour Animations Sync) ${MOD_VERSION}" \
+              --notes-file Mods/SkyParkourTogether/RELEASE_NOTES.md
+          fi
+          gh release upload "$tag" "$ARCHIVE" --clobber

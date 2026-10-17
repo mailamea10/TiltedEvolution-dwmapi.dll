@@ -9,14 +9,14 @@ Game: Skyrim Special Edition
 | Category | Animation |
 | Author | mailamea10 |
 | Language | English |
-| Brief overview (summary) | Shares SkyParkour's vaults, climbs, ledge grabs, slides and landing rolls between Skyrim Together Reborn players, so everyone sees the parkour you do. One FOMOD for 1.5.97, 1.6.1170/1179 and 1.7.104. |
+| Brief overview (summary) | Shares SkyParkour's vaults, climbs, ledge grabs, slides and landing rolls between Skyrim Together Reborn players, so everyone sees the parkour you do. Works with the official Skyrim Together Reborn 1.8.3 (1.7.104, 1.6.1170/1179) and 1.8.5 (incl. 1.5.97). |
 | Header / thumbnail image | Mods/SkyParkourTogether/fomod/images/banner.png (original art; do not use SkyParkour's logo or images) |
 | Tags | Animation, Multiplayer, SKSE, Compatibility patch |
 
 ## Requirements tab
 
 Nexus requirements:
-- Skyrim Together Reborn: https://www.nexusmods.com/skyrimspecialedition/mods/69993 (note: "1.8.5 for your game version")
+- Skyrim Together Reborn: https://www.nexusmods.com/skyrimspecialedition/mods/69993 (note: "1.8.3 main or optional file for your game version, or STR 1.8.5")
 - SkyParkour (Tsptds's SkyParkour page; link the current version) (note: "Required; not included")
 - Address Library for SKSE Plugins: https://www.nexusmods.com/skyrimspecialedition/mods/32444
 
@@ -28,8 +28,8 @@ Off-site requirements:
 - File name: SkyParkour Together (Parkour Animations Sync)
 - File version: 1.0.0
 - Category: Main files
-- Upload: SkyParkour_Together_Parkour_Animations_Sync-1.0.0.zip (from the GitHub release skyparkour-together-v1.0.0)
-- File description: FOMOD installer for Skyrim 1.5.97, 1.6.1170/1.6.1179 and 1.7.104. Every player needs it.
+- Upload: SkyParkour_Together_Parkour_Animations_Sync-1.0.0-STR-1.8.3-and-1.8.5.zip (from the GitHub release skyparkour-together-v1.0.0)
+- File description: FOMOD installer for Skyrim Together Reborn 1.8.3 from Nexus (Skyrim 1.7.104 and 1.6.1170/1.6.1179) and Skyrim Together Reborn 1.8.5 (1.7.104, 1.6.1170/1.6.1179, 1.5.97). Every player needs it.
 
 ## Permissions and credits
 

@@ -1,9 +1,11 @@
 """Adds the STR Mod Sync add-on to a Skyrim Together Reborn 1.8.5 source tree.
 
-Usage: python apply_addon.py <path to the STR source tree>
+Usage: python apply_addon.py <path to the STR source tree> [--protocol 1.8.5|1.8.3]
 
 Copies the add-on's client sources into Code/client and registers ModSyncService in Code/client/World.cpp.
-The same add-on goes onto the 1.5.97, 1.6.1170/1.6.1179 and 1.7.104 trees, which all share 1.8.5's client.
+The same add-on goes onto the 1.8.5 trees (1.5.97, 1.6.1170/1.6.1179, 1.7.104) and the official 1.8.3 trees
+(1.6.1170/1.6.1179, 1.7.104). The two releases address relayed script animations differently, which
+--protocol accounts for (default 1.8.5).
 """
 
 import pathlib
@@ -22,10 +24,16 @@ def insert_after(text: str, anchor: str, addition: str, path: pathlib.Path) -> s
 
 
 def main() -> None:
-    if len(sys.argv) != 2:
+    args = sys.argv[1:]
+    protocol = "1.8.5"
+    if "--protocol" in args:
+        index = args.index("--protocol")
+        protocol = args[index + 1] if index + 1 < len(args) else ""
+        del args[index : index + 2]
+    if len(args) != 1 or protocol not in ("1.8.5", "1.8.3"):
         sys.exit(__doc__)
 
-    tree = pathlib.Path(sys.argv[1]).resolve()
+    tree = pathlib.Path(args[0]).resolve()
     addon = pathlib.Path(__file__).resolve().parent
 
     source_root = addon / "Code"
@@ -35,6 +43,16 @@ def main() -> None:
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
             print(f"apply_addon: copied {target.relative_to(tree)}")
+
+    if protocol == "1.8.3":
+        service = tree / "Code" / "client" / "Services" / "Generic" / "ModSyncService.cpp"
+        text = service.read_text(encoding="utf-8")
+        default = "#define STR_MODSYNC_NO_OBJECT 0xFFFFFFFFu"
+        if default not in text:
+            sys.exit(f"apply_addon: '{default}' not found in {service}")
+        # 1.8.3: the stock client skips script animations for object id 0.
+        service.write_text(text.replace(default, "#define STR_MODSYNC_NO_OBJECT 0u"), encoding="utf-8")
+        print("apply_addon: protocol 1.8.3")
 
     world = tree / "Code" / "client" / "World.cpp"
     text = world.read_text(encoding="utf-8")

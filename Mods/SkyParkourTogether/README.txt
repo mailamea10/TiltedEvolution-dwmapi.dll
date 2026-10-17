@@ -8,14 +8,24 @@ height and variant you got.
 
 Requirements (every player in the session)
 ------------------------------------------
-- Skyrim Special/Anniversary Edition 1.5.97, 1.6.1170, 1.6.1179 or 1.7.104
-- SKSE for that game version, and Address Library for SKSE Plugins
-- Skyrim Together Reborn 1.8.5 installed as a mod
+- SKSE for your game version, and Address Library for SKSE Plugins
 - SkyParkour (by Tsptds), from its own Nexus page. This mod contains no
   SkyParkour files.
+- Skyrim Together Reborn, installed as a mod, in one of these versions:
 
-Any regular Skyrim Together Reborn 1.8.5 server works; nothing is installed
-on the server.
+  Skyrim Together              Skyrim
+  ---------------------------  ------------------------------
+  1.8.3 (official, Nexus)      1.7.104 (main file)
+                               1.6.1170 / 1.6.1179 (optional file "for 1.6.1170")
+  1.8.5 (absol89)              1.7.104, 1.6.1170 / 1.6.1179
+  1.8.5 (1.5.97 port)          1.5.97
+
+The installer first asks which Skyrim Together you use, then your game
+version. Not sure? You have the official one from Nexus: pick 1.8.3.
+
+1.8.3 and 1.8.5 cannot play together, so everyone in a session uses the same
+one. Any regular server of that version works; nothing is installed on the
+server.
 
 What is in the archive
 ----------------------
@@ -23,7 +33,7 @@ What is in the archive
   Together which of your animations are SkyParkour's. One DLL for every
   game version; it does not touch game memory.
 - SkyrimTogetherRuntime/SkyrimTogether.exe: the Skyrim Together launcher for
-  your game version, built from Skyrim Together Reborn 1.8.5 with one small
+  your Skyrim Together and game version, built from that release with one small
   add-on (the STR Mod Sync API) that carries the animations to the other
   players. Nothing else in Skyrim Together is changed.
   The 1.5.97 option also installs EarlyLoad.dll, TPProcess.exe and
@@ -32,8 +42,9 @@ What is in the archive
 
 Install
 -------
-1. Install Skyrim Together Reborn 1.8.5 and SkyParkour as usual.
-2. Install this archive with your mod manager and pick your game version.
+1. Install Skyrim Together Reborn and SkyParkour as usual.
+2. Install this archive with your mod manager and pick your Skyrim Together
+   version, then your game version.
 3. Place it AFTER Skyrim Together Reborn so its SkyrimTogether.exe wins the
    conflict (Mod Organizer 2: lower in the left pane; Vortex: load after).
 4. Start the game from SkyrimTogetherRuntime/SkyrimTogether.exe as you

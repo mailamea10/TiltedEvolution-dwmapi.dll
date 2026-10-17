@@ -7,8 +7,9 @@ Your friends see your parkour. When you vault a fence, climb a wall, grab a ledg
 [list]
 [*][b]Every SkyParkour move is shared[/b]: vaults, climbs, low and high ledge grabs, steps (including weapon-out steps that play on the legs only), slides and landing rolls, at your playback speed setting.
 [*][b]The same animation on every screen[/b]: the graph values SkyParkour uses to pick an animation go along with each move, so other players see the exact animation you played.
-[*][b]One installer for three game versions[/b]: Skyrim [b]1.5.97[/b], [b]1.6.1170 / 1.6.1179[/b] and [b]1.7.104[/b]. The FOMOD asks which one you play.
-[*][b]No server changes[/b]: it plays on any regular Skyrim Together Reborn 1.8.5 server.
+[*][b]Works with the official Skyrim Together Reborn 1.8.3[/b] from Nexus: the main file (Skyrim [b]1.7.104[/b]) and the optional file for [b]1.6.1170 / 1.6.1179[/b].
+[*][b]Also works with Skyrim Together Reborn 1.8.5[/b] (absol89), including its [b]1.5.97[/b] port.
+[*][b]No server changes[/b]: it plays on any regular server of your Skyrim Together version.
 [*][b]SkyParkour itself is untouched[/b]: this mod contains no SkyParkour files and changes nothing about how parkour plays for you.
 [/list]
 
@@ -18,14 +19,21 @@ Your friends see your parkour. When you vault a fence, climb a wall, grab a ledg
 [*]Skyrim Special/Anniversary Edition [b]1.5.97, 1.6.1170, 1.6.1179 or 1.7.104[/b]
 [*][url=https://skse.silverlock.org/]SKSE64[/url] for your game version
 [*][url=https://www.nexusmods.com/skyrimspecialedition/mods/32444]Address Library for SKSE Plugins[/url]
-[*][url=https://www.nexusmods.com/skyrimspecialedition/mods/69993]Skyrim Together Reborn[/url] [b]1.8.5[/b] for your game version
+[*][url=https://www.nexusmods.com/skyrimspecialedition/mods/69993]Skyrim Together Reborn[/url] [b]1.8.3[/b] (the Nexus main or optional file for your game version), or Skyrim Together Reborn [b]1.8.5[/b]
 [*][b]SkyParkour[/b] by Tsptds, from its own Nexus page (not included)
 [/list]
 
+[size=5][b]Which Skyrim Together do I have?[/b][/size]
+[list]
+[*][b]1.8.3 (official)[/b]: you downloaded Skyrim Together Reborn from its Nexus page. Main file = Skyrim 1.7.104; optional file "for 1.6.1170" = Skyrim 1.6.1170/1.6.1179. [b]Not sure? This is you.[/b]
+[*][b]1.8.5[/b]: you use absol89's 1.8.5 build, or play on Skyrim 1.5.97 with the 1.5.97 port.
+[/list]
+1.8.3 and 1.8.5 can't join each other's servers, so everyone in your session needs the same one.
+
 [size=5][b]Installation[/b][/size]
 [list=1]
-[*]Install Skyrim Together Reborn 1.8.5 and SkyParkour as usual.
-[*]Install this mod with Mod Organizer 2 or Vortex and pick your game version in the installer.
+[*]Install Skyrim Together Reborn and SkyParkour as usual.
+[*]Install this mod with Mod Organizer 2 or Vortex. The installer asks which Skyrim Together you use, then your game version.
 [*]Let it win its file conflict with Skyrim Together Reborn: in MO2, place it [b]below[/b] Skyrim Together Reborn in the left pane; in Vortex, set it to load [b]after[/b].
 [*]Start the game from [font=Courier New]SkyrimTogetherRuntime/SkyrimTogether.exe[/font], as you normally start Skyrim Together.
 [/list]
@@ -41,7 +49,7 @@ If the SKSE log says the add-on was [b]not[/b] found, another mod's [font=Courie
 SkyParkour plays its animations directly on your character's animation graph, which Skyrim Together does not share, so other players only saw you slide around in a running pose. This mod has two parts:
 [list]
 [*][b]SkyParkourTogether.dll[/b] (SKSE plugin): tells Skyrim Together which of your animations are SkyParkour's and which values pick the right one. It reads no game memory, so one DLL works on every game version.
-[*][b]SkyrimTogether.exe[/b] for your game version: Skyrim Together Reborn 1.8.5 with a small add-on, the [i]STR Mod Sync API[/i], that sends those animations through Skyrim Together's existing animation relay and plays them on your character on the other players' screens. Nothing else in Skyrim Together is changed. On 1.5.97 the installer also adds the files Skyrim Together needs to run on that version.
+[*][b]SkyrimTogether.exe[/b] for your Skyrim Together and game version: that exact Skyrim Together release with a small add-on, the [i]STR Mod Sync API[/i], that sends those animations through Skyrim Together's existing animation relay and plays them on your character on the other players' screens. Nothing else in Skyrim Together is changed. On 1.5.97 the installer also adds the files Skyrim Together needs to run on that version.
 [/list]
 
 [size=5][b]Compatibility[/b][/size]
