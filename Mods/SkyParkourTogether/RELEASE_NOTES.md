@@ -1,4 +1,4 @@
-**SkyParkour Together (Parkour Animations Sync) 1.0.0** shares SkyParkour's animations between Skyrim Together Reborn 1.8.5 players: vaults, climbs, ledge grabs, steps, slides and landing rolls play on your character for everyone, with the same height and variant you got.
+**SkyParkour Together (Parkour Animations Sync) 1.0.0** shares SkyParkour's animations between Skyrim Together Reborn players: vaults, climbs, ledge grabs, steps, slides and landing rolls play on your character for everyone, with the same height and variant you got.
 
 One FOMOD for the official **Skyrim Together Reborn 1.8.3** from Nexus (Skyrim **1.7.104** and **1.6.1170 / 1.6.1179**) and **Skyrim Together Reborn 1.8.5** (Skyrim 1.7.104, 1.6.1170 / 1.6.1179 and **1.5.97**). The installer asks which Skyrim Together you use, then your game version.
 
