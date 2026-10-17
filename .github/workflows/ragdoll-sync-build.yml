@@ -109,6 +109,16 @@ jobs:
           grep -E "error C[0-9]+|error LNK[0-9]+|fatal error|: error:" build-launcher.log | sort -u | head -40 | while IFS= read -r line; do echo "::error::${line:0:900}"; done
           exit $status
 
+      # The 1.6.1170 / 1.6.1179 launcher from the same source (absol89's 1.8.5 for 1.6), so the feature can
+      # also be tested on 1.6. It lands in releasedbg/ next to the legacy/ folder.
+      - name: Build 1.6.1170 immersive launcher
+        run: |
+          set +e
+          xmake build -y -vD SkyrimImmersiveLauncher 2>&1 | tee build-launcher-ae.log
+          status=${PIPESTATUS[0]}
+          grep -E "error C[0-9]+|error LNK[0-9]+|fatal error|: error:" build-launcher-ae.log | sort -u | head -40 | while IFS= read -r line; do echo "::error::${line:0:900}"; done
+          exit $status
+
       # Ship the matching server as well, so client and server come from the same commit.
       - name: Build server
         run: |
@@ -126,12 +136,21 @@ jobs:
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ragdoll-sync-test
         run: |
           out=build/windows/x64/releasedbg
           mkdir -p publish
           cp "$out/SkyrimTogetherRuntime_1_5.dll" "$out/SkyrimTogetherSKSE.dll" "$out/TPProcess.exe" "$out/EarlyLoad.dll" "$out/legacy/SkyrimTogether.exe" publish/
           cp "$out/STServer.dll" "$out/SkyrimTogetherServer.exe" publish/
           cp GameFiles/Skyrim/SKSE/Plugins/versionlib-ae-to-se-1-5-97-0.map publish/
+          cp "$out/SkyrimTogether.exe" publish/SkyrimTogether-1.6.1170.exe
+          # Ready-to-extract overlays: each zip goes over a Skyrim Together 1.8.5 install.
+          tag_name=$(echo "$RELEASE_TAG" | sed 's/-test$//')
+          rm -rf ov && mkdir -p ov/se/SkyrimTogetherReborn ov/ae/SkyrimTogetherReborn
+          cp "$out/legacy/SkyrimTogether.exe" "$out/EarlyLoad.dll" "$out/TPProcess.exe" GameFiles/Skyrim/SKSE/Plugins/versionlib-ae-to-se-1-5-97-0.map ov/se/SkyrimTogetherReborn/
+          cp "$out/SkyrimTogether.exe" ov/ae/SkyrimTogetherReborn/
+          (cd ov/se && 7z a -tzip "../../publish/${tag_name}-1.5.97.zip" . > /dev/null)
+          (cd ov/ae && 7z a -tzip "../../publish/${tag_name}-1.6.1170.zip" . > /dev/null)
           ls -la publish
           gh release delete ragdoll-sync-test --yes --cleanup-tag || true
           gh release create ragdoll-sync-test publish/* --prerelease --target "$GITHUB_SHA" \
