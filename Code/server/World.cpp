@@ -15,6 +15,7 @@
 #include <Services/CombatService.h>
 #include <Services/TradeService.h>
 #include <Services/WeatherService.h>
+#include <Services/RaceMenuService.h>
 #include <Services/ScriptService.h>
 #include <Services/MapService.h>
 #include <Services/DroppedItemService.h>
@@ -45,6 +46,7 @@ World::World()
     ctx().emplace<WeatherService>(*this, m_dispatcher);
     ctx().emplace<MapService>(*this, m_dispatcher);
     ctx().emplace<DroppedItemService>(*this, m_dispatcher);
+    ctx().emplace<RaceMenuService>(*this, m_dispatcher);
 
     ESLoader::ESLoader loader;
     // emplace loaded mods into modscomponent.
