@@ -138,9 +138,9 @@ jobs:
           out=build/windows/x64/releasedbg
           make_pkg() {
             local launcher_dir=$1 zip=$2
-            rm -rf package && mkdir -p package/SkyrimTogetherRuntime
-            cp "$out/$launcher_dir/SkyrimTogether.exe" "$out/EarlyLoad.dll" "$out/TPProcess.exe" package/SkyrimTogetherRuntime/
-            cp GameFiles/Skyrim/SKSE/Plugins/versionlib-ae-to-se-1-5-97-0.map package/SkyrimTogetherRuntime/
+            rm -rf package && mkdir -p package/SkyrimTogetherReborn
+            cp "$out/$launcher_dir/SkyrimTogether.exe" "$out/EarlyLoad.dll" "$out/TPProcess.exe" package/SkyrimTogetherReborn/
+            cp GameFiles/Skyrim/SKSE/Plugins/versionlib-ae-to-se-1-5-97-0.map package/SkyrimTogetherReborn/
             cp Packaging/legacy/README-1.5.97.txt package/
             cp LICENSE package/LICENSE.txt
             (cd package && 7z a -tzip "../$zip" . > /dev/null)
