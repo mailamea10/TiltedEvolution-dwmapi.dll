@@ -117,10 +117,15 @@ jobs:
       - name: Gather distributable binaries
         run: |
           set +e
-          xmake install -y -o distrib 2>&1 | tee install.log
+          # xmake install wants every default target built first (the same as the upstream playable build).
+          xmake build -y 2>&1 | tee install.log
           status=${PIPESTATUS[0]}
+          if [ $status -eq 0 ]; then
+            xmake install -y -o distrib 2>&1 | tee -a install.log
+            status=${PIPESTATUS[0]}
+          fi
           grep -E "error C[0-9]+|error LNK[0-9]+|fatal error|: error:|error:" install.log | sort -u | head -40 | while IFS= read -r line; do echo "::error::${line:0:900}"; done
-          ls distrib/bin
+          ls distrib/bin || true
           exit $status
 
       - name: Setup pnpm
