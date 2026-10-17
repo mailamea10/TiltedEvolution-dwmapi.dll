@@ -32,6 +32,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <type_traits>
 
 namespace
 {
@@ -63,16 +64,28 @@ constexpr auto kColorFormType = static_cast<FormType>(0x85);
 // owner's preset with the same key are kept; anything else under these keys is the copy being regenerated.
 constexpr const char* kForeignMorphKeys[] = {"RSMBodyGen", "OBody", "OBodyNG"};
 
-// The CharGen natives are RaceMenu's SKSE callbacks, which take (StaticFunctionTag*, arguments...). A
-// BSFixedString argument is passed by value, which on x64 means a pointer to a temporary that the callee
-// releases: the string handed over below carries its own reference for that.
-using TSaveCharacterPreset = void (*)(void* apTag, Actor* apActor, BSFixedString* apName);
-using TLoadCharacterPresetEx = bool (*)(void* apTag, Actor* apActor, BSFixedString* apName, void* apHairColor, uint32_t aFlags);
+// The CharGen and NiOverride natives are RaceMenu's SKSE callbacks, which take (StaticFunctionTag*, arguments...).
+// SKSE's BSFixedString (StringCache::Ref) is a plain struct holding the interned string pointer, so a
+// BSFixedString argument travels by value in a register as that pointer, and the callee does not release it.
+// Pass NativeString (the same layout) and release our own BSFixedString afterwards.
+struct NativeString
+{
+    const char* data;
+};
+static_assert(sizeof(NativeString) == sizeof(void*) && std::is_trivially_copyable_v<NativeString>);
+
+NativeString Arg(const BSFixedString& acString) noexcept
+{
+    return NativeString{acString.data};
+}
+
+using TSaveCharacterPreset = void (*)(void* apTag, Actor* apActor, NativeString aName);
+using TLoadCharacterPresetEx = bool (*)(void* apTag, Actor* apActor, NativeString aName, void* apHairColor, uint32_t aFlags);
 
 // NiOverride natives, same convention (TESObjectREFR* arguments).
-using TSetBodyMorph = void (*)(void* apTag, Actor* apActor, BSFixedString* apMorph, BSFixedString* apKey, float aValue);
-using TGetBodyMorph = float (*)(void* apTag, Actor* apActor, BSFixedString* apMorph, BSFixedString* apKey);
-using THasBodyMorphKey = bool (*)(void* apTag, Actor* apActor, BSFixedString* apKey);
+using TSetBodyMorph = void (*)(void* apTag, Actor* apActor, NativeString aMorph, NativeString aKey, float aValue);
+using TGetBodyMorph = float (*)(void* apTag, Actor* apActor, NativeString aMorph, NativeString aKey);
+using THasBodyMorphKey = bool (*)(void* apTag, Actor* apActor, NativeString aKey);
 using TActorCall = void (*)(void* apTag, Actor* apActor);
 using TActorQuery = bool (*)(void* apTag, Actor* apActor);
 
@@ -354,8 +367,9 @@ void RaceMenuSyncService::SendLocalPreset(const char* acpReason) noexcept
     const auto cPath = PresetPath(kLocalPresetName);
     RemoveFile(cPath);
 
-    BSFixedString name(kLocalPresetName); // released by the callee
-    cSave(nullptr, pPlayer, &name);
+    BSFixedString name(kLocalPresetName);
+    cSave(nullptr, pPlayer, Arg(name));
+    name.Release();
 
     std::string json;
     const bool cRead = ReadFile(cPath, json);
@@ -629,8 +643,9 @@ bool RaceMenuSyncService::ApplyPreset(uint32_t aPlayerId, Actor* apActor, Remote
     if (aPreset.HasOverlayNodes && cRemoveOverlays)
         cRemoveOverlays(nullptr, apActor);
 
-    BSFixedString name(cName.c_str()); // released by the callee
-    const bool cLoaded = cLoad(nullptr, apActor, &name, aPreset.HairColorForm, kPresetApplyAll);
+    BSFixedString name(cName.c_str());
+    const bool cLoaded = cLoad(nullptr, apActor, Arg(name), aPreset.HairColorForm, kPresetApplyAll);
+    name.Release();
     RemoveFile(cPath);
 
     if (cLoaded)
@@ -663,8 +678,10 @@ void RaceMenuSyncService::EnforceBodyMorphs(uint32_t aPlayerId, Actor* apActor, 
             if (cOwnersKey)
                 continue;
 
-            BSFixedString key(cpKey); // released by the callee
-            if (cHasKey(nullptr, apActor, &key))
+            BSFixedString key(cpKey);
+            const bool cHasForeignKey = cHasKey(nullptr, apActor, Arg(key));
+            key.Release();
+            if (cHasForeignKey)
             {
                 pReason = cpKey;
                 break;
@@ -679,7 +696,10 @@ void RaceMenuSyncService::EnforceBodyMorphs(uint32_t aPlayerId, Actor* apActor, 
         {
             BSFixedString morph(cMorph.Name.c_str());
             BSFixedString key(cMorph.Key.c_str());
-            if (std::fabs(cGet(nullptr, apActor, &morph, &key) - cMorph.Value) > 0.001f)
+            const float cValue = cGet(nullptr, apActor, Arg(morph), Arg(key));
+            morph.Release();
+            key.Release();
+            if (std::fabs(cValue - cMorph.Value) > 0.001f)
             {
                 pReason = "drift";
                 break;
@@ -695,7 +715,9 @@ void RaceMenuSyncService::EnforceBodyMorphs(uint32_t aPlayerId, Actor* apActor, 
     {
         BSFixedString morph(cMorph.Name.c_str());
         BSFixedString key(cMorph.Key.c_str());
-        cSet(nullptr, apActor, &morph, &key, cMorph.Value);
+        cSet(nullptr, apActor, Arg(morph), Arg(key), cMorph.Value);
+        morph.Release();
+        key.Release();
     }
     cUpdate(nullptr, apActor);
 
