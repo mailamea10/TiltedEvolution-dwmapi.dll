@@ -32,7 +32,7 @@ What is in the archive
 - SKSE/Plugins/SkyParkourTogether.dll: the SKSE plugin. It tells Skyrim
   Together which of your animations are SkyParkour's. One DLL for every
   game version; it does not touch game memory.
-- SkyrimTogetherRuntime/SkyrimTogether.exe: the Skyrim Together launcher for
+- SkyrimTogetherReborn/SkyrimTogether.exe: the Skyrim Together launcher for
   your Skyrim Together and game version, built from that release with one small
   add-on (the STR Mod Sync API) that carries the animations to the other
   players. Nothing else in Skyrim Together is changed.
@@ -47,14 +47,14 @@ Install
    version, then your game version.
 3. Place it AFTER Skyrim Together Reborn so its SkyrimTogether.exe wins the
    conflict (Mod Organizer 2: lower in the left pane; Vortex: load after).
-4. Start the game from SkyrimTogetherRuntime/SkyrimTogether.exe as you
+4. Start the game from SkyrimTogetherReborn/SkyrimTogether.exe as you
    normally start Skyrim Together.
 
 Checking that it works
 ----------------------
 - Documents/My Games/Skyrim Special Edition/SKSE/SkyParkourTogether.log
   should say "Skyrim Together add-on found".
-- Skyrim Together's log (SkyrimTogetherRuntime/logs) should contain
+- Skyrim Together's log (SkyrimTogetherReborn/logs) should contain
   "mod sync: SkyParkour Together 1.0.0 ... registered 1 event source(s)".
 
 If the SKSE log says the add-on was not found, the game was started with a

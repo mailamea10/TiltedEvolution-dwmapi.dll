@@ -51,7 +51,7 @@ Plays on 1.8.5 servers only; 1.8.3 and 1.8.5 cannot join each other's servers.</
             <plugin name="Skyrim 1.7.104">
               <description>Skyrim Special/Anniversary Edition 1.7.104 with the Skyrim Together Reborn 1.8.3 main file from Nexus (SKSE 2.3.x).
 
-Installs the Skyrim Together launcher with the parkour add-on (SkyrimTogetherRuntime/SkyrimTogether.exe).</description>
+Installs the Skyrim Together launcher with the parkour add-on (SkyrimTogetherReborn/SkyrimTogether.exe).</description>
               <image path="fomod\images\banner.png" />
               <files>
                 <folder source="10 STR 1.8.3 - 1.7.104" destination="" priority="0" />
@@ -63,7 +63,7 @@ Installs the Skyrim Together launcher with the parkour add-on (SkyrimTogetherRun
             <plugin name="Skyrim 1.6.1170 / 1.6.1179">
               <description>Skyrim Special/Anniversary Edition 1.6.1170 or 1.6.1179 with the Skyrim Together Reborn 1.8.3 optional file &quot;for 1.6.1170&quot; from Nexus (SKSE 2.2.6).
 
-Installs the Skyrim Together launcher with the parkour add-on (SkyrimTogetherRuntime/SkyrimTogether.exe).</description>
+Installs the Skyrim Together launcher with the parkour add-on (SkyrimTogetherReborn/SkyrimTogether.exe).</description>
               <image path="fomod\images\banner.png" />
               <files>
                 <folder source="11 STR 1.8.3 - 1.6.1170" destination="" priority="0" />
@@ -87,7 +87,7 @@ Installs the Skyrim Together launcher with the parkour add-on (SkyrimTogetherRun
             <plugin name="Skyrim 1.7.104">
               <description>Skyrim Special/Anniversary Edition 1.7.104 with Skyrim Together Reborn 1.8.5 (absol89).
 
-Installs the Skyrim Together launcher with the parkour add-on (SkyrimTogetherRuntime/SkyrimTogether.exe).</description>
+Installs the Skyrim Together launcher with the parkour add-on (SkyrimTogetherReborn/SkyrimTogether.exe).</description>
               <image path="fomod\images\banner.png" />
               <files>
                 <folder source="20 STR 1.8.5 - 1.7.104" destination="" priority="0" />
@@ -99,7 +99,7 @@ Installs the Skyrim Together launcher with the parkour add-on (SkyrimTogetherRun
             <plugin name="Skyrim 1.6.1170 / 1.6.1179">
               <description>Skyrim Special/Anniversary Edition 1.6.1170 or 1.6.1179 with Skyrim Together Reborn 1.8.5 (absol89).
 
-Installs the Skyrim Together launcher with the parkour add-on (SkyrimTogetherRuntime/SkyrimTogether.exe).</description>
+Installs the Skyrim Together launcher with the parkour add-on (SkyrimTogetherReborn/SkyrimTogether.exe).</description>
               <image path="fomod\images\banner.png" />
               <files>
                 <folder source="21 STR 1.8.5 - 1.6.1170" destination="" priority="0" />
@@ -111,7 +111,7 @@ Installs the Skyrim Together launcher with the parkour add-on (SkyrimTogetherRun
             <plugin name="Skyrim 1.5.97">
               <description>Skyrim Special Edition 1.5.97 (SKSE 2.0.20) with Skyrim Together Reborn 1.8.5.
 
-Installs the 1.5.97 Skyrim Together launcher with the parkour add-on: SkyrimTogetherRuntime/SkyrimTogether.exe, EarlyLoad.dll, TPProcess.exe and versionlib-ae-to-se-1-5-97-0.map. Skyrim Together has no 1.5.97 launcher of its own, so this one comes with the mod; you do not need any other 1.5.97 port. Plays on 1.8.5 servers only.</description>
+Installs the 1.5.97 Skyrim Together launcher with the parkour add-on: SkyrimTogetherReborn/SkyrimTogether.exe, EarlyLoad.dll, TPProcess.exe and versionlib-ae-to-se-1-5-97-0.map. Skyrim Together has no 1.5.97 launcher of its own, so this one comes with the mod; you do not need any other 1.5.97 port. Plays on 1.8.5 servers only.</description>
               <image path="fomod\images\banner.png" />
               <files>
                 <folder source="22 STR 1.8.5 - 1.5.97" destination="" priority="0" />

@@ -4,7 +4,7 @@ One FOMOD for the official **Skyrim Together Reborn 1.8.3** from Nexus (Skyrim *
 
 **Contents**
 - `SKSE/Plugins/SkyParkourTogether.dll`: one SKSE plugin for every runtime (it uses no game addresses).
-- `SkyrimTogetherRuntime/SkyrimTogether.exe` for your Skyrim Together and game version: that release plus the STR Mod Sync add-on that carries the animations. The 1.5.97 option adds the 1.5.97 launcher files Skyrim Together needs on that version.
+- `SkyrimTogetherReborn/SkyrimTogether.exe` for your Skyrim Together and game version: that release plus the STR Mod Sync add-on that carries the animations. The 1.5.97 option adds the 1.5.97 launcher files Skyrim Together needs on that version.
 
 **Requirements (every player):** Skyrim Together Reborn 1.8.3 or 1.8.5, SkyParkour (by Tsptds, not included), SKSE and Address Library for your game version. Works with any regular server of your Skyrim Together version.
 

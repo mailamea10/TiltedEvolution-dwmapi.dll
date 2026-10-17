@@ -136,7 +136,7 @@ jobs:
       - name: Collect the add-on files
         run: |
           out=str/build/windows/x64/releasedbg
-          dest="addon/${{ matrix.folder }}/SkyrimTogetherRuntime"
+          dest="addon/${{ matrix.folder }}/SkyrimTogetherReborn"
           mkdir -p "$dest"
           if [ "${{ matrix.legacy }}" = "true" ]; then
             cp "$out/legacy-noconsole/SkyrimTogether.exe" "$out/EarlyLoad.dll" "$out/TPProcess.exe" "$dest/"
