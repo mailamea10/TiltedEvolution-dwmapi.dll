@@ -1,0 +1,44 @@
+name: SkyParkour Together - repack the 1.8.5-only archive
+
+# One-off fix for SkyParkour_Together_Parkour_Animations_Sync-1.0.0.zip on the skyparkour-together-v1.0.0
+# release: it installed the launcher into SkyrimTogetherRuntime/, which Skyrim Together installs do not
+# have. The files are moved to SkyrimTogetherReborn/ (and the installer text and README updated); the
+# binaries are not rebuilt.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'release/skyparkour-**'
+    paths:
+      - '.github/workflows/skyparkour-together-repack-1.8.5-asset.yml'
+
+jobs:
+  repack:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: skyparkour-together-v1.0.0
+      ASSET: SkyParkour_Together_Parkour_Animations_Sync-1.0.0.zip
+    steps:
+      - name: Repack
+        run: |
+          set -e
+          gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p "$ASSET" -D in
+          unzip -q "in/$ASSET" -d x
+          cd x
+          if [ ! -d "10 STR Add-on 1.7.104/SkyrimTogetherRuntime" ]; then
+            echo "already repacked"; exit 0
+          fi
+          for d in "10 STR Add-on 1.7.104" "11 STR Add-on 1.6.1170" "12 STR Add-on 1.5.97"; do
+            mv "$d/SkyrimTogetherRuntime" "$d/SkyrimTogetherReborn"
+          done
+          perl -pi -e 's/SkyrimTogetherRuntime/SkyrimTogetherReborn/g' fomod/ModuleConfig.xml "00 Core/Docs/SkyParkour Together - README.txt"
+          ! grep -rl SkyrimTogetherRuntime fomod "00 Core/Docs"
+          find . -type f | sort
+          mkdir -p ../out
+          zip -r -q -X "../out/$ASSET" .
+          cd ..
+          gh release upload "$TAG" "out/$ASSET" --clobber -R "$GITHUB_REPOSITORY"
