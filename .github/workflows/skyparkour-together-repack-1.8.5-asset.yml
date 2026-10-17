@@ -43,7 +43,8 @@ jobs:
               return t.index("Install\n-------"), t.index("Credits\n-------")
           a, b = section(text)
           c, d = section(current)
-          readme.write_text(text[:a] + current[c:d] + text[b:], encoding="utf-8")
+          install = current[c:d].replace("Pick which Skyrim Together you\n   use, then your game version.", "Pick your game version.")
+          readme.write_text(text[:a] + install + text[b:], encoding="utf-8")
 
           config = pathlib.Path("x/fomod/ModuleConfig.xml")
           xml = config.read_text(encoding="utf-8").replace("SkyrimTogetherRuntime", "SkyrimTogetherReborn")
