@@ -8,6 +8,10 @@ One FOMOD for the official **Skyrim Together Reborn 1.8.3** from Nexus (Skyrim *
 
 **Requirements (every player):** Skyrim Together Reborn 1.8.3 or 1.8.5, SkyParkour (by Tsptds, not included), SKSE and Address Library for your game version. Works with any regular server of your Skyrim Together version.
 
-Install after Skyrim Together Reborn so its `SkyrimTogether.exe` wins the conflict. See the README in the archive for checks and troubleshooting.
+**Installing:** the launcher has to sit in the same folder as the rest of Skyrim Together.
+- **Mod Organizer 2:** after installing, rename `SkyrimTogether.exe` in your Skyrim Together Reborn mod's `SkyrimTogetherReborn` folder to `SkyrimTogether.original.exe`, copy this mod's `SkyrimTogetherReborn/SkyrimTogether.exe` in (on 1.5.97 also `EarlyLoad.dll`, `TPProcess.exe` and the `.map`), and start the game with your usual Skyrim Together entry. Pointing MO2 at the exe inside this mod does not work: it closes straight away.
+- **Vortex:** load this mod after Skyrim Together Reborn and deploy.
+
+See the README in the archive for checks, troubleshooting and uninstalling.
 
 SkyParkour Together is an unofficial compatibility add-on, not affiliated with SkyParkour's author. GPLv3; source in `Mods/SkyParkourTogether` on this branch.

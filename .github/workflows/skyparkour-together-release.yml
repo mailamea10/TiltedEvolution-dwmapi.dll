@@ -234,3 +234,4 @@ jobs:
               --notes-file Mods/SkyParkourTogether/RELEASE_NOTES.md
           fi
           gh release upload "$tag" "$ARCHIVE" --clobber
+          gh release edit "$tag" --notes-file Mods/SkyParkourTogether/RELEASE_NOTES.md

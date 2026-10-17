@@ -1,9 +1,9 @@
 name: SkyParkour Together - repack the 1.8.5-only archive
 
-# One-off fix for SkyParkour_Together_Parkour_Animations_Sync-1.0.0.zip on the skyparkour-together-v1.0.0
-# release: it installed the launcher into SkyrimTogetherRuntime/, which Skyrim Together installs do not
-# have. The files are moved to SkyrimTogetherReborn/ (and the installer text and README updated); the
-# binaries are not rebuilt.
+# Keeps SkyParkour_Together_Parkour_Animations_Sync-1.0.0.zip (the first, 1.8.5-only archive on the
+# skyparkour-together-v1.0.0 release) in line with the current instructions without rebuilding its binaries:
+# - the launcher goes in SkyrimTogetherReborn/ (it was in SkyrimTogetherRuntime/),
+# - the README's install section and the installer's notes say how Mod Organizer 2 users place the launcher.
 
 on:
   workflow_dispatch:
@@ -12,6 +12,7 @@ on:
       - 'release/skyparkour-**'
     paths:
       - '.github/workflows/skyparkour-together-repack-1.8.5-asset.yml'
+      - 'Mods/SkyParkourTogether/README.txt'
 
 jobs:
   repack:
@@ -23,22 +24,36 @@ jobs:
       TAG: skyparkour-together-v1.0.0
       ASSET: SkyParkour_Together_Parkour_Animations_Sync-1.0.0.zip
     steps:
+      - uses: actions/checkout@v7
+
       - name: Repack
         run: |
           set -e
           gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p "$ASSET" -D in
           unzip -q "in/$ASSET" -d x
-          cd x
-          if [ ! -d "10 STR Add-on 1.7.104/SkyrimTogetherRuntime" ]; then
-            echo "already repacked"; exit 0
-          fi
           for d in "10 STR Add-on 1.7.104" "11 STR Add-on 1.6.1170" "12 STR Add-on 1.5.97"; do
-            mv "$d/SkyrimTogetherRuntime" "$d/SkyrimTogetherReborn"
+            if [ -d "x/$d/SkyrimTogetherRuntime" ]; then mv "x/$d/SkyrimTogetherRuntime" "x/$d/SkyrimTogetherReborn"; fi
           done
-          perl -pi -e 's/SkyrimTogetherRuntime/SkyrimTogetherReborn/g' fomod/ModuleConfig.xml "00 Core/Docs/SkyParkour Together - README.txt"
-          ! grep -rl SkyrimTogetherRuntime fomod "00 Core/Docs"
-          find . -type f | sort
-          mkdir -p ../out
-          zip -r -q -X "../out/$ASSET" .
-          cd ..
+          python3 - <<'PY'
+          import pathlib
+          readme = pathlib.Path("x/00 Core/Docs/SkyParkour Together - README.txt")
+          current = pathlib.Path("Mods/SkyParkourTogether/README.txt").read_text(encoding="utf-8")
+          text = readme.read_text(encoding="utf-8").replace("SkyrimTogetherRuntime", "SkyrimTogetherReborn")
+          def section(t):
+              return t.index("Install\n-------"), t.index("Credits\n-------")
+          a, b = section(text)
+          c, d = section(current)
+          readme.write_text(text[:a] + current[c:d] + text[b:], encoding="utf-8")
+
+          config = pathlib.Path("x/fomod/ModuleConfig.xml")
+          xml = config.read_text(encoding="utf-8").replace("SkyrimTogetherRuntime", "SkyrimTogetherReborn")
+          note = " Mod Organizer 2 users: after installing, copy the launcher files into your Skyrim Together Reborn mod's SkyrimTogetherReborn folder (back up the originals first); see the README."
+          if "Mod Organizer 2 users" not in xml:
+              xml = xml.replace("</description>", note + "</description>")
+              # Only the three game-version options describe files; the note belongs there, not on other text.
+          config.write_text(xml, encoding="utf-8")
+          PY
+          ! grep -rl SkyrimTogetherRuntime x/fomod "x/00 Core/Docs"
+          grep -c "Mod Organizer 2" "x/00 Core/Docs/SkyParkour Together - README.txt"
+          (cd x && find . -type f | sort && mkdir -p ../out && zip -r -q -X "../out/$ASSET" .)
           gh release upload "$TAG" "out/$ASSET" --clobber -R "$GITHUB_REPOSITORY"

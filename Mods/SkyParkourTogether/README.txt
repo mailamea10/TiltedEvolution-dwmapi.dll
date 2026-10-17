@@ -42,27 +42,63 @@ What is in the archive
 
 Install
 -------
+Skyrim Together starts from SkyrimTogetherReborn/SkyrimTogether.exe, and that
+launcher only runs from the folder that also holds the rest of Skyrim Together
+(libcef.dll, EarlyLoad.dll, the UI and so on). So this mod's launcher has to
+end up in that folder; which way depends on your mod manager.
+
 1. Install Skyrim Together Reborn and SkyParkour as usual.
-2. Install this archive with your mod manager and pick your Skyrim Together
-   version, then your game version.
-3. Place it AFTER Skyrim Together Reborn so its SkyrimTogether.exe wins the
-   conflict (Mod Organizer 2: lower in the left pane; Vortex: load after).
-4. Start the game from SkyrimTogetherReborn/SkyrimTogether.exe as you
-   normally start Skyrim Together.
+2. Install this archive with your mod manager. Pick which Skyrim Together you
+   use, then your game version.
+
+Mod Organizer 2
+  MO2 starts a launcher from its real folder on disk, not from the merged
+  game folder, so mod order does not help here. Copy the launcher by hand:
+  3. Right-click SkyParkour Together > Open in Explorer and open its
+     SkyrimTogetherReborn folder.
+  4. Right-click your Skyrim Together Reborn mod > Open in Explorer and open
+     its SkyrimTogetherReborn folder.
+  5. In the Skyrim Together folder, rename SkyrimTogether.exe to
+     SkyrimTogether.original.exe (your backup).
+  6. Copy SkyrimTogether.exe from the SkyParkour Together folder into the
+     Skyrim Together folder. On 1.5.97, also copy EarlyLoad.dll, TPProcess.exe
+     and versionlib-ae-to-se-1-5-97-0.map, replacing what is there.
+  7. Keep SkyParkour Together enabled (it provides the SKSE plugin) and start
+     the game with your usual MO2 entry for Skyrim Together, the one that
+     points into the Skyrim Together Reborn mod. Do not add an MO2 entry that
+     points into the SkyParkour Together mod: that folder only holds the
+     launcher, which cannot start from there.
+
+Vortex
+  Vortex places all files in the game folder, so mod order is enough:
+  3. Set SkyParkour Together to load AFTER Skyrim Together Reborn so its
+     SkyrimTogether.exe wins the conflict, and deploy.
+  4. Start the game from SkyrimTogetherReborn/SkyrimTogether.exe in the game's
+     Data folder, as you normally start Skyrim Together.
 
 Checking that it works
 ----------------------
 - Documents/My Games/Skyrim Special Edition/SKSE/SkyParkourTogether.log
   should say "Skyrim Together add-on found".
-- Skyrim Together's log (SkyrimTogetherReborn/logs) should contain
+- Skyrim Together's log (SkyrimTogetherReborn/logs; in MO2 usually the
+  overwrite folder) should contain
   "mod sync: SkyParkour Together 1.0.0 ... registered 1 event source(s)".
 
-If the SKSE log says the add-on was not found, the game was started with a
-SkyrimTogether.exe from another mod: check the conflict order (step 3).
+Troubleshooting
+- The launcher closes straight away, with no window and no log: it was
+  started from a folder without the rest of Skyrim Together. In MO2, follow
+  steps 3-7 above.
+- The SKSE log says the add-on was not found: the game was started with a
+  different SkyrimTogether.exe. In MO2, check that the copied launcher is the
+  one in the Skyrim Together Reborn mod; in Vortex, check the load order.
 
 Uninstall
 ---------
-Remove the mod. Skyrim Together's own SkyrimTogether.exe takes over again.
+Mod Organizer 2: delete the copied SkyrimTogether.exe from the Skyrim Together
+Reborn mod and rename SkyrimTogether.original.exe back to SkyrimTogether.exe
+(on 1.5.97, restore the other copied files from your Skyrim Together
+download), then remove this mod.
+Vortex: remove the mod; Skyrim Together's own launcher takes over again.
 
 Credits
 -------

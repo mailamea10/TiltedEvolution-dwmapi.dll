@@ -31,11 +31,26 @@ Your friends see your parkour. When you vault a fence, climb a wall, grab a ledg
 1.8.3 and 1.8.5 can't join each other's servers, so everyone in your session needs the same one.
 
 [size=5][b]Installation[/b][/size]
+Skyrim Together only starts when its launcher sits in the same folder as the rest of Skyrim Together ([font=Courier New]libcef.dll[/font], [font=Courier New]EarlyLoad.dll[/font], the UI...). How you get this mod's launcher there depends on your mod manager.
 [list=1]
 [*]Install Skyrim Together Reborn and SkyParkour as usual.
-[*]Install this mod with Mod Organizer 2 or Vortex. The installer asks which Skyrim Together you use, then your game version.
-[*]Let it win its file conflict with Skyrim Together Reborn: in MO2, place it [b]below[/b] Skyrim Together Reborn in the left pane; in Vortex, set it to load [b]after[/b].
-[*]Start the game from [font=Courier New]SkyrimTogetherReborn/SkyrimTogether.exe[/font], as you normally start Skyrim Together.
+[*]Install this mod. The installer asks which Skyrim Together you use, then your game version.
+[/list]
+
+[size=4][b]Mod Organizer 2[/b][/size]
+MO2 starts a launcher from its real folder on disk, so mod order is not enough. Copy the launcher once:
+[list=1]
+[*]Right-click [b]SkyParkour Together[/b] > [i]Open in Explorer[/i] and open its [font=Courier New]SkyrimTogetherReborn[/font] folder.
+[*]Right-click your [b]Skyrim Together Reborn[/b] mod > [i]Open in Explorer[/i] and open its [font=Courier New]SkyrimTogetherReborn[/font] folder.
+[*]In the Skyrim Together folder, rename [font=Courier New]SkyrimTogether.exe[/font] to [font=Courier New]SkyrimTogether.original.exe[/font] (your backup).
+[*]Copy [font=Courier New]SkyrimTogether.exe[/font] from the SkyParkour Together folder into the Skyrim Together folder. On [b]1.5.97[/b], also copy [font=Courier New]EarlyLoad.dll[/font], [font=Courier New]TPProcess.exe[/font] and [font=Courier New]versionlib-ae-to-se-1-5-97-0.map[/font].
+[*]Keep SkyParkour Together enabled (it provides the SKSE plugin) and start the game with your usual MO2 entry for Skyrim Together, the one pointing into the Skyrim Together Reborn mod. [b]Don't[/b] point an MO2 entry at the SkyParkour Together folder: the launcher can't start from there and simply closes.
+[/list]
+
+[size=4][b]Vortex[/b][/size]
+[list=1]
+[*]Set SkyParkour Together to load [b]after[/b] Skyrim Together Reborn and deploy.
+[*]Start the game from [font=Courier New]SkyrimTogetherReborn/SkyrimTogether.exe[/font] as you normally start Skyrim Together.
 [/list]
 
 [size=4][b]Is it working?[/b][/size]
@@ -43,7 +58,8 @@ Your friends see your parkour. When you vault a fence, climb a wall, grab a ledg
 [*][font=Courier New]Documents/My Games/Skyrim Special Edition/SKSE/SkyParkourTogether.log[/font] says [i]"Skyrim Together add-on found"[/i].
 [*]Skyrim Together's log ([font=Courier New]SkyrimTogetherReborn/logs[/font]) contains [i]"mod sync: SkyParkour Together 1.0.0 ... registered"[/i].
 [/list]
-If the SKSE log says the add-on was [b]not[/b] found, another mod's [font=Courier New]SkyrimTogether.exe[/font] is winning: fix the conflict order (step 3).
+[b]The launcher closes straight away[/b] (no window, no log): it was started from a folder without the rest of Skyrim Together. In MO2, do the copy steps above.
+[b]The SKSE log says the add-on was not found:[/b] the game started with a different [font=Courier New]SkyrimTogether.exe[/font]. In MO2, check the copied launcher is the one in the Skyrim Together Reborn mod; in Vortex, check the load order.
 
 [size=5][b]How it works[/b][/size]
 SkyParkour plays its animations directly on your character's animation graph, which Skyrim Together does not share, so other players only saw you slide around in a running pose. This mod has two parts:
@@ -60,7 +76,7 @@ SkyParkour plays its animations directly on your character's animation graph, wh
 [/list]
 
 [size=5][b]Uninstall[/b][/size]
-Remove the mod. Skyrim Together's own [font=Courier New]SkyrimTogether.exe[/font] takes over again.
+[b]MO2:[/b] delete the copied [font=Courier New]SkyrimTogether.exe[/font] from the Skyrim Together Reborn mod, rename [font=Courier New]SkyrimTogether.original.exe[/font] back, then remove this mod. [b]Vortex:[/b] remove the mod.
 
 [size=5][b]Credits[/b][/size]
 [list]
