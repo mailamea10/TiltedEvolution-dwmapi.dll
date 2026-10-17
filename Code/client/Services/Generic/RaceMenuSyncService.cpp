@@ -16,14 +16,20 @@
 
 #include <Actor.h>
 #include <PlayerCharacter.h>
+#include <Forms/BGSColorForm.h>
 #include <Forms/TESNPC.h>
 #include <Games/ActorExtension.h>
+#include <Games/IFormFactory.h>
 #include <Interface/UI.h>
 #include <Misc/BSFixedString.h>
 #include <Misc/TintMask.h>
 
 #include <zlib.h>
 
+#include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 
@@ -45,11 +51,151 @@ constexpr double kJoinDelaySeconds = 5.0;
 constexpr double kApplyIntervalSeconds = 0.5;
 constexpr uint32_t kMaxApplyAttempts = 5;
 
+// A second full pass this long after a load, once RaceMenu's queued overlay builds and the copy's equipment have
+// settled, and how often the copy's body morphs are compared against the owner's.
+constexpr double kSettleSeconds = 4.0;
+constexpr double kMorphCheckSeconds = 5.0;
+
+// BGSColorForm (CLFM).
+constexpr auto kColorFormType = static_cast<FormType>(0x85);
+
+// Morph keys that BodyGen and OBody put on NPCs, which a copy of a player is to them. Body morphs from the
+// owner's preset with the same key are kept; anything else under these keys is the copy being regenerated.
+constexpr const char* kForeignMorphKeys[] = {"RSMBodyGen", "OBody", "OBodyNG"};
+
 // The CharGen natives are RaceMenu's SKSE callbacks, which take (StaticFunctionTag*, arguments...). A
 // BSFixedString argument is passed by value, which on x64 means a pointer to a temporary that the callee
 // releases: the string handed over below carries its own reference for that.
 using TSaveCharacterPreset = void (*)(void* apTag, Actor* apActor, BSFixedString* apName);
 using TLoadCharacterPresetEx = bool (*)(void* apTag, Actor* apActor, BSFixedString* apName, void* apHairColor, uint32_t aFlags);
+
+// NiOverride natives, same convention (TESObjectREFR* arguments).
+using TSetBodyMorph = void (*)(void* apTag, Actor* apActor, BSFixedString* apMorph, BSFixedString* apKey, float aValue);
+using TGetBodyMorph = float (*)(void* apTag, Actor* apActor, BSFixedString* apMorph, BSFixedString* apKey);
+using THasBodyMorphKey = bool (*)(void* apTag, Actor* apActor, BSFixedString* apKey);
+using TActorCall = void (*)(void* apTag, Actor* apActor);
+using TActorQuery = bool (*)(void* apTag, Actor* apActor);
+
+template <class T> T GetNative(World& aWorld, const char* acpType, const char* acpName)
+{
+    return reinterpret_cast<T>(const_cast<void*>(aWorld.ctx().at<PapyrusService>().Get(acpType, acpName)));
+}
+
+// Just enough JSON to read RaceMenu's "bodyMorphs" array; anything else is skipped over.
+struct JsonReader
+{
+    const char* p;
+    const char* end;
+
+    void SkipWs() noexcept
+    {
+        while (p < end && (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n'))
+            ++p;
+    }
+
+    bool Consume(char aC) noexcept
+    {
+        SkipWs();
+        if (p < end && *p == aC)
+        {
+            ++p;
+            return true;
+        }
+        return false;
+    }
+
+    bool Peek(char aC) noexcept
+    {
+        SkipWs();
+        return p < end && *p == aC;
+    }
+
+    bool ReadString(std::string& aOut) noexcept
+    {
+        aOut.clear();
+        if (!Consume('"'))
+            return false;
+        while (p < end && *p != '"')
+        {
+            if (*p == '\\' && p + 1 < end)
+            {
+                ++p;
+                switch (*p)
+                {
+                case 'n': aOut += '\n'; break;
+                case 't': aOut += '\t'; break;
+                case 'r': aOut += '\r'; break;
+                case 'b': aOut += '\b'; break;
+                case 'f': aOut += '\f'; break;
+                case 'u':
+                    // Morph names and keys are ASCII; keep the escape's low byte.
+                    if (end - p >= 5)
+                    {
+                        aOut += static_cast<char>(std::strtoul(std::string(p + 1, p + 5).c_str(), nullptr, 16) & 0xFF);
+                        p += 4;
+                    }
+                    break;
+                default: aOut += *p; break;
+                }
+                ++p;
+                continue;
+            }
+            aOut += *p++;
+        }
+        return Consume('"');
+    }
+
+    bool ReadNumber(double& aOut) noexcept
+    {
+        SkipWs();
+        const char* start = p;
+        while (p < end && (std::isdigit(static_cast<unsigned char>(*p)) || *p == '-' || *p == '+' || *p == '.' || *p == 'e' || *p == 'E'))
+            ++p;
+        if (p == start)
+            return false;
+        aOut = std::strtod(std::string(start, p).c_str(), nullptr);
+        return true;
+    }
+
+    bool SkipValue(int aDepth = 0) noexcept
+    {
+        if (aDepth > 64)
+            return false;
+        SkipWs();
+        if (p >= end)
+            return false;
+        if (*p == '"')
+        {
+            std::string ignored;
+            return ReadString(ignored);
+        }
+        if (*p == '{' || *p == '[')
+        {
+            const char cClose = *p == '{' ? '}' : ']';
+            const bool cObject = *p == '{';
+            ++p;
+            if (Consume(cClose))
+                return true;
+            do
+            {
+                if (cObject)
+                {
+                    std::string key;
+                    if (!ReadString(key) || !Consume(':'))
+                        return false;
+                }
+                if (!SkipValue(aDepth + 1))
+                    return false;
+            } while (Consume(','));
+            return Consume(cClose);
+        }
+        // Number or literal.
+        const char* start = p;
+        while (p < end && *p != ',' && *p != '}' && *p != ']' && *p != ' ' && *p != '\r' && *p != '\n' && *p != '\t')
+            ++p;
+        return p != start;
+    }
+};
 
 std::filesystem::path PresetPath(const std::string& acName)
 {
@@ -157,6 +303,7 @@ void RaceMenuSyncService::OnConnected(const ConnectedEvent&) noexcept
 
 void RaceMenuSyncService::OnDisconnected(const DisconnectedEvent&) noexcept
 {
+    // The hair color forms stay allocated: a copy that is still being torn down may point at one.
     m_remotePresets.clear();
     m_sendAfterJoin = false;
 }
@@ -188,8 +335,8 @@ void RaceMenuSyncService::OnUpdate(const UpdateEvent& acEvent) noexcept
     m_applyTimer += acEvent.Delta;
     if (m_applyTimer >= kApplyIntervalSeconds)
     {
+        ApplyPending(m_applyTimer);
         m_applyTimer = 0.0;
-        ApplyPending();
     }
 }
 
@@ -250,11 +397,112 @@ void RaceMenuSyncService::OnNotifyPreset(const NotifyRaceMenuPreset& acMessage) 
     preset.Json = std::move(json);
     preset.FaceTints = acMessage.FaceTints;
     preset.FailedAttempts = 0;
+    preset.SettleTimer = -1.0;
 
     spdlog::info("RaceMenu sync: received the appearance of player {:X}, revision {}, {} bytes", acMessage.PlayerId, acMessage.Revision, preset.Json.size());
 }
 
-void RaceMenuSyncService::ApplyPending() noexcept
+void RaceMenuSyncService::ParsePreset(RemotePreset& aPreset) noexcept
+{
+    if (aPreset.ParsedRevision == aPreset.Revision && aPreset.ParsedRevision != 0)
+        return;
+
+    aPreset.ParsedRevision = aPreset.Revision;
+    aPreset.BodyMorphs.clear();
+    aPreset.HasOverlayNodes = aPreset.Json.find("[Ovl") != String::npos || aPreset.Json.find("[SOvl") != String::npos;
+
+    const auto cKey = aPreset.Json.find("\"bodyMorphs\"");
+    if (cKey == String::npos)
+        return;
+
+    JsonReader reader{aPreset.Json.data() + cKey + 12, aPreset.Json.data() + aPreset.Json.size()};
+    if (!reader.Consume(':') || !reader.Consume('['))
+        return;
+    if (reader.Consume(']'))
+        return;
+
+    do
+    {
+        if (!reader.Consume('{'))
+            return;
+
+        std::string name;
+        std::vector<std::pair<std::string, float>> keys;
+        if (!reader.Peek('}'))
+        {
+            do
+            {
+                std::string member;
+                if (!reader.ReadString(member) || !reader.Consume(':'))
+                    return;
+
+                if (member == "name")
+                {
+                    if (!reader.ReadString(name))
+                        return;
+                }
+                else if (member == "value") // presets from before morph keys
+                {
+                    double value;
+                    if (!reader.ReadNumber(value))
+                        return;
+                    keys.emplace_back("RSMLegacy", static_cast<float>(value));
+                }
+                else if (member == "keys")
+                {
+                    if (!reader.Consume('['))
+                        return;
+                    if (!reader.Consume(']'))
+                    {
+                        do
+                        {
+                            if (!reader.Consume('{'))
+                                return;
+                            std::string key;
+                            double value = 0.0;
+                            do
+                            {
+                                std::string field;
+                                if (!reader.ReadString(field) || !reader.Consume(':'))
+                                    return;
+                                if (field == "key")
+                                {
+                                    if (!reader.ReadString(key))
+                                        return;
+                                }
+                                else if (field == "value")
+                                {
+                                    if (!reader.ReadNumber(value))
+                                        return;
+                                }
+                                else if (!reader.SkipValue())
+                                    return;
+                            } while (reader.Consume(','));
+                            if (!reader.Consume('}'))
+                                return;
+                            if (!key.empty())
+                                keys.emplace_back(std::move(key), static_cast<float>(value));
+                        } while (reader.Consume(','));
+                        if (!reader.Consume(']'))
+                            return;
+                    }
+                }
+                else if (!reader.SkipValue())
+                    return;
+            } while (reader.Consume(','));
+        }
+        if (!reader.Consume('}'))
+            return;
+
+        if (!name.empty())
+        {
+            for (auto& [key, value] : keys)
+                aPreset.BodyMorphs.push_back({String(name.c_str()), String(key.c_str()), value});
+        }
+    } while (reader.Consume(','));
+}
+
+void RaceMenuSyncService::ApplyPending(double aDelta) noexcept
 {
     if (m_remotePresets.empty() || !RaceMenuAvailable())
         return;
@@ -280,32 +528,75 @@ void RaceMenuSyncService::ApplyPending() noexcept
         if (!pRoot)
             continue;
 
-        if (preset.AppliedRevision == preset.Revision && preset.AppliedFormId == pActor->formID && preset.AppliedRoot == pRoot)
-            continue;
+        bool apply = preset.AppliedRevision != preset.Revision || preset.AppliedFormId != pActor->formID || preset.AppliedRoot != pRoot;
 
-        if (ApplyPreset(cPlayerId, pActor, preset))
+        // STR rebuilding the copy's base from the owner's appearance points its hair back at the shared form.
+        auto* pNpc = Cast<TESNPC>(pActor->baseForm);
+        // Only once the copy has been seen holding its own form, so a base RaceMenu could not repoint does not
+        // turn this into a reload loop.
+        if (!apply && preset.HairColorHeld && pNpc && pNpc->headData && pNpc->headData->hairColor != preset.HairColorForm)
         {
-            preset.AppliedRevision = preset.Revision;
-            preset.AppliedFormId = pActor->formID;
-            preset.AppliedRoot = pRoot;
+            preset.HairColorHeld = false;
+            spdlog::info("RaceMenu sync: the copy of player {:X} lost its own hair color, applying the appearance again", cPlayerId);
+            apply = true;
+        }
 
-            // Rebuilding the head drops the complexion STR painted on it; repaint it with the owner's tints.
-            if (!preset.FaceTints.Entries.empty())
+        bool settlePass = false;
+        if (!apply && preset.SettleTimer >= 0.0)
+        {
+            preset.SettleTimer -= aDelta;
+            if (preset.SettleTimer < 0.0)
             {
-                FaceGenSystem::Setup(m_world, entity, preset.FaceTints);
+                apply = true;
+                settlePass = true;
             }
         }
-        else if (++preset.FailedAttempts == kMaxApplyAttempts)
+
+        if (apply)
         {
-            spdlog::warn("RaceMenu sync: giving up on the appearance of player {:X} after {} attempts", cPlayerId, kMaxApplyAttempts);
+            if (ApplyPreset(cPlayerId, pActor, preset))
+            {
+                // The first load after a change gets a second pass once things have settled; the second pass
+                // does not schedule another.
+                preset.SettleTimer = settlePass ? -1.0 : kSettleSeconds;
+                preset.MorphCheckTimer = kMorphCheckSeconds;
+                preset.AppliedRevision = preset.Revision;
+                preset.AppliedFormId = pActor->formID;
+                preset.AppliedRoot = pRoot;
+                preset.HairColorHeld = preset.HairColorForm && pNpc && pNpc->headData && pNpc->headData->hairColor == preset.HairColorForm;
+
+                // Rebuilding the head drops the complexion STR painted on it; repaint it with the owner's tints.
+                if (!preset.FaceTints.Entries.empty())
+                {
+                    FaceGenSystem::Setup(m_world, entity, preset.FaceTints);
+                }
+
+                if (settlePass)
+                    EnsureOverlays(cPlayerId, pActor, preset);
+            }
+            else if (++preset.FailedAttempts == kMaxApplyAttempts)
+            {
+                spdlog::warn("RaceMenu sync: giving up on the appearance of player {:X} after {} attempts", cPlayerId, kMaxApplyAttempts);
+            }
+            continue;
+        }
+
+        preset.MorphCheckTimer -= aDelta;
+        if (preset.MorphCheckTimer <= 0.0)
+        {
+            preset.MorphCheckTimer = kMorphCheckSeconds;
+            EnforceBodyMorphs(cPlayerId, pActor, preset, false);
+            EnsureOverlays(cPlayerId, pActor, preset);
         }
     }
 }
 
 bool RaceMenuSyncService::ApplyPreset(uint32_t aPlayerId, Actor* apActor, RemotePreset& aPreset) noexcept
 {
-    const TLoadCharacterPresetEx cLoad =
-        reinterpret_cast<TLoadCharacterPresetEx>(const_cast<void*>(m_world.ctx().at<PapyrusService>().Get("CharGen", "LoadCharacterPresetEx")));
+    const auto cLoad = GetNative<TLoadCharacterPresetEx>(m_world, "CharGen", "LoadCharacterPresetEx");
+    const auto cRemoveOverlays = GetNative<TActorCall>(m_world, "NiOverride", "RemoveOverlays");
+
+    ParsePreset(aPreset);
 
     const std::string cName = fmt::format("STRSync_{:X}", aPlayerId);
     const auto cPath = PresetPath(cName);
@@ -315,11 +606,123 @@ bool RaceMenuSyncService::ApplyPreset(uint32_t aPlayerId, Actor* apActor, Remote
         return false;
     }
 
+    // Give this copy a hair color form of its own (see the header); RaceMenu writes the preset's color into
+    // the form it is handed and points the copy's base at it. One form per player, reused across respawns.
+    if (!aPreset.HairColorForm)
+    {
+        if (auto* pFactory = IFormFactory::GetForType(kColorFormType))
+        {
+            if (auto* pColor = static_cast<BGSColorForm*>(pFactory->Create()))
+            {
+                pColor->color.red = pColor->color.green = pColor->color.blue = 0;
+                pColor->color.alpha = 0xFF;
+                aPreset.HairColorForm = pColor;
+            }
+        }
+        if (!aPreset.HairColorForm)
+            spdlog::warn("RaceMenu sync: could not create a hair color form for player {:X}; the copy keeps the shared one", aPlayerId);
+    }
+
+    // RaceMenu only builds overlays on a copy it has not registered, and builds them on a task after this call.
+    // Dropping the registration first makes the load queue a fresh build ahead of the overlay overrides, so the
+    // overrides land on overlay nodes that exist.
+    if (aPreset.HasOverlayNodes && cRemoveOverlays)
+        cRemoveOverlays(nullptr, apActor);
+
     BSFixedString name(cName.c_str()); // released by the callee
-    const bool cLoaded = cLoad(nullptr, apActor, &name, nullptr, kPresetApplyAll);
+    const bool cLoaded = cLoad(nullptr, apActor, &name, aPreset.HairColorForm, kPresetApplyAll);
     RemoveFile(cPath);
 
-    spdlog::info("RaceMenu sync: appearance revision {} of player {:X} {} on {:X}", aPreset.Revision, aPlayerId, cLoaded ? "applied" : "was refused by RaceMenu",
-                 apActor->formID);
+    if (cLoaded)
+        EnforceBodyMorphs(aPlayerId, apActor, aPreset, false);
+
+    spdlog::info("RaceMenu sync: appearance revision {} of player {:X} {} on {:X} ({} body morphs, overlay nodes: {}, own hair color: {})",
+                 aPreset.Revision, aPlayerId, cLoaded ? "applied" : "was refused by RaceMenu", apActor->formID, aPreset.BodyMorphs.size(),
+                 aPreset.HasOverlayNodes, aPreset.HairColorForm != nullptr);
     return cLoaded;
+}
+
+void RaceMenuSyncService::EnforceBodyMorphs(uint32_t aPlayerId, Actor* apActor, RemotePreset& aPreset, bool aForce) noexcept
+{
+    const auto cSet = GetNative<TSetBodyMorph>(m_world, "NiOverride", "SetBodyMorph");
+    const auto cGet = GetNative<TGetBodyMorph>(m_world, "NiOverride", "GetBodyMorph");
+    const auto cHasKey = GetNative<THasBodyMorphKey>(m_world, "NiOverride", "HasBodyMorphKey");
+    const auto cClear = GetNative<TActorCall>(m_world, "NiOverride", "ClearMorphs");
+    const auto cUpdate = GetNative<TActorCall>(m_world, "NiOverride", "UpdateModelWeight");
+    if (!cSet || !cGet || !cHasKey || !cClear || !cUpdate)
+        return;
+
+    const char* pReason = aForce ? "requested" : nullptr;
+
+    // Morphs the copy picked up from BodyGen or OBody.
+    if (!pReason)
+    {
+        for (const char* cpKey : kForeignMorphKeys)
+        {
+            const bool cOwnersKey = std::any_of(aPreset.BodyMorphs.begin(), aPreset.BodyMorphs.end(), [cpKey](const auto& acMorph) { return acMorph.Key == cpKey; });
+            if (cOwnersKey)
+                continue;
+
+            BSFixedString key(cpKey); // released by the callee
+            if (cHasKey(nullptr, apActor, &key))
+            {
+                pReason = cpKey;
+                break;
+            }
+        }
+    }
+
+    // The owner's morphs changed or cleared underneath us.
+    if (!pReason)
+    {
+        for (const auto& cMorph : aPreset.BodyMorphs)
+        {
+            BSFixedString morph(cMorph.Name.c_str());
+            BSFixedString key(cMorph.Key.c_str());
+            if (std::fabs(cGet(nullptr, apActor, &morph, &key) - cMorph.Value) > 0.001f)
+            {
+                pReason = "drift";
+                break;
+            }
+        }
+    }
+
+    if (!pReason)
+        return;
+
+    cClear(nullptr, apActor);
+    for (const auto& cMorph : aPreset.BodyMorphs)
+    {
+        BSFixedString morph(cMorph.Name.c_str());
+        BSFixedString key(cMorph.Key.c_str());
+        cSet(nullptr, apActor, &morph, &key, cMorph.Value);
+    }
+    cUpdate(nullptr, apActor);
+
+    static uint32_t s_logged = 0;
+    if (s_logged < 20 || s_logged % 50 == 0)
+        spdlog::info("RaceMenu sync: re-applied {} body morphs of player {:X} on {:X} ({})", aPreset.BodyMorphs.size(), aPlayerId, apActor->formID, pReason);
+    ++s_logged;
+}
+
+void RaceMenuSyncService::EnsureOverlays(uint32_t aPlayerId, Actor* apActor, const RemotePreset& aPreset) noexcept
+{
+    if (!aPreset.HasOverlayNodes)
+        return;
+
+    const auto cHas = GetNative<TActorQuery>(m_world, "NiOverride", "HasOverlays");
+    const auto cAdd = GetNative<TActorCall>(m_world, "NiOverride", "AddOverlays");
+    const auto cApplyNodes = GetNative<TActorCall>(m_world, "NiOverride", "ApplyNodeOverrides");
+    if (!cHas || !cAdd)
+        return;
+
+    if (cHas(nullptr, apActor))
+        return;
+
+    // AddOverlays builds the nodes on a task and the build applies the copy's stored node overrides to them.
+    cAdd(nullptr, apActor);
+    if (cApplyNodes)
+        cApplyNodes(nullptr, apActor);
+
+    spdlog::info("RaceMenu sync: overlays were missing on the copy of player {:X} ({:X}), rebuilt them", aPlayerId, apActor->formID);
 }
