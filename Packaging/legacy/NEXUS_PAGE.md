@@ -24,8 +24,10 @@ Install one of the two; everything else in them is the same.
 ## Installation
 
 1. Install Skyrim Together Reborn 1.8.5 in your mod manager as usual.
-2. Install this file as a mod placed **after** it (or merge it into the same mod), so its files win the conflicts. It replaces `SkyrimTogetherReborn/SkyrimTogether.exe`, `EarlyLoad.dll` and `TPProcess.exe`, and adds `versionlib-ae-to-se-1-5-97-0.map`.
-3. In Mod Organizer 2, add `SkyrimTogetherReborn/SkyrimTogether.exe` (inside the mod folder) as an executable and launch it from MO2. Vortex users: launch it as a tool.
+2. **Mod Organizer 2:** right-click the Skyrim Together Reborn mod > *Open in Explorer*, open its `SkyrimTogetherReborn` folder, back up `SkyrimTogether.exe`, `EarlyLoad.dll` and `TPProcess.exe` (rename them, e.g. to `*.original`), then extract this file's `SkyrimTogetherReborn` folder over it. The launcher only starts next to the rest of Skyrim Together, and MO2 starts it from its real folder, so a separate mod placed after Skyrim Together does **not** work.
+   **Vortex:** install this file as a mod that loads **after** Skyrim Together Reborn and deploy.
+   It replaces `SkyrimTogetherReborn/SkyrimTogether.exe`, `EarlyLoad.dll` and `TPProcess.exe`, and adds `versionlib-ae-to-se-1-5-97-0.map`.
+3. In Mod Organizer 2, add the Skyrim Together Reborn mod's `SkyrimTogetherReborn/SkyrimTogether.exe` as an executable and launch it from MO2. Vortex users: launch it as a tool.
 4. On the first start the launcher asks for your game folder: pick the folder with `SkyrimSE.exe` (for Nolvus, `STOCK GAME`). It remembers it separately from the 1.6 launcher.
 5. In game, press **F2** to open the overlay and connect.
 

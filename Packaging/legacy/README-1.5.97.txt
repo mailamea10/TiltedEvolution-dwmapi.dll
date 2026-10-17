@@ -23,15 +23,28 @@ Install one of them; the other files are identical.
 
 Install
 -------
+The launcher only starts from the folder that holds the rest of Skyrim
+Together (libcef.dll, the UI and so on), so these files have to end up in
+your Skyrim Together mod's SkyrimTogetherReborn folder.
+
 1. Install Skyrim Together Reborn 1.8.5 as a mod in your mod manager.
-2. Extract this archive over it (or as a separate mod that wins its file
-   conflicts). It replaces SkyrimTogetherReborn/SkyrimTogether.exe,
+2. Mod Organizer 2: right-click the Skyrim Together Reborn mod > Open in
+   Explorer, open its SkyrimTogetherReborn folder, back up SkyrimTogether.exe,
+   EarlyLoad.dll and TPProcess.exe (rename them, e.g. to *.original), then
+   extract this archive's SkyrimTogetherReborn folder over it. MO2 starts a
+   launcher from its real folder, so installing this archive as a separate mod
+   placed after Skyrim Together does not work, and an MO2 entry pointing into
+   such a separate mod closes straight away.
+   Vortex: install this archive as a mod that loads after Skyrim Together
+   Reborn and deploy.
+   Either way it replaces SkyrimTogetherReborn/SkyrimTogether.exe,
    EarlyLoad.dll and TPProcess.exe and adds
    SkyrimTogetherReborn/versionlib-ae-to-se-1-5-97-0.map.
 3. Do not install SkyrimTogetherSKSE.dll or SkyrimTogetherRuntime_1_5.dll from
    test builds; the launcher does not need them.
-4. In Mod Organizer 2, add SkyrimTogetherReborn/SkyrimTogether.exe as an
-   executable and launch it from MO2. The first start asks for the game folder.
+4. In Mod Organizer 2, add the Skyrim Together Reborn mod's
+   SkyrimTogetherReborn/SkyrimTogether.exe as an executable and launch it from
+   MO2 (Vortex: launch it as a tool). The first start asks for the game folder.
 
 Nothing is written to the game's install folder. Logs (and a crash dump, if
 the game crashes) go to SkyrimTogetherReborn/logs, which in MO2 ends up in
