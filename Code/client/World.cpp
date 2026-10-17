@@ -24,6 +24,7 @@
 #include <Services/GraphEventSyncService.h>
 #include <Services/MapService.h>
 #include <Services/DroppedItemService.h>
+#include <Services/SceneSyncService.h>
 
 #include <Events/PreUpdateEvent.h>
 #include <Events/UpdateEvent.h>
@@ -60,6 +61,9 @@ World::World()
     ctx().emplace<GraphEventSyncService>(*this, m_transport, m_dispatcher);
     ctx().emplace<MapService>(*this, m_dispatcher, m_transport);
     ctx().emplace<DroppedItemService>(*this, m_dispatcher, m_transport);
+    // After GraphEventSyncService: both hook the player graph notify, and the scene hook has to be the outer one
+    // to see the scene plugin as its caller.
+    ctx().emplace<SceneSyncService>(*this, m_transport, m_dispatcher);
 
     BehaviorVar::Get()->Init();
 }

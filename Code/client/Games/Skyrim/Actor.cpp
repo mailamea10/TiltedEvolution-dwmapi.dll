@@ -1,5 +1,7 @@
 #include <Games/References.h>
 #include <Games/Skyrim/EquipManager.h>
+#include <Services/SceneSyncService.h>
+#include <intrin.h>
 #include <AI/AIProcess.h>
 #include <Misc/MiddleProcess.h>
 #include <Misc/GameVM.h>
@@ -928,7 +930,13 @@ char TP_MAKE_THISCALL(HookSetPosition, Actor, NiPoint3& aPosition)
     const auto bIsRemote = pExtension && pExtension->IsRemote();
 
     if (bIsRemote && !ScopedReferencesOverride::IsOverriden())
+    {
+        // A scene plugin placing another owner's actor (another player taking part in a scene started here):
+        // that owner has to move it, so forward the spot to them.
+        if (SceneSyncService::IsSceneCaller(_ReturnAddress()))
+            SceneSyncService::CapturePlacement(apThis->formID, aPosition, apThis->rotation.z);
         return 1;
+    }
 
     // Don't interfere with non actor references, or the player, or if we are calling our self
     if (apThis->formType != Actor::Type || apThis == PlayerCharacter::Get() || ScopedReferencesOverride::IsOverriden())

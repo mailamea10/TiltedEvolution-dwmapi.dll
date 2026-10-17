@@ -19,6 +19,9 @@
 #include <Messages/ScriptAnimationRequest.h>
 #include <Messages/NotifyScriptAnimation.h>
 #include <Services/GraphEventSyncService.h>
+#include <Services/SceneSyncService.h>
+#include <Games/ActorExtension.h>
+#include <Actor.h>
 #include <Messages/NotifyRemoveObjects.h>
 
 #include <PlayerCharacter.h>
@@ -506,10 +509,23 @@ void ObjectService::OnNotifyScriptAnimation(const NotifyScriptAnimation& acMessa
         return;
     }
 
+    // A scene started on another client placing an actor this client owns (see SceneSyncService). Copies
+    // owned elsewhere follow their owner's movement instead.
+    if (acMessage.EventName.rfind(SceneSyncService::kPlacementPrefix, 0) == 0)
+    {
+        auto* pActor = Cast<Actor>(pObject);
+        if (pActor && pActor->GetExtension()->IsLocal())
+            SceneSyncService::ApplyPlacement(pActor, acMessage.EventName.c_str() + strlen(SceneSyncService::kPlacementPrefix));
+        return;
+    }
+
     BSFixedString eventName(acMessage.EventName.c_str());
     if (acMessage.Animation == String{})
     {
-        pObject->SendAnimationEvent(&eventName);
+        // Scene animations can be refused for a moment while the actor is still leaving what it was doing;
+        // the scene plugin retries on its own client, so retry here as well.
+        if (!pObject->SendAnimationEvent(&eventName) && Cast<Actor>(pObject))
+            m_world.ctx().at<SceneSyncService>().QueueRetry(pObject->formID, acMessage.EventName.c_str());
     }
     else
     {
