@@ -54,6 +54,7 @@
 #include <Messages/RequestTimeSkip.h>
 #include <Messages/RequestActionEvents.h>
 #include <Messages/RaceMenuPresetRequest.h>
+#include <Messages/RagdollPoseRequest.h>
 #include <Messages/PlayerRespawnRequest.h>
 #include <Messages/DialogueRequest.h>
 #include <Messages/SubtitleRequest.h>
@@ -82,7 +83,7 @@ struct ClientMessageFactory
             PartyChangeLeaderRequest, PartyKickRequest, TradeInviteRequest, TradeInviteResponseRequest, TradeOfferUpdateRequest, TradeSetReadyRequest, TradeCancelRequest, TradeInventorySyncRequest, RequestActorValueChanges, RequestActorMaxValueChanges, EnterExteriorCellRequest, RequestHealthChangeBroadcast, ActivateRequest, LockChangeRequest, AssignObjectsRequest, RequestDeathStateChange, ShiftGridCellRequest,
             RequestOwnershipTransfer, RequestOwnershipClaim, RequestObjectInventoryChanges, SpellCastRequest, ProjectileLaunchRequest, InterruptCastRequest, AddTargetRequest, ScriptAnimationRequest, DrawWeaponRequest, MountRequest, NewPackageRequest, RequestRespawn, SyncExperienceRequest,
             RequestEquipmentChanges, SendChatMessageRequest, TeleportCommandRequest, PlayerRespawnRequest, DialogueRequest, SubtitleRequest, PlayerDialogueRequest, PlayerLevelRequest, TeleportRequest, RequestPlayerHealthUpdate, RequestWeatherChange, RequestCurrentWeather, RequestSetWaypoint,
-            RequestRemoveWaypoint, RemoveSpellRequest, SetTimeCommandRequest, RequestTimeSkip, DropItemRequest, DroppedItemMoveRequest, PickUpDroppedItemRequest, RequestActionEvents, RaceMenuPresetRequest>;
+            RequestRemoveWaypoint, RemoveSpellRequest, SetTimeCommandRequest, RequestTimeSkip, DropItemRequest, DroppedItemMoveRequest, PickUpDroppedItemRequest, RequestActionEvents, RaceMenuPresetRequest, RagdollPoseRequest>;
 
         return s_visitor(std::forward<T>(func));
     }

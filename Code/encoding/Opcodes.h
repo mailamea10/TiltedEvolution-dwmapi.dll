@@ -65,8 +65,9 @@ enum ClientOpcode : unsigned char
     kTradeCancelRequest,
     kTradeInventorySyncRequest,
     kRequestActionEvents,
-    // Appended so servers and clients without RaceMenu sync skip it as an unknown message.
+    // Appended so servers and clients without these side features skip them as unknown messages.
     kRaceMenuPresetRequest,
+    kRagdollPoseRequest,
     kClientOpcodeMax
 };
 
@@ -139,5 +140,6 @@ enum ServerOpcode : unsigned char
     kNotifyTradeComplete,
     kNotifyActionEvents,
     kNotifyRaceMenuPreset,
+    kNotifyRagdollPose,
     kServerOpcodeMax
 };
