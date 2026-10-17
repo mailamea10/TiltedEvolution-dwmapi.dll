@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://qconsulting.ca/fo3/ModConfig5.0.xsd">
+  <moduleName>Skyrim Together Reborn - Combined Test (Parkour + RaceMenu + Ragdoll)</moduleName>
+  <requiredInstallFiles>
+    <folder source="00 Core" destination="" priority="0" />
+  </requiredInstallFiles>
+  <installSteps order="Explicit">
+    <installStep name="Skyrim version">
+      <optionalFileGroups order="Explicit">
+        <group name="Which Skyrim Special Edition version do you play?" type="SelectExactlyOne">
+          <plugins order="Explicit">
+            <plugin name="Skyrim SE 1.6.1170 / 1.6.1179">
+              <description>For Skyrim Special Edition / Anniversary Edition 1.6.1170 (Steam) or 1.6.1179 (GOG). Choose this for EldenRim Together and other 1.6.1170 modlists.
+
+This is a complete Skyrim Together Reborn: disable your old Skyrim Together Reborn mod and the separate SkyParkour Together mod after installing this one, and point your SkyrimTogether executable at this mod (see the README).</description>
+              <files>
+                <folder source="10 Skyrim SE 1.6.1170" destination="" priority="0" />
+              </files>
+              <typeDescriptor>
+                <type name="Recommended" />
+              </typeDescriptor>
+            </plugin>
+            <plugin name="Skyrim SE 1.5.97">
+              <description>For Skyrim Special Edition 1.5.97 (the legacy port; needs SKSE 2.0.20).
+
+This is a complete Skyrim Together Reborn: disable your old Skyrim Together Reborn mod and the separate SkyParkour Together mod after installing this one, and point your SkyrimTogether executable at this mod (see the README).</description>
+              <files>
+                <folder source="11 Skyrim SE 1.5.97" destination="" priority="0" />
+              </files>
+              <typeDescriptor>
+                <type name="Optional" />
+              </typeDescriptor>
+            </plugin>
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
+  </installSteps>
+</config>

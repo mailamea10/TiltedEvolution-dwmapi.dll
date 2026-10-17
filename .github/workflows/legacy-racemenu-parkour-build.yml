@@ -122,32 +122,63 @@ jobs:
           call Mods\SkyParkourTogether\Plugin\build.bat || exit /b 1
           dumpbin /exports Mods\SkyParkourTogether\Plugin\build\SkyParkourTogether.dll | findstr /C:"SKSEPlugin_" /C:"STRModSync_"
 
-      - name: Package
+      # Everything else a complete Skyrim Together Reborn needs (CEF, the UI, ImmersiveElf, the server) so the
+      # package installs on its own instead of being copied over another Skyrim Together download.
+      - name: Gather distributable binaries
+        run: |
+          xmake install -o distrib
+          ls distrib/bin
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: lts/iron
+          cache-dependency-path: Code/skyrim_ui/pnpm-lock.yaml
+          cache: pnpm
+
+      - name: Build the UI
+        run: |
+          pnpm --prefix Code/skyrim_ui/ install
+          pnpm --prefix Code/skyrim_ui/ deploy:production
+
+      - name: Package FOMOD
         run: |
           out=build/windows/x64/releasedbg
           plugin=Mods/SkyParkourTogether/Plugin/build/SkyParkourTogether.dll
           rm -rf pkg publish && mkdir -p publish
-          make_client() {
-            local dir=pkg/$1
-            mkdir -p "$dir/SkyrimTogetherReborn" "$dir/SKSE/Plugins"
-            cp "$plugin" "$dir/SKSE/Plugins/"
-            cp Packaging/combined/README.txt "$dir/README - combined test build.txt"
-            cp LICENSE "$dir/LICENSE.txt"
-          }
-          make_client se
-          cp "$out/legacy/SkyrimTogether.exe" "$out/EarlyLoad.dll" "$out/TPProcess.exe" GameFiles/Skyrim/SKSE/Plugins/versionlib-ae-to-se-1-5-97-0.map pkg/se/SkyrimTogetherReborn/
-          make_client ae
-          cp "$out/SkyrimTogether.exe" pkg/ae/SkyrimTogetherReborn/
-          mkdir -p pkg/server
-          cp "$out/STServer.dll" "$out/SkyrimTogetherServer.exe" pkg/server/
-          cp Packaging/combined/README.txt "pkg/server/README - combined test build.txt"
-          (cd pkg/se && 7z a -tzip ../../publish/combined-1.5.97.zip . > /dev/null)
-          (cd pkg/ae && 7z a -tzip ../../publish/combined-1.6.1170.zip . > /dev/null)
-          (cd pkg/server && 7z a -tzip ../../publish/combined-server.zip . > /dev/null)
-          cp "$out/legacy/SkyrimTogether.exe" publish/SkyrimTogether-1.5.97.exe
-          cp "$out/SkyrimTogether.exe" publish/SkyrimTogether-1.6.1170.exe
-          cp "$out/EarlyLoad.dll" "$out/TPProcess.exe" "$out/STServer.dll" "$out/SkyrimTogetherServer.exe" "$plugin" publish/
-          cp GameFiles/Skyrim/SKSE/Plugins/versionlib-ae-to-se-1-5-97-0.map publish/
+          root=pkg
+          core="$root/00 Core"
+          str="$core/SkyrimTogetherReborn"
+          mkdir -p "$str" "$core/SKSE/Plugins" "$root/fomod"
+
+          # The Skyrim Together folder: binaries, CEF, UI and a default server config.
+          cp -rf distrib/bin/. "$str/"
+          cp "$out/STServer.dll" "$out/SkyrimTogetherServer.exe" "$out/EarlyLoad.dll" "$out/TPProcess.exe" "$str/"
+          cp -r Code/skyrim_ui/dist/UI "$str/"
+          rm -f "$str"/*.pdb "$str"/*.lib "$str"/*.exp "$str"/*Tests*.exe "$str"/SkyrimTogether.exe
+          mkdir -p "$str/config"
+          (cd "$str" && ./SkyrimTogetherServer.exe --generate-config config/STServer.ini) || echo "::warning::could not generate STServer.ini"
+
+          # Data-folder files (plugins, scripts, behaviors) and the SkyParkour Together plugin.
+          cp -r GameFiles/Skyrim/. "$core/"
+          cp "$plugin" "$core/SKSE/Plugins/"
+          cp Packaging/combined/README.txt "$core/SkyrimTogetherReborn - Combined Test README.txt"
+          cp LICENSE "$core/SkyrimTogetherReborn/LICENSE.txt"
+
+          # The launcher is the only file that differs per game version.
+          mkdir -p "$root/10 Skyrim SE 1.6.1170/SkyrimTogetherReborn" "$root/11 Skyrim SE 1.5.97/SkyrimTogetherReborn"
+          cp "$out/SkyrimTogether.exe" "$root/10 Skyrim SE 1.6.1170/SkyrimTogetherReborn/"
+          cp "$out/legacy/SkyrimTogether.exe" GameFiles/Skyrim/SKSE/Plugins/versionlib-ae-to-se-1-5-97-0.map "$root/11 Skyrim SE 1.5.97/SkyrimTogetherReborn/"
+
+          cp Packaging/combined/fomod/info.xml Packaging/combined/fomod/ModuleConfig.xml "$root/fomod/"
+          (cd "$root" && 7z a -tzip ../publish/SkyrimTogetherReborn-Combined-Test.zip . > /dev/null)
+          cp Packaging/combined/README.txt publish/INSTALL-README.txt
+          find "$root" -maxdepth 3 | sort | head -80
           ls -la publish
 
       - name: Upload artifact
@@ -166,4 +197,4 @@ jobs:
           gh release delete racemenu-parkour-combined-test --yes --cleanup-tag || true
           gh release create racemenu-parkour-combined-test publish/* --prerelease --target "$GITHUB_SHA" \
             --title "Combined test build: Parkour + RaceMenu + Ragdoll (${GITHUB_SHA::8})" \
-            --notes "Test build of ${GITHUB_REF_NAME} at ${GITHUB_SHA}: SkyParkour Together parkour sync (add-on + plugin), RaceMenu sync and ragdoll sync in one build, for Skyrim SE 1.5.97 and 1.6.1170, with the matching server. combined-1.5.97.zip / combined-1.6.1170.zip are the clients, combined-server.zip the server; every player and the server must use this build. Disable the separate SkyParkour Together mod while testing this one. Install steps are in the README inside each zip."
+            --notes-file Packaging/combined/RELEASE_NOTES.md

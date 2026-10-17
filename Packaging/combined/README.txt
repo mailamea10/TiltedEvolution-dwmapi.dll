@@ -1,70 +1,94 @@
-Skyrim Together Reborn 1.8.5 - combined test build
+Skyrim Together Reborn 1.8.5 - Combined Test Build
 Parkour sync (SkyParkour Together) + RaceMenu sync + Ragdoll sync
-====================================================================
+=================================================================
 
-A test build, not a release. Every player and the server must use files from
-the same build, or the server refuses the connection.
+This is a test build, not a release. It is a COMPLETE Skyrim Together Reborn:
+launcher, UI, server, plugins and the SkyParkour Together plugin, all in one
+mod. You do not need any other Skyrim Together download.
 
-What is in it
+Every player must install this same build, and whoever hosts must run the
+server that comes with it (SkyrimTogetherServer.exe in the same folder).
+Otherwise the server refuses the connection.
+
+
+WHAT YOU NEED
 -------------
-- Parkour sync: the SkyParkour Together add-on (STR Mod Sync API) plus its SKSE
-  plugin, SkyParkourTogether.dll. Same code as the skyparkour-together-v1.0.0
-  release.
-- RaceMenu sync: sculpting, RaceMenu presets, overlays, hair color and body
-  sliders on the other players.
-- Ragdoll sync: the owner's ragdoll (knockdowns, deaths) shown on every client.
+- Skyrim Special Edition 1.6.1170 / 1.6.1179, or 1.5.97.
+- SKSE for your game version (2.2.6 for 1.6.1170, 2.0.20 for 1.5.97).
+- SkyParkour (SkyParkourNG) for parkour, and RaceMenu for appearance sync.
+  Run Pandora (or Nemesis) after installing SkyParkour.
 
-Files
------
-combined-1.5.97.zip     Client for Skyrim SE 1.5.97 (the legacy port).
-combined-1.6.1170.zip   Client for Skyrim SE 1.6.1170 / 1.6.1179.
-combined-server.zip     The matching server. RaceMenu and ragdoll sync add
-                        messages that only this server relays, so whoever hosts
-                        must run it.
 
-Requirements
-------------
-- Skyrim Together Reborn 1.8.5 already installed (absol89's build for 1.6.1170, or
-  our legacy-test package for 1.5.97).
-- SkyParkour (SkyParkourNG) for parkour, RaceMenu for appearance sync.
-- Do not use STRPluginMessagingAPI with this build: it patches the stock
-  launcher and closes the game with ours.
-- Disable or remove the separate SkyParkour Together mod while testing this
-  build. This build already contains it, so keeping both installs the add-on twice.
-
-Install (MO2)
--------------
-1. Install the client zip for your game version as a new mod, and enable it.
-   It installs SKSE\Plugins\SkyParkourTogether.dll.
-2. MO2 runs SkyrimTogether.exe from its real folder, so the launcher has to sit
-   next to Skyrim Together's own files.
-   a. Open the Skyrim Together Reborn mod's folder (right click > Open in
-      Explorer) and go into SkyrimTogetherReborn.
-   b. Rename SkyrimTogether.exe to SkyrimTogether.original.exe (keep it).
-   c. Copy SkyrimTogether.exe from this build's SkyrimTogetherReborn folder in
-      there.
-   d. For 1.5.97 also copy EarlyLoad.dll, TPProcess.exe and the
-      versionlib-ae-to-se-1-5-97-0.map file (back up EarlyLoad.dll and
-      TPProcess.exe first).
-3. Start the game with your existing SkyrimTogether executable entry in MO2.
-
-Install (Vortex)
+BEFORE YOU START
 ----------------
-Install the client zip and set it to load after Skyrim Together Reborn, then
-deploy.
+Turn these off if you have them. They clash with this build:
+- Your current Skyrim Together Reborn mod (this build replaces it).
+- The separate "SkyParkour Together" mod (this build already contains it).
+- STRPluginMessagingAPI (it closes the game with this launcher).
+- For Nucleus Co-op split screen: SmoothCam.
 
-Server
-------
-Extract combined-server.zip over your server folder (back up STServer.dll and
-SkyrimTogetherServer.exe first), or run it from its own folder.
 
-Logs
-----
-- Client: SkyrimTogetherReborn\logs\tp_client.log ("mod sync:", "RaceMenu sync:",
-  "Ragdoll sync:" lines).
-- Plugin: Documents\My Games\Skyrim Special Edition\SKSE\SkyParkourTogether.log.
+INSTALL WITH MOD ORGANIZER 2
+----------------------------
+1. Download the one zip from the release page
+   (SkyrimTogetherReborn-Combined-Test.zip).
+2. In MO2 click "Install a new mod from an archive" (the CD icon) and pick the
+   zip.
+3. The installer asks which Skyrim version you play:
+     - Skyrim SE 1.6.1170 / 1.6.1179  -> EldenRim Together and most current
+       modlists.
+     - Skyrim SE 1.5.97              -> the legacy 1.5.97 port.
+   Pick yours and finish the install.
+4. Enable the new mod in the left pane. Disable your old Skyrim Together
+   Reborn mod and the old SkyParkour Together mod.
+5. Point MO2's SkyrimTogether executable at the new mod:
+     a. Click the two gears ("Modify Executables").
+     b. Select your SkyrimTogether entry (or press + and add a new one).
+     c. Binary: browse to
+          <MO2 folder>\mods\<this mod's name>\SkyrimTogetherReborn\SkyrimTogether.exe
+     d. Start in: the same SkyrimTogetherReborn folder.
+     e. Apply.
+6. Launch with that entry. In game press the right Ctrl key to open the
+   Skyrim Together menu and connect.
 
-Uninstall
+
+INSTALL WITH VORTEX
+-------------------
+1. Drag the zip into Vortex's Mods page and install it.
+2. Pick your Skyrim version in the installer.
+3. Disable your old Skyrim Together Reborn mod and the old SkyParkour
+   Together mod, then Deploy.
+4. Start the game with Data\SkyrimTogetherReborn\SkyrimTogether.exe (add it
+   as a tool in Vortex's dashboard if it is not there).
+
+
+HOSTING THE SERVER
+------------------
+Run SkyrimTogetherServer.exe from this mod's SkyrimTogetherReborn folder.
+Its settings are in config\STServer.ini next to it. Players connect to your
+IP (or 127.0.0.1 on the same PC).
+
+
+NUCLEUS CO-OP (SPLIT SCREEN)
+----------------------------
+Nucleus starts SkyrimTogether.exe and the server from the folder you gave it.
+After installing, open Nucleus, remove and re-add the Skyrim Together Reborn
+game, and point it at this mod's SkyrimTogetherReborn\SkyrimTogether.exe.
+Keep SmoothCam disabled for split screen.
+
+
+CHECK THAT IT WORKS
+-------------------
+SkyrimTogetherReborn\logs\tp_client.log (MO2: the overwrite folder) should show
+lines starting with:
+  "mod sync:"        parkour sync is running
+  "RaceMenu sync:"   appearance sync is running
+  "Ragdoll sync:"    ragdoll sync is running
+Documents\My Games\Skyrim Special Edition\SKSE\SkyParkourTogether.log should say
+"Skyrim Together add-on found".
+
+
+UNINSTALL
 ---------
-Disable the mod, and rename SkyrimTogether.original.exe back to SkyrimTogether.exe
-(plus EarlyLoad.dll and TPProcess.exe for 1.5.97).
+Disable or remove this mod, enable your old Skyrim Together Reborn mod again
+and point the SkyrimTogether executable back at it.
