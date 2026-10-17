@@ -113,7 +113,7 @@ The 1.5.97 build is the 1.8.5 client compiled a second time with `SKYRIM_TARGET_
 | `SkyrimTogetherReborn-1.8.5-SE-1.5.97.zip` | No console window |
 | `SkyrimTogetherReborn-1.8.5-SE-1.5.97-console.zip` | Console window with the live log, for troubleshooting |
 
-Each zip holds `SkyrimTogetherRuntime/SkyrimTogether.exe`, `EarlyLoad.dll`, `TPProcess.exe`, `versionlib-ae-to-se-1-5-97-0.map`, a README and the GPL licence. Players extract it over the STR 1.8.5 mod and launch `SkyrimTogetherRuntime/SkyrimTogether.exe` from their mod manager. The map is read from next to the launcher first and from `Data/SKSE/Plugins` as a fallback, so the only extra requirement is the SE Address Library (`version-1-5-97-0.bin`).
+Each zip holds `SkyrimTogetherReborn/SkyrimTogether.exe`, `EarlyLoad.dll`, `TPProcess.exe`, `versionlib-ae-to-se-1-5-97-0.map`, a README and the GPL licence. Players extract it over the STR 1.8.5 mod and launch `SkyrimTogetherReborn/SkyrimTogether.exe` from their mod manager. The map is read from next to the launcher first and from `Data/SKSE/Plugins` as a fallback, so the only extra requirement is the SE Address Library (`version-1-5-97-0.bin`).
 
 Build: `xmake build SkyrimImmersiveLauncherLegacy SkyrimImmersiveLauncherLegacyNoConsole`. The `Legacy 1.5.97 build` workflow (`.github/workflows/legacy-build.yml`) builds the client, both launchers, `TPProcess` and the SKSE bootstrap, and packages both zips. It tags the build with the server version it talks to (v1.8.5), because the server rejects a client whose version string differs.
 

@@ -12,7 +12,7 @@ Requirements
 - Address Library for SKSE Plugins, "All in one" (SE) - provides
   Data/SKSE/Plugins/version-1-5-97-0.bin
 - The Skyrim Together Reborn 1.8.5 mod files (esp, scripts, behaviours, the
-  SkyrimTogetherRuntime folder with its UI) installed as usual
+  SkyrimTogetherReborn folder with its UI) installed as usual
 
 Two downloads
 -------------
@@ -25,16 +25,16 @@ Install
 -------
 1. Install Skyrim Together Reborn 1.8.5 as a mod in your mod manager.
 2. Extract this archive over it (or as a separate mod that wins its file
-   conflicts). It replaces SkyrimTogetherRuntime/SkyrimTogether.exe,
+   conflicts). It replaces SkyrimTogetherReborn/SkyrimTogether.exe,
    EarlyLoad.dll and TPProcess.exe and adds
-   SkyrimTogetherRuntime/versionlib-ae-to-se-1-5-97-0.map.
+   SkyrimTogetherReborn/versionlib-ae-to-se-1-5-97-0.map.
 3. Do not install SkyrimTogetherSKSE.dll or SkyrimTogetherRuntime_1_5.dll from
    test builds; the launcher does not need them.
-4. In Mod Organizer 2, add SkyrimTogetherRuntime/SkyrimTogether.exe as an
+4. In Mod Organizer 2, add SkyrimTogetherReborn/SkyrimTogether.exe as an
    executable and launch it from MO2. The first start asks for the game folder.
 
 Nothing is written to the game's install folder. Logs (and a crash dump, if
-the game crashes) go to SkyrimTogetherRuntime/logs, which in MO2 ends up in
+the game crashes) go to SkyrimTogetherReborn/logs, which in MO2 ends up in
 the overwrite folder.
 
 Credits
