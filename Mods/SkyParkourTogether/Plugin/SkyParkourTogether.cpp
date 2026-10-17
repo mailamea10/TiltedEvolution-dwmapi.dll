@@ -8,6 +8,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <shlobj.h>
+#include <psapi.h>
 
 #include <cstdint>
 #include <cstdio>
@@ -78,8 +79,17 @@ void ReportHost(uint32_t aRuntimeVersion)
              (aRuntimeVersion >> 4) & 0xFFF);
     Log(line);
 
-    // The Skyrim Together launcher hosts the game, so the add-on's export is on the main module.
-    const auto hostVersion = reinterpret_cast<STRModSync::THostApiVersion>(GetProcAddress(GetModuleHandleW(nullptr), STRModSync::kHostApiVersionExport));
+    // The Skyrim Together launcher hosts the game and reports the game's image as the main module, so look
+    // for the add-on's export in every loaded module rather than only in GetModuleHandle(nullptr).
+    STRModSync::THostApiVersion hostVersion = nullptr;
+    HMODULE modules[1024];
+    DWORD needed = 0;
+    if (K32EnumProcessModules(GetCurrentProcess(), modules, sizeof(modules), &needed))
+    {
+        const DWORD cCount = (needed / sizeof(HMODULE)) < 1024 ? needed / sizeof(HMODULE) : 1024;
+        for (DWORD i = 0; i < cCount && !hostVersion; ++i)
+            hostVersion = reinterpret_cast<STRModSync::THostApiVersion>(GetProcAddress(modules[i], STRModSync::kHostApiVersionExport));
+    }
     if (hostVersion)
     {
         snprintf(line, sizeof(line), "Skyrim Together add-on found (Mod Sync API %u); SkyParkour animations will be shared", hostVersion());
@@ -87,8 +97,8 @@ void ReportHost(uint32_t aRuntimeVersion)
     }
     else
     {
-        Log("Skyrim Together add-on not found: the game was not started from the SkyrimTogether.exe this mod installs. "
-            "SkyParkour works as usual, but its animations are not shared.");
+        Log("Skyrim Together add-on not found: the game was started with a SkyrimTogether.exe without the add-on "
+            "(see the README's install steps). SkyParkour works as usual, but its animations are not shared.");
     }
 }
 } // namespace
