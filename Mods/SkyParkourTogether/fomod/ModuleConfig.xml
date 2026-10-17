@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://qconsulting.ca/fo3/ModConfig5.0.xsd">
+  <moduleName>SkyParkour Together (Parkour Animations Sync)</moduleName>
+  <moduleImage path="fomod\images\banner.png" />
+
+  <requiredInstallFiles>
+    <folder source="00 Core" destination="" priority="0" />
+  </requiredInstallFiles>
+
+  <installSteps order="Explicit">
+    <installStep name="Game version">
+      <optionalFileGroups order="Explicit">
+        <group name="Which Skyrim do you play on?" type="SelectExactlyOne">
+          <plugins order="Explicit">
+            <plugin name="Skyrim 1.7.104">
+              <description>Skyrim Special/Anniversary Edition 1.7.104 (the current Steam and GOG release), with Skyrim Together Reborn 1.8.5 for 1.7.104.
+
+Installs the SKSE plugin and the Skyrim Together launcher with the parkour add-on (SkyrimTogetherRuntime/SkyrimTogether.exe).</description>
+              <image path="fomod\images\banner.png" />
+              <files>
+                <folder source="10 STR Add-on 1.7.104" destination="" priority="0" />
+              </files>
+              <typeDescriptor>
+                <type name="Optional" />
+              </typeDescriptor>
+            </plugin>
+            <plugin name="Skyrim 1.6.1170 / 1.6.1179">
+              <description>Skyrim Special/Anniversary Edition 1.6.1170 or 1.6.1179, with Skyrim Together Reborn 1.8.5 for 1.6.
+
+Installs the SKSE plugin and the Skyrim Together launcher with the parkour add-on (SkyrimTogetherRuntime/SkyrimTogether.exe).</description>
+              <image path="fomod\images\banner.png" />
+              <files>
+                <folder source="11 STR Add-on 1.6.1170" destination="" priority="0" />
+              </files>
+              <typeDescriptor>
+                <type name="Optional" />
+              </typeDescriptor>
+            </plugin>
+            <plugin name="Skyrim 1.5.97">
+              <description>Skyrim Special Edition 1.5.97 (SKSE 2.0.20), with Skyrim Together Reborn 1.8.5.
+
+Installs the SKSE plugin and the 1.5.97 Skyrim Together launcher with the parkour add-on: SkyrimTogetherRuntime/SkyrimTogether.exe, EarlyLoad.dll, TPProcess.exe and versionlib-ae-to-se-1-5-97-0.map. Skyrim Together has no 1.5.97 launcher of its own, so this one comes with the mod; you do not need any other 1.5.97 port.</description>
+              <image path="fomod\images\banner.png" />
+              <files>
+                <folder source="12 STR Add-on 1.5.97" destination="" priority="0" />
+              </files>
+              <typeDescriptor>
+                <type name="Optional" />
+              </typeDescriptor>
+            </plugin>
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
+  </installSteps>
+</config>
