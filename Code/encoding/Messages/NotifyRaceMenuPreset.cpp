@@ -1,11 +1,15 @@
 #include <Messages/NotifyRaceMenuPreset.h>
+#include <Structs/LargeBlob.h>
+
+// Matches the server and client limits for a compressed preset.
+constexpr size_t kMaxPresetBytes = 384 * 1024;
 
 void NotifyRaceMenuPreset::SerializeRaw(TiltedPhoques::Buffer::Writer& aWriter) const noexcept
 {
     Serialization::WriteVarInt(aWriter, PlayerId);
     Serialization::WriteVarInt(aWriter, Revision);
     Serialization::WriteVarInt(aWriter, UncompressedSize);
-    Serialization::WriteString(aWriter, Preset);
+    LargeBlob::Write(aWriter, Preset);
     FaceTints.Serialize(aWriter);
 }
 
@@ -16,6 +20,6 @@ void NotifyRaceMenuPreset::DeserializeRaw(TiltedPhoques::Buffer::Reader& aReader
     PlayerId = Serialization::ReadVarInt(aReader) & 0xFFFFFFFF;
     Revision = Serialization::ReadVarInt(aReader) & 0xFFFFFFFF;
     UncompressedSize = Serialization::ReadVarInt(aReader) & 0xFFFFFFFF;
-    Preset = Serialization::ReadString(aReader);
+    Preset = LargeBlob::Read(aReader, kMaxPresetBytes);
     FaceTints.Deserialize(aReader);
 }
