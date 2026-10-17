@@ -172,6 +172,9 @@ jobs:
           rm -f "$str"/*.pdb "$str"/*.lib "$str"/*.exp "$str"/*Tests*.exe "$str"/SkyrimTogether.exe
           mkdir -p "$str/config"
           (cd "$str" && ./SkyrimTogetherServer.exe --generate-config config/STServer.ini) || echo "::warning::could not generate STServer.ini"
+          # The launcher links the client statically; the runtime DLLs and the SKSE bootstrap are only for the
+          # SKSE route and do nothing in this folder, and generating the config leaves a server log behind.
+          rm -rf "$str/logs" "$str"/SkyrimTogetherRuntime*.dll "$str/SkyrimTogetherSKSE.dll"
 
           # Data-folder files (plugins, scripts, behaviors) and the SkyParkour Together plugin.
           cp -r GameFiles/Skyrim/. "$core/"
