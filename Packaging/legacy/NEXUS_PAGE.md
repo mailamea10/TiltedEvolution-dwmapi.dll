@@ -11,7 +11,7 @@ It launches like the official mod: from `SkyrimTogether.exe` in your mod manager
 - Skyrim Special Edition **1.5.97** (Steam)
 - [SKSE64 2.0.20](https://skse.silverlock.org/)
 - [Address Library for SKSE Plugins](https://www.nexusmods.com/skyrimspecialedition/mods/32444), the SE (1.5.97) file
-- Skyrim Together Reborn **1.8.5**, installed as a mod (the plugins, scripts, behaviours and the `SkyrimTogetherRuntime` folder)
+- Skyrim Together Reborn **1.8.5**, installed as a mod (the plugins, scripts, behaviours and the `SkyrimTogetherReborn` folder)
 - A server running STR 1.8.5 (any regular 1.8.5 server works)
 
 ## Downloads
@@ -24,8 +24,8 @@ Install one of the two; everything else in them is the same.
 ## Installation
 
 1. Install Skyrim Together Reborn 1.8.5 in your mod manager as usual.
-2. Install this file as a mod placed **after** it (or merge it into the same mod), so its files win the conflicts. It replaces `SkyrimTogetherRuntime/SkyrimTogether.exe`, `EarlyLoad.dll` and `TPProcess.exe`, and adds `versionlib-ae-to-se-1-5-97-0.map`.
-3. In Mod Organizer 2, add `SkyrimTogetherRuntime/SkyrimTogether.exe` (inside the mod folder) as an executable and launch it from MO2. Vortex users: launch it as a tool.
+2. Install this file as a mod placed **after** it (or merge it into the same mod), so its files win the conflicts. It replaces `SkyrimTogetherReborn/SkyrimTogether.exe`, `EarlyLoad.dll` and `TPProcess.exe`, and adds `versionlib-ae-to-se-1-5-97-0.map`.
+3. In Mod Organizer 2, add `SkyrimTogetherReborn/SkyrimTogether.exe` (inside the mod folder) as an executable and launch it from MO2. Vortex users: launch it as a tool.
 4. On the first start the launcher asks for your game folder: pick the folder with `SkyrimSE.exe` (for Nolvus, `STOCK GAME`). It remembers it separately from the 1.6 launcher.
 5. In game, press **F2** to open the overlay and connect.
 
@@ -95,7 +95,7 @@ Everything in Skyrim Together Reborn 1.8.5 works on 1.5.97.
 ### Made for 1.5.97
 
 - Works with the 1.5.97 `SkyrimSE.exe` and SKSE 2.0.20; joins regular 1.8.5 servers.
-- Nothing is written to your game folder. Logs, and a crash dump if the game crashes, go to `SkyrimTogetherRuntime/logs` (with MO2, in your overwrite folder).
+- Nothing is written to your game folder. Logs, and a crash dump if the game crashes, go to `SkyrimTogetherReborn/logs` (with MO2, in your overwrite folder).
 - The crash log names the module and offset that crashed, so reports are useful without a multi-gigabyte dump.
 - The 1.5.97 and 1.6 launchers remember their game folders separately, so you can keep both installed.
 
@@ -105,7 +105,7 @@ Everything in Skyrim Together Reborn 1.8.5 works on 1.5.97.
 
 **Do I still need the Address Library?** Yes, the SE (1.5.97) file. This mod ships only the small map that translates the 1.8.5 addresses to it.
 
-**The game does not start / crashes.** Use the console download and send `SkyrimTogetherRuntime/logs/tp_client.log` (in MO2, check overwrite) with your report.
+**The game does not start / crashes.** Use the console download and send `SkyrimTogetherReborn/logs/tp_client.log` (in MO2, check overwrite) with your report.
 
 **Does it work on 1.5.80 or other SE builds?** No, only 1.5.97.
 
