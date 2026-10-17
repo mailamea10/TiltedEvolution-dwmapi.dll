@@ -1,0 +1,169 @@
+name: Combined Parkour + RaceMenu + Ragdoll build
+
+# One test build with everything that is being tested together: the SkyParkour Together add-on and plugin
+# (parkour sync), RaceMenu sync and ragdoll sync, for 1.5.97 (legacy port) and 1.6.1170, plus the server
+# they need. Publishes the racemenu-parkour-combined-test pre-release; no other release is touched.
+
+on:
+  workflow_dispatch:
+    inputs:
+      server_version:
+        description: 'Version string the server compares against (the STR server release this build must talk to)'
+        required: false
+        default: 'v1.8.5'
+  push:
+    branches:
+      - 'feature/legacy-1.5.97-on-1.8.5-racemenu-parkour'
+
+concurrency:
+  group: combined-test-build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-2022
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # full history is needed to create the version string (BuildInfo.h)
+          fetch-depth: 0
+
+      # The server refuses any client whose version string differs from its own, so tag the build with the
+      # server version it is meant to talk to.
+      - name: Pin protocol version
+        env:
+          SERVER_VERSION: ${{ github.event.inputs.server_version || 'v1.8.5' }}
+        run: |
+          git tag -f "$SERVER_VERSION" HEAD
+          echo "client will report version: $(git describe --tags --abbrev=0)"
+
+      - name: Checkout submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --force --recursive --depth=1
+
+      - name: Restore xmake packages
+        id: pkgcache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/AppData/Local/.xmake/packages
+          key: ${{ runner.os }}-xmake-pkgs-${{ hashFiles('**/xmake.lua') }}
+          restore-keys: |
+            ${{ runner.os }}-xmake-pkgs-
+
+      - name: Setup xmake
+        uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: 3.1.0
+          actions-cache-folder: '.xmake-cache'
+          actions-cache-key: windows-2022
+
+      - name: Configure xmake and install dependencies
+        run: xmake config --plat=windows --arch=x64 --mode=releasedbg --yes -vD
+
+      - name: Save xmake packages
+        if: always() && steps.pkgcache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/AppData/Local/.xmake/packages
+          key: ${{ runner.os }}-xmake-pkgs-${{ hashFiles('**/xmake.lua') }}
+
+      - name: Build legacy runtime DLL
+        run: |
+          set +e
+          xmake build -y -vD SkyrimTogetherClientDllLegacy 2>&1 | tee build-legacy.log
+          status=${PIPESTATUS[0]}
+          grep -E "error C[0-9]+|error LNK[0-9]+|fatal error|: error:" build-legacy.log | sort -u | head -40 | while IFS= read -r line; do echo "::error::${line:0:900}"; done
+          exit $status
+
+      - name: Build SKSE bootstrap plugin and TPProcess
+        run: |
+          xmake build -y -vD SkyrimTogetherSKSE
+          xmake build -y -vD TPProcess
+
+      - name: Build 1.5.97 immersive launcher
+        run: |
+          set +e
+          xmake build -y -vD SkyrimImmersiveLauncherLegacy 2>&1 | tee build-launcher.log
+          status=${PIPESTATUS[0]}
+          grep -E "error C[0-9]+|error LNK[0-9]+|fatal error|: error:" build-launcher.log | sort -u | head -40 | while IFS= read -r line; do echo "::error::${line:0:900}"; done
+          exit $status
+
+      - name: Build 1.6.1170 immersive launcher
+        run: |
+          set +e
+          xmake build -y -vD SkyrimImmersiveLauncher 2>&1 | tee build-launcher-ae.log
+          status=${PIPESTATUS[0]}
+          grep -E "error C[0-9]+|error LNK[0-9]+|fatal error|: error:" build-launcher-ae.log | sort -u | head -40 | while IFS= read -r line; do echo "::error::${line:0:900}"; done
+          exit $status
+
+      # RaceMenu and ragdoll sync add message types only this server relays.
+      - name: Build server
+        run: |
+          set +e
+          xmake build -y -vD SkyrimServerRunner 2>&1 | tee build-server.log
+          status=${PIPESTATUS[0]}
+          grep -E "error C[0-9]+|error LNK[0-9]+|fatal error|: error:" build-server.log | sort -u | head -40 | while IFS= read -r line; do echo "::error::${line:0:900}"; done
+          exit $status
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Build SkyParkour Together plugin
+        shell: cmd
+        run: |
+          call Mods\SkyParkourTogether\Plugin\build.bat || exit /b 1
+          dumpbin /exports Mods\SkyParkourTogether\Plugin\build\SkyParkourTogether.dll | findstr /C:"SKSEPlugin_" /C:"STRModSync_"
+
+      - name: Package
+        run: |
+          out=build/windows/x64/releasedbg
+          plugin=Mods/SkyParkourTogether/Plugin/build/SkyParkourTogether.dll
+          rm -rf pkg publish && mkdir -p publish
+          make_client() {
+            local dir=pkg/$1
+            mkdir -p "$dir/SkyrimTogetherReborn" "$dir/SKSE/Plugins"
+            cp "$plugin" "$dir/SKSE/Plugins/"
+            cp Packaging/combined/README.txt "$dir/README - combined test build.txt"
+            cp LICENSE "$dir/LICENSE.txt"
+          }
+          make_client se
+          cp "$out/legacy/SkyrimTogether.exe" "$out/EarlyLoad.dll" "$out/TPProcess.exe" GameFiles/Skyrim/SKSE/Plugins/versionlib-ae-to-se-1-5-97-0.map pkg/se/SkyrimTogetherReborn/
+          make_client ae
+          cp "$out/SkyrimTogether.exe" pkg/ae/SkyrimTogetherReborn/
+          mkdir -p pkg/server
+          cp "$out/STServer.dll" "$out/SkyrimTogetherServer.exe" pkg/server/
+          cp Packaging/combined/README.txt "pkg/server/README - combined test build.txt"
+          (cd pkg/se && 7z a -tzip ../../publish/combined-1.5.97.zip . > /dev/null)
+          (cd pkg/ae && 7z a -tzip ../../publish/combined-1.6.1170.zip . > /dev/null)
+          (cd pkg/server && 7z a -tzip ../../publish/combined-server.zip . > /dev/null)
+          cp "$out/legacy/SkyrimTogether.exe" publish/SkyrimTogether-1.5.97.exe
+          cp "$out/SkyrimTogether.exe" publish/SkyrimTogether-1.6.1170.exe
+          cp "$out/EarlyLoad.dll" "$out/TPProcess.exe" "$out/STServer.dll" "$out/SkyrimTogetherServer.exe" "$plugin" publish/
+          cp GameFiles/Skyrim/SKSE/Plugins/versionlib-ae-to-se-1-5-97-0.map publish/
+          ls -la publish
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: combined-test-build
+          retention-days: 14
+          if-no-files-found: error
+          path: publish/*
+
+      - name: Publish combined test pre-release
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete racemenu-parkour-combined-test --yes --cleanup-tag || true
+          gh release create racemenu-parkour-combined-test publish/* --prerelease --target "$GITHUB_SHA" \
+            --title "Combined test build: Parkour + RaceMenu + Ragdoll (${GITHUB_SHA::8})" \
+            --notes "Test build of ${GITHUB_REF_NAME} at ${GITHUB_SHA}: SkyParkour Together parkour sync (add-on + plugin), RaceMenu sync and ragdoll sync in one build, for Skyrim SE 1.5.97 and 1.6.1170, with the matching server. combined-1.5.97.zip / combined-1.6.1170.zip are the clients, combined-server.zip the server; every player and the server must use this build. Disable the separate SkyParkour Together mod while testing this one. Install steps are in the README inside each zip."
