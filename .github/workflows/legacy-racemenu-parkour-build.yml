@@ -112,22 +112,16 @@ jobs:
           grep -E "error C[0-9]+|error LNK[0-9]+|fatal error|: error:" build-server.log | sort -u | head -40 | while IFS= read -r line; do echo "::error::${line:0:900}"; done
           exit $status
 
-      - uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
-
-      - name: Build SkyParkour Together plugin
-        shell: cmd
-        run: |
-          call Mods\SkyParkourTogether\Plugin\build.bat || exit /b 1
-          dumpbin /exports Mods\SkyParkourTogether\Plugin\build\SkyParkourTogether.dll | findstr /C:"SKSEPlugin_" /C:"STRModSync_"
-
       # Everything else a complete Skyrim Together Reborn needs (CEF, the UI, ImmersiveElf, the server) so the
       # package installs on its own instead of being copied over another Skyrim Together download.
       - name: Gather distributable binaries
         run: |
-          xmake install -o distrib
+          set +e
+          xmake install -y -o distrib 2>&1 | tee install.log
+          status=${PIPESTATUS[0]}
+          grep -E "error C[0-9]+|error LNK[0-9]+|fatal error|: error:|error:" install.log | sort -u | head -40 | while IFS= read -r line; do echo "::error::${line:0:900}"; done
           ls distrib/bin
+          exit $status
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -145,6 +139,16 @@ jobs:
         run: |
           pnpm --prefix Code/skyrim_ui/ install
           pnpm --prefix Code/skyrim_ui/ deploy:production
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Build SkyParkour Together plugin
+        shell: cmd
+        run: |
+          call Mods\SkyParkourTogether\Plugin\build.bat || exit /b 1
+          dumpbin /exports Mods\SkyParkourTogether\Plugin\build\SkyParkourTogether.dll | findstr /C:"SKSEPlugin_" /C:"STRModSync_"
 
       - name: Package FOMOD
         run: |
