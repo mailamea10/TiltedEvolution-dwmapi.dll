@@ -70,6 +70,7 @@
 #include <Messages/NotifyDroppedItemMove.h>
 #include <Messages/NotifyDroppedItemsRemove.h>
 #include <Messages/NotifyActionEvents.h>
+#include <Messages/NotifyRagdollPose.h>
 
 using TiltedPhoques::UniquePtr;
 
@@ -84,7 +85,7 @@ struct ServerMessageFactory
             NotifyActorValueChanges, NotifyPartyJoined, NotifyPartyLeft, NotifyTradeInvite, NotifyTradeStarted, NotifyTradeState, NotifyTradeCancel, NotifyTradeComplete, NotifyActorMaxValueChanges, NotifyHealthChangeBroadcast, NotifyActivate, NotifyLockChange, AssignObjectsResponse, NotifyDeathStateChange, NotifyOwnershipTransfer, NotifyObjectInventoryChanges, NotifySpellCast,
             NotifyProjectileLaunch, NotifyInterruptCast, NotifyAddTarget, NotifyScriptAnimation, NotifyDrawWeapon, NotifyMount, NotifyNewPackage, NotifyRespawn, NotifySyncExperience, NotifyEquipmentChanges, NotifyChatMessageBroadcast, TeleportCommandResponse, NotifyPlayerRespawn, NotifyDialogue,
             NotifySubtitle, NotifyPlayerDialogue, NotifyActorTeleport, NotifyPlayerLeft, NotifyPlayerJoined, NotifyDialogue, NotifySubtitle, NotifyPlayerDialogue, NotifyPlayerLevel, NotifyPlayerCellChanged, NotifyTeleport, NotifyPlayerHealthUpdate, NotifySettingsChange,
-            NotifyWeatherChange, NotifySetWaypoint, NotifyRemoveWaypoint, NotifySetTimeResult, NotifyRemoveSpell, NotifyRemoveObjects, DropItemResponse, NotifyDroppedItemsSpawn, NotifyDroppedItemMove, NotifyDroppedItemsRemove, NotifyActionEvents>;
+            NotifyWeatherChange, NotifySetWaypoint, NotifyRemoveWaypoint, NotifySetTimeResult, NotifyRemoveSpell, NotifyRemoveObjects, DropItemResponse, NotifyDroppedItemsSpawn, NotifyDroppedItemMove, NotifyDroppedItemsRemove, NotifyActionEvents, NotifyRagdollPose>;
 
         return s_visitor(std::forward<T>(func));
     }
