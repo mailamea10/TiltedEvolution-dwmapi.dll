@@ -1,6 +1,6 @@
 #pragma once
 
-// STR LipSync API, version 1.
+// STR LipSync API, version 2.
 //
 // The contract between the LipSync Together SKSE plugin (LipSyncTogether.dll) and the LipSync Together add-on
 // built into the Skyrim Together launcher.
@@ -16,7 +16,7 @@
 
 namespace STRLipSync
 {
-inline constexpr uint32_t kApiVersion = 1;
+inline constexpr uint32_t kApiVersion = 2;
 
 inline constexpr char kDescriptorExport[] = "STRLipSync_GetDescriptor";
 inline constexpr char kHostApiVersionExport[] = "STRLipSync_HostApiVersion";
@@ -41,6 +41,7 @@ struct Settings
     float MouthStrength;      // scales every phoneme the add-on writes (1 = as analysed)
     float RemoteDelaySeconds; // how long a copy holds a received mouth before showing it, to smooth out the network
     float MaxDistance;        // copies further away than this (game units) are left alone
+    uint32_t Debug;           // 1: log timing and mouth states (LogLevels in the INI)
 };
 
 struct Descriptor

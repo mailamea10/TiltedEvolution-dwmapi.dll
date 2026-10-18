@@ -70,6 +70,11 @@ private:
         Shape Current{};
         double LastReceived{};
         FaceState Face{};
+
+        // Timing, logged once a second with LogLevels.
+        uint32_t ReceivedCount{};
+        double LargestGap{};
+        String LastState{};
     };
 
     void ScanForPlugin() noexcept;
@@ -79,6 +84,7 @@ private:
     void UpdateRemotes(double aDelta, bool aApply) noexcept;
     void WriteFace(Actor* apActor, FaceState& aFace, const Shape& acMouth) noexcept;
     void ReleaseFace(Actor* apActor, FaceState& aFace) noexcept;
+    void ReportTiming(double aDelta) noexcept;
     void Reset() noexcept;
 
     World& m_world;
@@ -101,6 +107,12 @@ private:
     double m_lastSendTime{-1.0};
     bool m_sentSpeaking{};
     bool m_wasOnline{};
+
+    double m_reportTimer{};
+    uint32_t m_sentCount{};
+    double m_frameTimeSum{};
+    double m_longestFrame{};
+    uint32_t m_frameCount{};
 
     Map<uint32_t, Remote> m_remotes;
 

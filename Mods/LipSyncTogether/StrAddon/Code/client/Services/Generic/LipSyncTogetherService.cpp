@@ -53,9 +53,9 @@ constexpr const char* kQuietState = "-";
 constexpr int kJawLevels = 7;
 constexpr int kShapeLevels = 3;
 
-// At most 20 states a second, an unchanged state at most every 0.2 s to show the speaker is still talking, and a
+// At most 30 states a second, an unchanged state at most every 0.2 s to show the speaker is still talking, and a
 // copy that hears nothing for 0.6 s closes its mouth.
-constexpr double kMinSendInterval = 0.05;
+constexpr double kMinSendInterval = 1.0 / 30.0;
 constexpr double kRepeatInterval = 0.2;
 constexpr double kRemoteTimeout = 0.6;
 constexpr size_t kMaxQueued = 32;
@@ -85,7 +85,6 @@ enum Phoneme : uint32_t
     kI = 8,
     kOh = 11,
     kOohQ = 12,
-    kW = 15,
     kPhonemeCount = 16,
 };
 
@@ -246,33 +245,34 @@ bool DecodeState(const String& acState, Shape& aOut) noexcept
     return true;
 }
 
-// The five shapes as Skyrim phonemes, 0 to 100.
+// The five shapes as Skyrim phonemes, 0 to 100. The weights stay near what vanilla dialogue uses: ordinary speech
+// is a modest Aah and Eh, spread and rounded lips only add some Eee/I or OohQ/Oh on top, and BigAah is for shouting.
 void ToPhonemes(const Shape& acMouth, float aStrength, int (&aOut)[kPhonemeCount]) noexcept
 {
     float weight[kPhonemeCount]{};
-    const float cOpen = acMouth.Open * (1.f - acMouth.Lips);
-    weight[kAah] = cOpen * (1.f - 0.6f * acMouth.Round);
-    weight[kBigAah] = 0.6f * Clamp01((acMouth.Open - 0.7f) / 0.3f) * (1.f - acMouth.Lips);
-    weight[kEh] = 0.4f * cOpen * acMouth.Wide;
-    weight[kEee] = 0.7f * acMouth.Wide;
-    weight[kI] = 0.3f * acMouth.Wide * acMouth.Open;
-    weight[kOohQ] = 0.8f * acMouth.Round;
-    weight[kW] = 0.4f * acMouth.Round;
-    weight[kOh] = 0.6f * acMouth.Round * acMouth.Open;
-    weight[kBMP] = acMouth.Lips;
-    weight[kFV] = 0.7f * acMouth.Teeth;
-    weight[kDST] = 0.5f * acMouth.Teeth;
-    weight[kChJSh] = 0.3f * acMouth.Teeth;
+    const float cOpen = acMouth.Open * (1.f - 0.6f * acMouth.Lips);
+    weight[kAah] = 0.55f * cOpen * (1.f - 0.5f * acMouth.Round) * (1.f - 0.4f * acMouth.Wide);
+    weight[kBigAah] = 0.3f * Clamp01((acMouth.Open - 0.85f) / 0.15f);
+    weight[kEh] = 0.3f * cOpen * (1.f - acMouth.Round);
+    weight[kEee] = 0.4f * acMouth.Wide;
+    weight[kI] = 0.25f * acMouth.Wide * acMouth.Open;
+    weight[kOohQ] = 0.45f * acMouth.Round;
+    weight[kOh] = 0.3f * acMouth.Round * acMouth.Open;
+    weight[kBMP] = 0.5f * acMouth.Lips;
+    weight[kFV] = 0.35f * acMouth.Teeth;
+    weight[kDST] = 0.25f * acMouth.Teeth;
+    weight[kChJSh] = 0.15f * acMouth.Teeth;
 
     for (uint32_t i = 0; i < kPhonemeCount; ++i)
         aOut[i] = std::clamp(static_cast<int>(std::lround(weight[i] * aStrength * 100.f)), 0, 100);
 }
 
-// Moves aCurrent toward aTarget, opening faster than closing.
+// Moves aCurrent toward aTarget, opening faster than closing. The sender has already smoothed the voice, so this
+// only rounds off the steps between received states.
 void SmoothToward(Shape& aCurrent, const Shape& acTarget, double aDelta) noexcept
 {
-    const float cAttack = 1.f - std::exp(static_cast<float>(-aDelta / 0.03));
-    const float cRelease = 1.f - std::exp(static_cast<float>(-aDelta / 0.06));
+    const float cAttack = 1.f - std::exp(static_cast<float>(-aDelta / 0.015));
+    const float cRelease = 1.f - std::exp(static_cast<float>(-aDelta / 0.035));
     auto step = [&](float& aValue, float aGoal) {
         aValue += (aGoal - aValue) * (aGoal > aValue ? cAttack : cRelease);
         if (aValue < 0.005f)
@@ -402,6 +402,7 @@ void LipSyncTogetherService::OnUpdate(const UpdateEvent& acEvent) noexcept
 
     m_clock += acEvent.Delta;
     m_faceFunctionWait += acEvent.Delta;
+    ReportTiming(acEvent.Delta);
     ResolveFaceFunction();
 
     const bool cOnline = m_transport.IsOnline();
@@ -476,6 +477,10 @@ void LipSyncTogetherService::SendLocal(const Shape& acMouth, bool aSpeaking) noe
     request.FormID = kNoObject;
     request.EventName = fmt::format("{}{:X}|{}", kWirePrefix, m_transport.GetLocalPlayerId(), state.c_str()).c_str();
     m_transport.Send(request);
+    ++m_sentCount;
+
+    if (Descriptor(m_pDescriptor)->Config->Debug && state != m_lastSentState)
+        spdlog::info("LipSync Together: sent {}", state.c_str());
 
     m_lastSentState = state;
     m_lastSendTime = m_clock;
@@ -503,6 +508,19 @@ void LipSyncTogetherService::OnNotifyScriptAnimation(const NotifyScriptAnimation
         return;
 
     auto& remote = m_remotes[cPlayerId];
+    // Gaps within a stretch of talking; the silence before someone starts is not a delay.
+    if (remote.LastReceived > 0.0 && m_clock - remote.LastReceived < 1.0)
+        remote.LargestGap = std::max(remote.LargestGap, m_clock - remote.LastReceived);
+    ++remote.ReceivedCount;
+
+    if (Descriptor(m_pDescriptor)->Config->Debug)
+    {
+        const String cState = cWire.substr(cBar + 1);
+        if (cState != remote.LastState)
+            spdlog::info("LipSync Together: received {} from player {:X}", cState.c_str(), cPlayerId);
+        remote.LastState = cState;
+    }
+
     if (remote.Queue.size() >= kMaxQueued)
         remote.Queue.erase(remote.Queue.begin());
     remote.Queue.push_back(Received{m_clock, mouth});
@@ -615,4 +633,37 @@ void LipSyncTogetherService::ReleaseFace(Actor* apActor, FaceState& aFace) noexc
         }
     }
     aFace.Forget();
+}
+
+void LipSyncTogetherService::ReportTiming(double aDelta) noexcept
+{
+    if (!Descriptor(m_pDescriptor)->Config->Debug)
+        return;
+
+    m_frameTimeSum += aDelta;
+    m_longestFrame = std::max(m_longestFrame, aDelta);
+    ++m_frameCount;
+
+    m_reportTimer += aDelta;
+    if (m_reportTimer < 1.0)
+        return;
+
+    // Each "sent"/"received" line carries the log's own millisecond timestamp, so with both games on one PC the
+    // two logs show how long a state takes from one to the other.
+    spdlog::info("LipSync Together: last {:.1f} s: {} states sent, frame time {:.1f} ms (longest {:.1f} ms)", m_reportTimer, m_sentCount,
+                 m_frameCount ? m_frameTimeSum / m_frameCount * 1000.0 : 0.0, m_longestFrame * 1000.0);
+    for (auto it = m_remotes.begin(); it != m_remotes.end(); ++it)
+    {
+        auto& remote = it.value();
+        spdlog::info("LipSync Together:   player {:X}: {} states received, longest gap {:.0f} ms, {} waiting, jaw {:.2f}", it->first, remote.ReceivedCount,
+                     remote.LargestGap * 1000.0, remote.Queue.size(), remote.Current.Open);
+        remote.ReceivedCount = 0;
+        remote.LargestGap = 0.0;
+    }
+
+    m_reportTimer = 0.0;
+    m_sentCount = 0;
+    m_frameTimeSum = 0.0;
+    m_longestFrame = 0.0;
+    m_frameCount = 0;
 }

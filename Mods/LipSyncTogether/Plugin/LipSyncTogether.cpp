@@ -31,9 +31,9 @@
 #include "../StrAddon/Code/client/LipSyncTogether/STRLipSyncAPI.h"
 
 #define LST_VERSION_MAJOR 0
-#define LST_VERSION_MINOR 1
+#define LST_VERSION_MINOR 2
 #define LST_VERSION_PATCH 0
-#define LST_VERSION_STRING "0.1.0"
+#define LST_VERSION_STRING "0.2.0"
 
 namespace
 {
@@ -117,15 +117,16 @@ struct Config
     std::string Device;        // part of the microphone's name; empty for the Windows default communications device
     float GateDb = 10.f;       // how far above the background noise counts as speech
     float MinLevelDb = -55.f;  // anything quieter never counts as speech
-    float Sensitivity = 1.f;   // scales how far the jaw opens
-    float RangeDb = 24.f;      // loudness above the gate that opens the jaw fully
-    float HoldSeconds = 0.15f; // the gate stays open this long after the voice drops, so words do not flutter
+    float Sensitivity = 1.f;     // scales how far the jaw opens
+    float HoldSeconds = 0.2f;    // the gate stays open this long after the voice drops, so words do not flutter
+    bool NoiseFilter = true;     // only a voice (a sound with a pitch) opens the gate, not clicks or fans
+    float VoiceThreshold = 0.5f; // how clearly pitched a sound must be to count as a voice (0 to 1)
     bool ShapesEnabled = true; // false: jaw only
     uint32_t PushToTalkKey = 0;
     uint32_t MuteToggleKey = 0;
     bool LogLevels = false;
 
-    STRLipSync::Settings Shared{1, 1.f, 0.1f, 4096.f};
+    STRLipSync::Settings Shared{1, 1.f, 0.04f, 4096.f, 0};
 };
 
 Config s_config;
@@ -183,8 +184,10 @@ void LoadConfig(HMODULE aModule)
             s_config.MinLevelDb = std::clamp(cNumber, -90.f, -10.f);
         else if (key == "sensitivity")
             s_config.Sensitivity = std::clamp(cNumber, 0.1f, 5.f);
-        else if (key == "rangedb")
-            s_config.RangeDb = std::clamp(cNumber, 6.f, 60.f);
+        else if (key == "noisefilter")
+            s_config.NoiseFilter = cInteger != 0;
+        else if (key == "voicethreshold")
+            s_config.VoiceThreshold = std::clamp(cNumber, 0.f, 1.f);
         else if (key == "holdms")
             s_config.HoldSeconds = std::clamp(cNumber, 0.f, 2000.f) / 1000.f;
         else if (key == "mode")
@@ -194,7 +197,10 @@ void LoadConfig(HMODULE aModule)
         else if (key == "mutetogglekey")
             s_config.MuteToggleKey = cInteger & 0xFF;
         else if (key == "loglevels")
+        {
             s_config.LogLevels = cInteger != 0;
+            s_config.Shared.Debug = s_config.LogLevels ? 1 : 0;
+        }
         else if (key == "animateself")
             s_config.Shared.AnimateSelf = cInteger != 0 ? 1 : 0;
         else if (key == "mouthstrength")
@@ -205,10 +211,12 @@ void LoadConfig(HMODULE aModule)
             s_config.Shared.MaxDistance = std::clamp(cNumber, 100.f, 100000.f);
     }
 
-    Log("Settings: device '%s', gate %.1f dB over the noise (never below %.1f dB), sensitivity %.2f, hold %.0f ms, mode %s, "
-        "push-to-talk key 0x%02X, mute toggle key 0x%02X, own face %s, mouth strength %.2f, remote delay %.0f ms, max distance %.0f",
-        s_config.Device.empty() ? "(Windows default)" : s_config.Device.c_str(), s_config.GateDb, s_config.MinLevelDb, s_config.Sensitivity,
-        s_config.HoldSeconds * 1000.f, s_config.ShapesEnabled ? "shapes" : "jaw", s_config.PushToTalkKey, s_config.MuteToggleKey,
+    Log("Settings: device '%s', gate %.1f dB over the noise (never below %.1f dB), voice filter %s (threshold %.2f), sensitivity %.2f, "
+        "hold %.0f ms, mode %s, push-to-talk key 0x%02X, mute toggle key 0x%02X, own face %s, mouth strength %.2f, remote delay %.0f ms, "
+        "max distance %.0f",
+        s_config.Device.empty() ? "(Windows default)" : s_config.Device.c_str(), s_config.GateDb, s_config.MinLevelDb, s_config.NoiseFilter ? "on" : "off",
+        s_config.VoiceThreshold, s_config.Sensitivity, s_config.HoldSeconds * 1000.f, s_config.ShapesEnabled ? "shapes" : "jaw", s_config.PushToTalkKey,
+        s_config.MuteToggleKey,
         s_config.Shared.AnimateSelf ? "on" : "off", s_config.Shared.MouthStrength, s_config.Shared.RemoteDelaySeconds * 1000.f,
         s_config.Shared.MaxDistance);
 }
@@ -271,6 +279,22 @@ struct Biquad
         return f;
     }
 
+    static Biquad LowPass(float aRate, float aCutoff) noexcept
+    {
+        Biquad f;
+        const float cW = 2.f * 3.14159265f * aCutoff / aRate;
+        const float cAlpha = std::sin(cW) / (2.f * 0.7071f);
+        const float cCos = std::cos(cW);
+        const float cA0 = 1.f + cAlpha;
+        f.b0 = (1.f - cCos) / 2.f / cA0;
+        f.b1 = (1.f - cCos) / cA0;
+        f.b2 = (1.f - cCos) / 2.f / cA0;
+        f.a1 = -2.f * cCos / cA0;
+        f.a2 = (1.f - cAlpha) / cA0;
+        f.Enabled = true;
+        return f;
+    }
+
     static Biquad HighPass(float aRate, float aCutoff) noexcept
     {
         Biquad f;
@@ -307,9 +331,17 @@ bool GameHasFocus() noexcept
 }
 
 // Turns mono samples into mouth shapes, one block (16 ms) at a time.
+//
+// Speech is told apart from other sounds by its pitch: a voiced sound repeats every 2.5 to 12.5 ms (80 to 400 Hz),
+// which keyboard clicks, fans and most room noise do not. With NoiseFilter on, the gate only opens after voicing
+// above the noise in two of the last three blocks, and stays open through the unvoiced consonants that follow
+// for HoldMs. The jaw follows loudness against the speaker's own recent peak, so it opens and closes with the
+// syllables whatever the microphone's gain, and the lip shapes follow how each vowel's spectrum differs from the
+// speaker's own average, so an ordinary voice reads as neutral speech rather than as one fixed vowel.
 struct Analyzer
 {
     static constexpr float kBlockSeconds = 0.016f;
+    static constexpr float kPitchSeconds = 0.032f;
 
     explicit Analyzer(float aRate)
         : m_rate(aRate)
@@ -321,6 +353,16 @@ struct Analyzer
         m_bands[1] = Biquad::BandPass(aRate, 1350.f, 1.6f);
         m_bands[2] = Biquad::BandPass(aRate, 2500.f, 1.6f);
         m_bands[3] = Biquad::BandPass(aRate, 5500.f, 1.0f);
+
+        // Pitch is looked for in the voice brought down to about 8 kHz.
+        m_decimation = std::max<uint32_t>(1, static_cast<uint32_t>(std::lround(aRate / 8000.f)));
+        m_pitchRate = aRate / m_decimation;
+        m_antiAlias = Biquad::LowPass(aRate, 3400.f);
+        m_minLag = std::max<uint32_t>(2, static_cast<uint32_t>(m_pitchRate / 400.f));
+        m_maxLag = static_cast<uint32_t>(m_pitchRate / 80.f);
+        m_window = static_cast<uint32_t>(m_pitchRate * kPitchSeconds);
+        m_history.assign(m_window + m_maxLag, 0.f);
+        m_linear.assign(m_history.size(), 0.f);
     }
 
     void Push(float aSample) noexcept
@@ -340,6 +382,15 @@ struct Analyzer
             ++m_crossings;
         m_lastPositive = cPositive;
 
+        m_decimationSum += m_antiAlias.Run(cHigh);
+        if (++m_decimationCount >= m_decimation)
+        {
+            m_history[m_historyPos] = m_decimationSum / m_decimation;
+            m_historyPos = (m_historyPos + 1) % m_history.size();
+            m_decimationSum = 0.f;
+            m_decimationCount = 0;
+        }
+
         if (++m_count >= m_blockSamples)
             FinishBlock();
     }
@@ -349,17 +400,50 @@ struct Analyzer
     {
         m_gateOpen = false;
         m_hold = 0.f;
+        m_voicedHistory = 0;
         Smooth(STRLipSync::Frame{}, aSeconds);
         PublishCurrent(false);
     }
 
 private:
+    // How strongly the last 32 ms repeat at some pitch between 80 and 400 Hz: about 0.8 or more for a held vowel,
+    // well under 0.4 for clicks, hiss and fan noise.
+    float Voicing() noexcept
+    {
+        const size_t cSize = m_history.size();
+        for (size_t i = 0; i < cSize; ++i)
+            m_linear[i] = m_history[(m_historyPos + i) % cSize];
+
+        const float* pNow = m_linear.data() + m_maxLag;
+        float energyNow = 0.f;
+        for (uint32_t n = 0; n < m_window; ++n)
+            energyNow += pNow[n] * pNow[n];
+        if (energyNow < 1e-9f)
+            return 0.f;
+
+        float best = 0.f;
+        for (uint32_t lag = m_minLag; lag <= m_maxLag; ++lag)
+        {
+            const float* pThen = pNow - lag;
+            float cross = 0.f;
+            float energyThen = 0.f;
+            for (uint32_t n = 0; n < m_window; ++n)
+            {
+                cross += pNow[n] * pThen[n];
+                energyThen += pThen[n] * pThen[n];
+            }
+            best = std::max(best, cross / std::sqrt(energyNow * energyThen + 1e-12f));
+        }
+        return Clamp01(best);
+    }
+
     void FinishBlock() noexcept
     {
         const float cCount = static_cast<float>(m_count);
         const bool cDigitalSilence = m_sumSquares == 0.f;
         const float cLevel = 10.f * std::log10(m_sumSquares / cCount + 1e-12f);
         const float cZeroCrossingRate = m_crossings / cCount * m_rate;
+        const float cVoicing = Voicing();
 
         float energy[4];
         float total = 1e-12f;
@@ -403,8 +487,26 @@ private:
         m_floor = std::clamp(m_floor, -100.f, -25.f);
 
         const float cThreshold = std::max(m_floor + s_config.GateDb, s_config.MinLevelDb);
+        const bool cLoudEnough = cLevel > cThreshold;
+        const bool cVoiced = cLoudEnough && cVoicing >= s_config.VoiceThreshold;
 
-        if (cLevel > cThreshold)
+        if (s_config.NoiseFilter)
+        {
+            m_voicedHistory = ((m_voicedHistory << 1) | (cVoiced ? 1u : 0u)) & 0x7u;
+            const uint32_t cVoicedBlocks = (m_voicedHistory & 1u) + ((m_voicedHistory >> 1) & 1u) + ((m_voicedHistory >> 2) & 1u);
+            if (cVoicedBlocks >= 2)
+            {
+                m_gateOpen = true;
+                m_hold = s_config.HoldSeconds;
+            }
+            else if (m_gateOpen)
+            {
+                m_hold -= cDt;
+                if (m_hold <= 0.f)
+                    m_gateOpen = false;
+            }
+        }
+        else if (cLoudEnough)
         {
             m_gateOpen = true;
             m_hold = s_config.HoldSeconds;
@@ -431,32 +533,49 @@ private:
         const bool cTalkKey = !s_config.PushToTalkKey || (cFocus && (GetAsyncKeyState(static_cast<int>(s_config.PushToTalkKey)) & 0x8000) != 0);
         const bool cSpeaking = m_gateOpen && cTalkKey && !m_muted;
 
+        // The speaker's recent peak: rises at once, sinks 4 dB a second, and stays at least 12 dB over the gate.
+        const float cBase = cThreshold - 3.f;
+        m_peak = std::max(m_peak - 4.f * cDt, cBase + 12.f);
+        if (cSpeaking && cVoiced)
+            m_peak = std::max(m_peak, cLevel);
+
         STRLipSync::Frame target{};
         if (cSpeaking)
         {
-            const float cLoud = Clamp01(std::pow(Ramp(cLevel, cThreshold - 3.f, cThreshold + s_config.RangeDb), 0.7f) * s_config.Sensitivity);
-            float open = cLoud;
+            const float cLoud = Ramp(cLevel, cBase, m_peak);
+            float open = Clamp01(std::pow(cLoud, 1.4f) * s_config.Sensitivity);
+            // Consonants without voice ("s", "f", "t") barely move the jaw.
+            if (!cVoiced)
+                open *= 0.6f;
 
             if (s_config.ShapesEnabled)
             {
-                const float cLow = energy[0] / total;
-                const float cFront = energy[2] / total;
-                const float cHiss = energy[3] / total;
+                const float cVowelEnergy = energy[0] + energy[1] + energy[2];
+                if (cVoiced && cVowelEnergy > 1e-12f)
+                {
+                    // Where the vowel's energy sits (log2 Hz), against the speaker's own average.
+                    const float cCentre = std::log2((energy[0] * 550.f + energy[1] * 1350.f + energy[2] * 2500.f) / cVowelEnergy);
+                    if (!m_haveCentre)
+                    {
+                        m_centre = cCentre;
+                        m_haveCentre = true;
+                    }
+                    else
+                        m_centre += (cCentre - m_centre) * std::min(1.f, cDt / 3.f);
 
-                // Hiss with many zero crossings: "s", "f", "sh" - teeth together, jaw nearly shut.
-                const float cTeeth = Ramp(cHiss, 0.2f, 0.5f) * Ramp(cZeroCrossingRate, 1500.f, 3500.f);
-                // Strong second formant up high: "ee", "i", "e" - lips spread.
-                const float cWide = Ramp(cFront, 0.12f, 0.35f) * (1.f - cTeeth);
-                // Nearly everything low with nothing up high: "oo", "o", "w" - lips rounded.
-                const float cRound = Ramp(cLow, 0.6f, 0.85f) * (1.f - Ramp(cFront, 0.05f, 0.15f)) * (1.f - cTeeth);
-                // A quiet hum that is almost all low: "m", "n", "b" - lips closed.
-                const float cLips = Ramp(cLow, 0.8f, 0.95f) * (1.f - Ramp(cLoud, 0.15f, 0.4f));
+                    const float cDeviation = cCentre - m_centre;
+                    target.Wide = Ramp(cDeviation, 0.12f, 0.45f);   // brighter than usual: "ee", "i"
+                    target.Round = Ramp(-cDeviation, 0.12f, 0.45f); // darker than usual: "oo", "o"
+                }
+                else if (!cVoiced)
+                {
+                    // Hiss with many zero crossings: "s", "f", "sh" - teeth together.
+                    target.Teeth = Ramp(energy[3] / total, 0.3f, 0.6f) * Ramp(cZeroCrossingRate, 2000.f, 4000.f);
+                }
 
-                open *= (1.f - 0.8f * cLips) * (1.f - 0.5f * cTeeth);
-                target.Wide = cWide;
-                target.Round = cRound;
-                target.Lips = cLips;
-                target.Teeth = cTeeth;
+                // Dips between syllables close the lips a little, as speech does.
+                target.Lips = 0.5f * Ramp(0.15f - cLoud, 0.f, 0.15f);
+                open *= (1.f - 0.6f * target.Lips) * (1.f - 0.5f * target.Teeth);
             }
             target.Open = open;
         }
@@ -470,9 +589,11 @@ private:
             if (m_logTimer <= 0.f)
             {
                 m_logTimer = 1.f;
-                Log("level %.1f dB, noise %.1f dB, gate %.1f dB, %s | open %.2f wide %.2f round %.2f lips %.2f teeth %.2f | zcr %.0f/s",
-                    cLevel, m_floor, cThreshold, cSpeaking ? "speaking" : (m_muted ? "muted" : (m_gateOpen ? "waiting for push-to-talk" : "quiet")),
-                    m_current.Open, m_current.Wide, m_current.Round, m_current.Lips, m_current.Teeth, cZeroCrossingRate);
+                Log("level %.1f dB, noise %.1f dB, gate %.1f dB, voicing %.2f, %s | open %.2f wide %.2f round %.2f lips %.2f teeth %.2f",
+                    cLevel, m_floor, cThreshold, cVoicing,
+                    cSpeaking ? "speaking"
+                              : (m_muted ? "muted" : (m_gateOpen ? "waiting for push-to-talk" : (cLoudEnough ? "noise (not a voice)" : "quiet"))),
+                    m_current.Open, m_current.Wide, m_current.Round, m_current.Lips, m_current.Teeth);
             }
         }
     }
@@ -481,7 +602,7 @@ private:
     void Smooth(const STRLipSync::Frame& acTarget, float aDt) noexcept
     {
         const float cAttack = 1.f - std::exp(-aDt / 0.025f);
-        const float cRelease = 1.f - std::exp(-aDt / 0.07f);
+        const float cRelease = 1.f - std::exp(-aDt / 0.06f);
         auto step = [&](float& aValue, float aTarget) {
             aValue += (aTarget - aValue) * (aTarget > aValue ? cAttack : cRelease);
             if (aValue < 0.005f)
@@ -512,11 +633,28 @@ private:
     float m_sumSquares{};
     float m_bandEnergy[4]{};
 
+    // Pitch detection.
+    Biquad m_antiAlias;
+    uint32_t m_decimation{1};
+    float m_pitchRate{};
+    uint32_t m_minLag{};
+    uint32_t m_maxLag{};
+    uint32_t m_window{};
+    std::vector<float> m_history;
+    std::vector<float> m_linear;
+    size_t m_historyPos{};
+    float m_decimationSum{};
+    uint32_t m_decimationCount{};
+    uint32_t m_voicedHistory{};
+
     float m_digitalSilence{};
     bool m_reportedSilence{};
 
     bool m_floorReady{};
     float m_floor{-60.f};
+    float m_peak{-40.f};
+    bool m_haveCentre{};
+    float m_centre{};
     bool m_gateOpen{};
     float m_hold{};
     bool m_muted{};
