@@ -17,11 +17,12 @@ struct Actor;
  * would not help either: each simulation would land the body somewhere else.
  *
  * So the owner's simulation is the only one. While an actor the client owns is ragdolled, the world transforms
- * of the skeleton bones that carry its ragdoll bodies are sampled after its animation update and streamed, on
- * the same timeline as its movement. The other clients play them back at the copy's interpolated render time
- * and put each of those bones exactly where the owner has it, filling in the bones between them from the copy's
- * own pose. A body at rest keeps its pose, also for players who arrive later; when the actor gets up, the copy
- * blends back to its animation.
+ * of the skeleton bones that carry its ragdoll bodies are sampled as the renderer begins each frame (after the
+ * frame's animation, physics and ragdoll updates) and streamed, on the same timeline as its movement. The other
+ * clients play them back at the copy's interpolated render time and, at that same point of the frame so that
+ * nothing overwrites them before they are drawn, put each of those bones exactly where the owner has it,
+ * filling in the bones between them from the copy's own pose. A body at rest keeps its pose, also for players
+ * who arrive later; when the actor gets up, the copy blends back to its animation.
  */
 struct RagdollSyncService
 {
@@ -32,6 +33,9 @@ struct RagdollSyncService
 
     // Whether the actor's own simulation has it in a ragdoll (knocked down or out, dying, dead, unconscious).
     static bool IsRagdolled(const Actor* apActor) noexcept;
+
+    // Called by the renderer once the frame is drawn; reports whether the poses put on as it began held.
+    static void OnFrameEnd() noexcept;
 
 protected:
     void OnUpdate(const UpdateEvent& acEvent) noexcept;
@@ -69,7 +73,6 @@ private:
         bool LoggedApply{};
     };
 
-    void InstallHooks() noexcept;
     void UpdateLocal(double aDelta) noexcept;
     void UpdateRemote(double aDelta) noexcept;
     void Send(Vector<RagdollPose>& aStreaming, Vector<RagdollPose>& aHeld) noexcept;
@@ -80,8 +83,6 @@ private:
     Map<uint32_t, LocalRagdoll> m_local;
     Map<uint32_t, RemoteRagdoll> m_remote;
     double m_sendTimer{};
-    bool m_playerHooked{};
-    bool m_characterHooked{};
 
     entt::scoped_connection m_updateConnection;
     entt::scoped_connection m_disconnectedConnection;

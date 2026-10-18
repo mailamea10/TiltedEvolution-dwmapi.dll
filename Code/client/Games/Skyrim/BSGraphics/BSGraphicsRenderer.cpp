@@ -1,5 +1,6 @@
 
 #include "Services/InputService.h"
+#include "Services/RagdollSyncService.h"
 #include "Systems/RenderSystemD3D11.h"
 
 #include "World.h"
@@ -152,6 +153,7 @@ void (*StopTimer)(int) = nullptr;
 // Insert us at the End
 void Hook_StopTimer(int type)
 {
+    RagdollSyncService::OnFrameEnd();
     PumpOverlay();
 
     StopTimer(type);
@@ -168,6 +170,7 @@ void (*RenderFrameEnd)() = nullptr;
 
 void Hook_RenderFrameEnd()
 {
+    RagdollSyncService::OnFrameEnd();
     PumpOverlay();
 
     RenderFrameEnd();

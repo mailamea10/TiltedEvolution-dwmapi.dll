@@ -14,6 +14,7 @@
 #include <Actor.h>
 #include <PlayerCharacter.h>
 #include <Games/ActorExtension.h>
+#include <Games/GamePatch.h>
 #include <NetImmerse/NiNode.h>
 
 #include <atomic>
@@ -234,7 +235,7 @@ Transform Compose(const Transform& acParent, const Transform& acLocal) noexcept
     return result;
 }
 
-// --- state shared with the animation update hook, which may run off the main thread ---
+// --- state shared with the frame hook ---
 
 struct HookTarget
 {
@@ -245,12 +246,23 @@ struct HookTarget
 
 std::mutex s_lock;
 std::atomic<bool> s_anyWork{false};
-std::atomic<uint64_t> s_hookCalls{0};
+std::atomic<uint64_t> s_frameCalls{0};
+std::atomic<bool> s_frameHookInstalled{false};
 Set<uint32_t> s_sampleWanted;
 Map<uint32_t, Vector<RagdollPose::Bone>> s_samples;
 Map<uint32_t, HookTarget> s_targets;
 // Bones matched on the last apply per actor, for the main thread's log.
 Map<uint32_t, uint32_t> s_matched;
+
+// One bone per actor whose pose was put on this frame, checked again once the frame is drawn: whether the pose
+// lasted until then is what decides whether the other players see it.
+struct HeldCheck
+{
+    uint32_t BoneHash{};
+    float Position[3]{};
+};
+Map<uint32_t, HeldCheck> s_heldChecks;
+Set<uint32_t> s_heldReported;
 
 void RefreshAnyWork() noexcept
 {
@@ -348,79 +360,97 @@ void SamplePose(NiAVObject* apObject, Vector<RagdollPose::Bone>& aBones, int aDe
     }
 }
 
-void AfterAnimationUpdate(Actor* apActor) noexcept
+NiAVObject* FindRagdollBone(NiAVObject* apObject, uint32_t aHash, int aDepth) noexcept
 {
-    s_hookCalls.fetch_add(1, std::memory_order_relaxed);
-    if (!s_anyWork || !apActor)
+    if (!apObject || aDepth > 64)
+        return nullptr;
+    if (IsRagdollBone(apObject) && HashName(GetName(apObject)) == aHash)
+        return apObject;
+    if (NiNode* pNode = AsNode(apObject))
+    {
+        for (auto* pChild : pNode->children)
+        {
+            if (NiAVObject* pFound = FindRagdollBone(pChild, aHash, aDepth + 1))
+                return pFound;
+        }
+    }
+    return nullptr;
+}
+
+// Puts the owner's pose on a copy, or samples the pose of an actor this client owns.
+void ProcessActor(uint32_t aFormId, bool aSample, const HookTarget* apTarget) noexcept
+{
+    auto* pActor = Cast<Actor>(TESForm::GetById(aFormId));
+    if (!pActor)
         return;
 
-    const uint32_t cFormId = apActor->formID;
-    bool sample = false;
-    HookTarget target;
-    {
-        std::lock_guard guard(s_lock);
-        sample = s_sampleWanted.count(cFormId) != 0;
-        auto it = s_targets.find(cFormId);
-        if (it != s_targets.end())
-            target = it->second;
-        else if (!sample)
-            return;
-    }
-
-    NiNode* pRoot = apActor->GetNiNode();
+    NiNode* pRoot = pActor->GetNiNode();
     if (!pRoot)
         return;
 
-    if (!target.Bones.empty() && target.Weight > 0.f)
+    if (apTarget && !apTarget->Bones.empty() && apTarget->Weight > 0.f)
     {
         const Transform cRootWorld = WorldTransform(pRoot);
         size_t boneIndex = 0;
         uint32_t matched = 0;
         for (auto* pChild : pRoot->children)
-            ApplyPose(pChild, cRootWorld, target, boneIndex, matched, 1);
+            ApplyPose(pChild, cRootWorld, *apTarget, boneIndex, matched, 1);
 
         std::lock_guard guard(s_lock);
-        s_matched[cFormId] = matched;
+        s_matched[aFormId] = matched;
+        if (matched && apTarget->Weight >= 0.999f && s_heldReported.count(aFormId) == 0)
+        {
+            const auto& bone = apTarget->Bones.front();
+            HeldCheck check;
+            check.BoneHash = bone.NameHash;
+            std::memcpy(check.Position, bone.Position, sizeof(check.Position));
+            s_heldChecks[aFormId] = check;
+        }
     }
 
-    if (sample)
+    if (aSample)
     {
         Vector<RagdollPose::Bone> bones;
         SamplePose(pRoot, bones, 0);
         std::lock_guard guard(s_lock);
-        s_samples[cFormId] = std::move(bones);
+        s_samples[aFormId] = std::move(bones);
     }
 }
 
-// TESObjectREFR vtable slot 0x7D: UpdateAnimation(float delta).
-constexpr size_t kUpdateAnimationSlot = 0x7D;
-using TUpdateAnimation = void (*)(Actor* apThis, float aDelta);
-TUpdateAnimation s_realPlayerUpdate = nullptr;
-TUpdateAnimation s_realCharacterUpdate = nullptr;
-
-void HookPlayerUpdateAnimation(Actor* apThis, float aDelta)
+// Runs as the renderer begins a frame, after the frame's animation, physics and ragdoll updates, so whatever the
+// bones hold now is what gets drawn. Ragdolls this client owns are sampled here too, so what is sent is what the
+// owner sees.
+void OnFrameBegin() noexcept
 {
-    s_realPlayerUpdate(apThis, aDelta);
-    AfterAnimationUpdate(apThis);
+    s_frameCalls.fetch_add(1, std::memory_order_relaxed);
+    if (!s_anyWork)
+        return;
+
+    Map<uint32_t, HookTarget> targets;
+    Set<uint32_t> samples;
+    {
+        std::lock_guard guard(s_lock);
+        targets = s_targets;
+        samples = s_sampleWanted;
+    }
+
+    for (const auto& [formId, target] : targets)
+        ProcessActor(formId, samples.count(formId) != 0, &target);
+    for (const uint32_t cFormId : samples)
+    {
+        if (targets.count(cFormId) == 0)
+            ProcessActor(cFormId, true, nullptr);
+    }
 }
 
-void HookCharacterUpdateAnimation(Actor* apThis, float aDelta)
-{
-    s_realCharacterUpdate(apThis, aDelta);
-    AfterAnimationUpdate(apThis);
-}
+// BSGraphics::Renderer::Begin(uint32_t windowId).
+using TRendererBegin = void (*)(void* apRenderer, uint32_t aWindowId);
+TRendererBegin RealRendererBegin = nullptr;
 
-bool SwapUpdateAnimation(Actor* apActor, void* apHook, TUpdateAnimation& aOriginal) noexcept
+void HookRendererBegin(void* apRenderer, uint32_t aWindowId)
 {
-    auto** pVTable = *reinterpret_cast<void***>(apActor);
-
-    DWORD oldProtect = 0;
-    if (!VirtualProtect(&pVTable[kUpdateAnimationSlot], sizeof(void*), PAGE_EXECUTE_READWRITE, &oldProtect))
-        return false;
-    aOriginal = reinterpret_cast<TUpdateAnimation>(pVTable[kUpdateAnimationSlot]);
-    pVTable[kUpdateAnimationSlot] = apHook;
-    VirtualProtect(&pVTable[kUpdateAnimationSlot], sizeof(void*), oldProtect, &oldProtect);
-    return true;
+    OnFrameBegin();
+    RealRendererBegin(apRenderer, aWindowId);
 }
 
 bool IsDeadOrDying(const Actor* apActor) noexcept
@@ -488,33 +518,38 @@ bool RagdollSyncService::IsRagdolled(const Actor* apActor) noexcept
     return cKnocked || cLimp;
 }
 
-void RagdollSyncService::InstallHooks() noexcept
+void RagdollSyncService::OnFrameEnd() noexcept
 {
-    if (!m_playerHooked)
+    // Reported once per actor: whether the pose put on as the frame began was still there when it was drawn. If
+    // something overwrote it, the other players would still see the copy in its rest pose.
+    Map<uint32_t, HeldCheck> checks;
     {
-        if (auto* pPlayer = PlayerCharacter::Get())
-        {
-            m_playerHooked = SwapUpdateAnimation(pPlayer, reinterpret_cast<void*>(&HookPlayerUpdateAnimation), s_realPlayerUpdate);
-            if (m_playerHooked)
-                spdlog::info("ragdoll sync: watching the player's animation updates");
-        }
+        std::lock_guard guard(s_lock);
+        if (s_heldChecks.empty())
+            return;
+        checks.swap(s_heldChecks);
     }
 
-    if (!m_characterHooked && m_playerHooked)
+    for (const auto& [formId, check] : checks)
     {
-        // Every NPC and every other player's copy shares the Character vtable; any loaded one gives it.
-        auto view = m_world.view<FormIdComponent>();
-        for (auto entity : view)
-        {
-            auto* pActor = Cast<Actor>(TESForm::GetById(view.get<FormIdComponent>(entity).Id));
-            if (!pActor || pActor->formType != FormType::Character)
-                continue;
+        auto* pActor = Cast<Actor>(TESForm::GetById(formId));
+        NiNode* pRoot = pActor ? pActor->GetNiNode() : nullptr;
+        NiAVObject* pBone = pRoot ? FindRagdollBone(pRoot, check.BoneHash, 0) : nullptr;
+        if (!pBone)
+            continue;
 
-            m_characterHooked = SwapUpdateAnimation(pActor, reinterpret_cast<void*>(&HookCharacterUpdateAnimation), s_realCharacterUpdate);
-            if (m_characterHooked)
-                spdlog::info("ragdoll sync: watching the animation updates of every other character");
-            break;
+        const Transform& world = WorldTransform(pBone);
+        const float dx = world.Position[0] - check.Position[0], dy = world.Position[1] - check.Position[1], dz = world.Position[2] - check.Position[2];
+        const float cOff = std::sqrt(dx * dx + dy * dy + dz * dz);
+
+        {
+            std::lock_guard guard(s_lock);
+            s_heldReported.insert(formId);
         }
+        if (cOff < 1.f)
+            spdlog::info("ragdoll sync: the owner's pose on {:X} held until the frame was drawn", formId);
+        else
+            spdlog::warn("ragdoll sync: the owner's pose on {:X} was overwritten before the frame was drawn ({:.0f} units off)", formId, cOff);
     }
 }
 
@@ -528,21 +563,23 @@ void RagdollSyncService::OnDisconnected(const DisconnectedEvent&) noexcept
     s_samples.clear();
     s_targets.clear();
     s_matched.clear();
+    s_heldChecks.clear();
+    s_heldReported.clear();
     RefreshAnyWork();
 }
 
 void RagdollSyncService::OnUpdate(const UpdateEvent& acEvent) noexcept
 {
-    if (!m_playerHooked || !m_characterHooked)
-        InstallHooks();
-
-    // Once, to tell from a log whether the engine calls the hooked update at all.
-    static double s_sinceHooked = 0.0;
+    // Once, to tell from a log whether the frame hook runs. Long frames (a loading screen) do not count.
+    static double s_watched = 0.0;
     static bool s_reported = false;
-    if (m_characterHooked && !s_reported && (s_sinceHooked += acEvent.Delta) > 20.0)
+    if (!s_reported && acEvent.Delta < 1.0 && (s_watched += acEvent.Delta) > 20.0)
     {
         s_reported = true;
-        spdlog::info("ragdoll sync: {} actor animation updates seen in the first 20 s", s_hookCalls.load());
+        if (s_frameHookInstalled)
+            spdlog::info("ragdoll sync: {} frames seen in the first 20 s of play", s_frameCalls.load());
+        else
+            spdlog::warn("ragdoll sync: the frame hook is not installed; ragdolls are not shared");
     }
 
     if (!m_transport.IsConnected())
@@ -568,6 +605,9 @@ void RagdollSyncService::OnNotifyPose(const NotifyRagdollPose& acMessage) noexce
             remote.Ended = false;
             remote.Snapshots.clear();
             remote.LoggedApply = false;
+
+            std::lock_guard guard(s_lock);
+            s_heldReported.clear();
         }
 
         Snapshot snapshot{acMessage.Tick, pose.PoseFlags, pose.Bones};
@@ -858,3 +898,14 @@ void RagdollSyncService::UpdateRemote(double aDelta) noexcept
     s_targets = std::move(targets);
     RefreshAnyWork();
 }
+
+static TiltedPhoques::Initializer s_ragdollFrameHook(
+    []()
+    {
+        if (auto* pBegin = GamePatch::Anchor(77245, "ragdoll sync frame begin"))
+        {
+            RealRendererBegin = reinterpret_cast<TRendererBegin>(pBegin);
+            TP_HOOK_IMMEDIATE(&RealRendererBegin, &HookRendererBegin);
+            s_frameHookInstalled = true;
+        }
+    });
