@@ -357,6 +357,7 @@ private:
     void FinishBlock() noexcept
     {
         const float cCount = static_cast<float>(m_count);
+        const bool cDigitalSilence = m_sumSquares == 0.f;
         const float cLevel = 10.f * std::log10(m_sumSquares / cCount + 1e-12f);
         const float cZeroCrossingRate = m_crossings / cCount * m_rate;
 
@@ -374,6 +375,19 @@ private:
         std::fill(std::begin(m_bandEnergy), std::end(m_bandEnergy), 0.f);
 
         const float cDt = kBlockSeconds;
+
+        // Exact zeros are not a quiet room: the device is muted, or a virtual one with nothing routed into it.
+        if (!m_reportedSilence)
+        {
+            m_digitalSilence = cDigitalSilence ? m_digitalSilence + cDt : 0.f;
+            if (m_digitalSilence >= 5.f)
+            {
+                m_reportedSilence = true;
+                Log("This microphone has sent nothing but digital silence for 5 seconds: it is muted, or it is a virtual "
+                    "audio device with nothing routed into it. Set Device= in "
+                    "LipSyncTogether.ini to part of another name from the list above, then restart the game.");
+            }
+        }
 
         // Background noise: follows a quieter room quickly, a louder one slowly (barely at all while speaking),
         // so a long sentence does not teach the gate that speech is noise.
@@ -497,6 +511,9 @@ private:
     bool m_lastPositive{};
     float m_sumSquares{};
     float m_bandEnergy[4]{};
+
+    float m_digitalSilence{};
+    bool m_reportedSilence{};
 
     bool m_floorReady{};
     float m_floor{-60.f};
