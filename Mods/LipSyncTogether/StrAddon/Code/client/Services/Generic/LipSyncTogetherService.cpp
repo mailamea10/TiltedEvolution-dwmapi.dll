@@ -1,0 +1,618 @@
+#include <Services/LipSyncTogetherService.h>
+
+#include <LipSyncTogether/LipSyncNatives.h>
+#include <LipSyncTogether/STRLipSyncAPI.h>
+
+#include <Components.h>
+#include <World.h>
+
+#include <Events/UpdateEvent.h>
+
+#include <Messages/NotifyScriptAnimation.h>
+#include <Messages/ScriptAnimationRequest.h>
+
+#include <Services/TransportService.h>
+
+#include <Actor.h>
+#include <PlayerCharacter.h>
+#include <Games/ActorExtension.h>
+#include <Interface/UI.h>
+#include <Misc/BSFixedString.h>
+#include <Misc/NativeFunction.h>
+
+#include <psapi.h>
+
+#include <algorithm>
+#include <atomic>
+#include <cmath>
+#include <cstdlib>
+#include <cstring>
+
+// Lets the plugin see that this Skyrim Together build carries the add-on.
+extern "C" __declspec(dllexport) uint32_t STRLipSync_HostApiVersion()
+{
+    return STRLipSync::kApiVersion;
+}
+
+namespace
+{
+// "STRLS1|<sender's player id, hex>|<mouth state>", relayed as a script animation for an object id that the stock
+// client drops without playing anything. 1.8.5 resolves that id as a server id, so one that cannot exist is used;
+// 1.8.3 skips id 0 outright (apply_addon.py --protocol 1.8.3 defines it).
+#ifndef STR_LIPSYNC_NO_OBJECT
+#define STR_LIPSYNC_NO_OBJECT 0xFFFFFFFFu
+#endif
+constexpr const char* kWirePrefix = "STRLS1|";
+constexpr uint32_t kNoObject = STR_LIPSYNC_NO_OBJECT;
+
+// A mouth state is three characters: the jaw (0-7), the strongest lip shape (N none, W wide, R round, L lips
+// closed, T teeth) and its strength (0 for N, else 1-3). "-" means the speaker went quiet. The server keeps every
+// distinct relayed string until it restarts and hands the whole set to everyone who joins, so the states are a
+// fixed set of 104 per player rather than raw numbers.
+constexpr const char* kQuietState = "-";
+constexpr int kJawLevels = 7;
+constexpr int kShapeLevels = 3;
+
+// At most 20 states a second, an unchanged state at most every 0.2 s to show the speaker is still talking, and a
+// copy that hears nothing for 0.6 s closes its mouth.
+constexpr double kMinSendInterval = 0.05;
+constexpr double kRepeatInterval = 0.2;
+constexpr double kRemoteTimeout = 0.6;
+constexpr size_t kMaxQueued = 32;
+
+// Faces are written at most this often.
+constexpr double kApplyInterval = 1.0 / 30.0;
+
+// The plugin can load late, so keep looking for it for a while.
+constexpr double kScanInterval = 5.0;
+constexpr double kScanDuration = 600.0;
+
+// Mfg Fix registers its natives while the game starts; give it this long before reporting it missing.
+constexpr double kFaceFunctionGrace = 20.0;
+
+// Mfg Fix's SetPhonemeModifier modes and Skyrim's phoneme ids.
+constexpr int32_t kModePhoneme = 0;
+enum Phoneme : uint32_t
+{
+    kAah = 0,
+    kBigAah = 1,
+    kBMP = 2,
+    kChJSh = 3,
+    kDST = 4,
+    kEee = 5,
+    kEh = 6,
+    kFV = 7,
+    kI = 8,
+    kOh = 11,
+    kOohQ = 12,
+    kW = 15,
+    kPhonemeCount = 16,
+};
+
+using Shape = LipSyncTogetherService::Shape;
+
+std::atomic<NativeFunction*> s_setPhonemeModifier{nullptr};
+
+bool StartsWith(const String& acText, const char* acpPrefix) noexcept
+{
+    const size_t cLength = strlen(acpPrefix);
+    return acText.size() >= cLength && memcmp(acText.data(), acpPrefix, cLength) == 0;
+}
+
+float Clamp01(float aValue) noexcept
+{
+    return std::clamp(aValue, 0.f, 1.f);
+}
+
+// --- memory checks for resolving Mfg Fix's native ------------------------------------------------------------
+
+bool IsReadable(const void* apAddress, size_t aSize) noexcept
+{
+    MEMORY_BASIC_INFORMATION info{};
+    if (!apAddress || !VirtualQuery(apAddress, &info, sizeof(info)) || info.State != MEM_COMMIT)
+        return false;
+    if (info.Protect & (PAGE_NOACCESS | PAGE_GUARD))
+        return false;
+    const auto cEnd = reinterpret_cast<uintptr_t>(info.BaseAddress) + info.RegionSize;
+    return reinterpret_cast<uintptr_t>(apAddress) + aSize <= cEnd;
+}
+
+bool IsExecutable(const void* apAddress) noexcept
+{
+    MEMORY_BASIC_INFORMATION info{};
+    if (!apAddress || !VirtualQuery(apAddress, &info, sizeof(info)) || info.State != MEM_COMMIT)
+        return false;
+    return (info.Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY)) != 0;
+}
+
+// The decorated class name MSVC's RTTI gives a vtable, or nullptr when it has none.
+const char* VtableClassName(const void* apVtable) noexcept
+{
+    struct CompleteObjectLocator
+    {
+        uint32_t Signature; // 1 on x64
+        uint32_t Offset;
+        uint32_t ConstructorOffset;
+        int32_t TypeDescriptor; // image-relative
+        int32_t ClassDescriptor;
+        int32_t Self;
+    };
+
+    const auto* pSlot = reinterpret_cast<const uint8_t*>(apVtable) - sizeof(void*);
+    if (!IsReadable(pSlot, sizeof(void*)))
+        return nullptr;
+    const auto* pLocator = *reinterpret_cast<const CompleteObjectLocator* const*>(pSlot);
+    if (!IsReadable(pLocator, sizeof(CompleteObjectLocator)) || pLocator->Signature != 1)
+        return nullptr;
+
+    const auto cImage = reinterpret_cast<uintptr_t>(pLocator) - static_cast<uintptr_t>(pLocator->Self);
+    const auto* pName = reinterpret_cast<const char*>(cImage + pLocator->TypeDescriptor + 2 * sizeof(void*));
+    if (!IsReadable(pName, 8) || pName[0] != '.')
+        return nullptr;
+    return pName;
+}
+
+// Mfg Fix NG (and other CommonLib plugins) register a native whose callback is a std::function at offset 0x50,
+// where a plain SKSE native keeps its function pointer. MSVC's std::function stores a function pointer in place:
+// the implementation object (vtable, then the pointer) at the start of its 64 bytes, and a pointer to that object
+// in its last 8. Both are checked, along with the implementation's RTTI name and signature, before anything is
+// called; an unexpected layout leaves lip sync off with a log line rather than crashing.
+
+void* ResolveSetPhonemeModifier(NativeFunction* apFunction, String& aHow) noexcept
+{
+    auto* pObject = reinterpret_cast<uint8_t*>(apFunction);
+    constexpr size_t kCallbackOffset = 0x50;
+    constexpr size_t kFunctionSize = 0x40;
+    if (!IsReadable(pObject + kCallbackOffset, kFunctionSize))
+    {
+        aHow = "its function object cannot be read";
+        return nullptr;
+    }
+
+    void* pFirst = *reinterpret_cast<void**>(pObject + kCallbackOffset);
+    if (IsExecutable(pFirst))
+    {
+        aHow = "plain SKSE native";
+        return pFirst;
+    }
+
+    const char* pName = VtableClassName(pFirst);
+    // std::_Func_impl_no_alloc<bool (*)(RE::StaticFunctionTag*, RE::Actor*, int, unsigned int, int), ...>
+    constexpr const char* kSignature = "P6A_NPEAUStaticFunctionTag@RE@@PEAVActor@2@HIH@Z";
+    if (!pName || !strstr(pName, "_Func_impl") || !strstr(pName, kSignature))
+    {
+        aHow = fmt::format("its callback is not a function pointer kept in a std::function ({})", pName ? pName : "no RTTI").c_str();
+        return nullptr;
+    }
+
+    void* pImpl = *reinterpret_cast<void**>(pObject + kCallbackOffset + kFunctionSize - sizeof(void*));
+    if (pImpl != pObject + kCallbackOffset)
+    {
+        aHow = "its std::function does not keep the callback in place";
+        return nullptr;
+    }
+
+    void* pCallee = *reinterpret_cast<void**>(pObject + kCallbackOffset + sizeof(void*));
+    if (!IsExecutable(pCallee))
+    {
+        aHow = "the function pointer in its std::function is not code";
+        return nullptr;
+    }
+
+    aHow = "CommonLib native";
+    return pCallee;
+}
+
+// --- mouth states ----------------------------------------------------------------------------------------------
+
+String EncodeState(const Shape& acMouth) noexcept
+{
+    const int cJaw = std::clamp(static_cast<int>(std::lround(acMouth.Open * kJawLevels)), 0, kJawLevels);
+
+    const std::pair<char, float> cShapes[] = {{'W', acMouth.Wide}, {'R', acMouth.Round}, {'L', acMouth.Lips}, {'T', acMouth.Teeth}};
+    auto strongest = std::max_element(std::begin(cShapes), std::end(cShapes), [](const auto& a, const auto& b) { return a.second < b.second; });
+
+    String state;
+    state.push_back(static_cast<char>('0' + cJaw));
+    if (strongest->second < 0.2f)
+    {
+        state += "N0";
+        return state;
+    }
+    state.push_back(strongest->first);
+    state.push_back(static_cast<char>('0' + std::clamp(static_cast<int>(std::lround(strongest->second * kShapeLevels)), 1, kShapeLevels)));
+    return state;
+}
+
+bool DecodeState(const String& acState, Shape& aOut) noexcept
+{
+    aOut = Shape{};
+    if (acState == kQuietState)
+        return true;
+    if (acState.size() != 3 || acState[0] < '0' || acState[0] > '0' + kJawLevels || acState[2] < '0' || acState[2] > '0' + kShapeLevels)
+        return false;
+
+    aOut.Open = static_cast<float>(acState[0] - '0') / kJawLevels;
+    const float cStrength = static_cast<float>(acState[2] - '0') / kShapeLevels;
+    switch (acState[1])
+    {
+    case 'N': break;
+    case 'W': aOut.Wide = cStrength; break;
+    case 'R': aOut.Round = cStrength; break;
+    case 'L': aOut.Lips = cStrength; break;
+    case 'T': aOut.Teeth = cStrength; break;
+    default: return false;
+    }
+    return true;
+}
+
+// The five shapes as Skyrim phonemes, 0 to 100.
+void ToPhonemes(const Shape& acMouth, float aStrength, int (&aOut)[kPhonemeCount]) noexcept
+{
+    float weight[kPhonemeCount]{};
+    const float cOpen = acMouth.Open * (1.f - acMouth.Lips);
+    weight[kAah] = cOpen * (1.f - 0.6f * acMouth.Round);
+    weight[kBigAah] = 0.6f * Clamp01((acMouth.Open - 0.7f) / 0.3f) * (1.f - acMouth.Lips);
+    weight[kEh] = 0.4f * cOpen * acMouth.Wide;
+    weight[kEee] = 0.7f * acMouth.Wide;
+    weight[kI] = 0.3f * acMouth.Wide * acMouth.Open;
+    weight[kOohQ] = 0.8f * acMouth.Round;
+    weight[kW] = 0.4f * acMouth.Round;
+    weight[kOh] = 0.6f * acMouth.Round * acMouth.Open;
+    weight[kBMP] = acMouth.Lips;
+    weight[kFV] = 0.7f * acMouth.Teeth;
+    weight[kDST] = 0.5f * acMouth.Teeth;
+    weight[kChJSh] = 0.3f * acMouth.Teeth;
+
+    for (uint32_t i = 0; i < kPhonemeCount; ++i)
+        aOut[i] = std::clamp(static_cast<int>(std::lround(weight[i] * aStrength * 100.f)), 0, 100);
+}
+
+// Moves aCurrent toward aTarget, opening faster than closing.
+void SmoothToward(Shape& aCurrent, const Shape& acTarget, double aDelta) noexcept
+{
+    const float cAttack = 1.f - std::exp(static_cast<float>(-aDelta / 0.03));
+    const float cRelease = 1.f - std::exp(static_cast<float>(-aDelta / 0.06));
+    auto step = [&](float& aValue, float aGoal) {
+        aValue += (aGoal - aValue) * (aGoal > aValue ? cAttack : cRelease);
+        if (aValue < 0.005f)
+            aValue = 0.f;
+    };
+    step(aCurrent.Open, acTarget.Open);
+    step(aCurrent.Wide, acTarget.Wide);
+    step(aCurrent.Round, acTarget.Round);
+    step(aCurrent.Lips, acTarget.Lips);
+    step(aCurrent.Teeth, acTarget.Teeth);
+}
+
+const STRLipSync::Descriptor* Descriptor(const void* apDescriptor) noexcept
+{
+    return static_cast<const STRLipSync::Descriptor*>(apDescriptor);
+}
+} // namespace
+
+void LipSyncTogether_OnNativeRegistered(NativeFunction* apFunction) noexcept
+{
+    if (!apFunction || s_setPhonemeModifier.load())
+        return;
+    const char* pType = apFunction->typeName.AsAscii();
+    const char* pName = apFunction->functionName.AsAscii();
+    if (pType && pName && !_stricmp(pType, "MfgConsoleFunc") && !_stricmp(pName, "SetPhonemeModifier"))
+        s_setPhonemeModifier.store(apFunction);
+}
+
+void LipSyncTogetherService::FaceState::Forget() noexcept
+{
+    std::fill(std::begin(Written), std::end(Written), static_cast<int8_t>(-1));
+    Owned = false;
+}
+
+LipSyncTogetherService::LipSyncTogetherService(World& aWorld, TransportService& aTransport, entt::dispatcher& aDispatcher) noexcept
+    : m_world(aWorld)
+    , m_transport(aTransport)
+{
+    m_updateConnection = aDispatcher.sink<UpdateEvent>().connect<&LipSyncTogetherService::OnUpdate>(this);
+    m_notifyConnection = aDispatcher.sink<NotifyScriptAnimation>().connect<&LipSyncTogetherService::OnNotifyScriptAnimation>(this);
+}
+
+void LipSyncTogetherService::ScanForPlugin() noexcept
+{
+    HMODULE modules[1024];
+    DWORD needed = 0;
+    if (!K32EnumProcessModules(GetCurrentProcess(), modules, sizeof(modules), &needed))
+        return;
+
+    const size_t cCount = std::min<size_t>(needed / sizeof(HMODULE), std::size(modules));
+    for (size_t i = 0; i < cCount; ++i)
+    {
+        const auto getDescriptor = reinterpret_cast<STRLipSync::TGetDescriptor>(GetProcAddress(modules[i], STRLipSync::kDescriptorExport));
+        if (!getDescriptor)
+            continue;
+
+        char path[MAX_PATH]{};
+        K32GetModuleBaseNameA(GetCurrentProcess(), modules[i], path, MAX_PATH);
+
+        const STRLipSync::Descriptor* pDescriptor = getDescriptor();
+        if (!pDescriptor || pDescriptor->ApiVersion != STRLipSync::kApiVersion || !pDescriptor->GetFrame || !pDescriptor->Config)
+        {
+            spdlog::warn("LipSync Together: {} has a descriptor this add-on cannot use (API {}, add-on API {})", path, pDescriptor ? pDescriptor->ApiVersion : 0,
+                         STRLipSync::kApiVersion);
+            continue;
+        }
+
+        m_pDescriptor = pDescriptor;
+        spdlog::info("LipSync Together: found {} {} in {} (own face {}, strength {:.2f}, remote delay {:.0f} ms, max distance {:.0f})",
+                     pDescriptor->ModName ? pDescriptor->ModName : "?", pDescriptor->ModVersion ? pDescriptor->ModVersion : "", path,
+                     pDescriptor->Config->AnimateSelf ? "on" : "off", pDescriptor->Config->MouthStrength, pDescriptor->Config->RemoteDelaySeconds * 1000.f,
+                     pDescriptor->Config->MaxDistance);
+        return;
+    }
+}
+
+bool LipSyncTogetherService::ResolveFaceFunction() noexcept
+{
+    if (m_setPhonemeModifier)
+        return true;
+    if (m_faceFunctionChecked)
+        return false;
+
+    NativeFunction* pFunction = s_setPhonemeModifier.load();
+    if (!pFunction)
+    {
+        if (m_faceFunctionWait < kFaceFunctionGrace)
+            return false;
+        m_faceFunctionChecked = true;
+        spdlog::warn("LipSync Together: MfgConsoleFunc.SetPhonemeModifier was never registered. Install Mfg Fix NG (or Mfg Fix on 1.5.97); "
+                     "until then nobody's mouth moves on this machine (mouth states are still sent)");
+        return false;
+    }
+
+    m_faceFunctionChecked = true;
+    String how;
+    m_setPhonemeModifier = reinterpret_cast<TSetPhonemeModifier>(ResolveSetPhonemeModifier(pFunction, how));
+    if (m_setPhonemeModifier)
+        spdlog::info("LipSync Together: faces are moved with MfgConsoleFunc.SetPhonemeModifier ({}, {})", how.c_str(), reinterpret_cast<const void*>(m_setPhonemeModifier));
+    else
+        spdlog::error("LipSync Together: cannot call MfgConsoleFunc.SetPhonemeModifier: {}; mouths are not moved on this machine", how.c_str());
+    return m_setPhonemeModifier != nullptr;
+}
+
+void LipSyncTogetherService::Reset() noexcept
+{
+    m_remotes.clear();
+    m_lastSentState.clear();
+    m_lastSendTime = -1.0;
+    m_sentSpeaking = false;
+}
+
+void LipSyncTogetherService::OnUpdate(const UpdateEvent& acEvent) noexcept
+{
+    if (!m_pDescriptor && m_scanElapsed < kScanDuration)
+    {
+        m_scanElapsed += acEvent.Delta;
+        m_scanTimer -= acEvent.Delta;
+        if (m_scanTimer <= 0.0)
+        {
+            m_scanTimer = kScanInterval;
+            ScanForPlugin();
+        }
+    }
+    if (!m_pDescriptor)
+        return;
+
+    m_clock += acEvent.Delta;
+    m_faceFunctionWait += acEvent.Delta;
+    ResolveFaceFunction();
+
+    const bool cOnline = m_transport.IsOnline();
+    if (cOnline != m_wasOnline)
+    {
+        m_wasOnline = cOnline;
+        Reset();
+    }
+
+    m_applyTimer -= acEvent.Delta;
+    const bool cApply = m_applyTimer <= 0.0 && m_setPhonemeModifier;
+    if (m_applyTimer <= 0.0)
+        m_applyTimer = kApplyInterval;
+
+    UpdateLocal(acEvent.Delta, cApply);
+    if (cOnline)
+        UpdateRemotes(acEvent.Delta, cApply);
+}
+
+void LipSyncTogetherService::UpdateLocal(double aDelta, bool aApply) noexcept
+{
+    const auto* pDescriptor = Descriptor(m_pDescriptor);
+
+    STRLipSync::Frame frame{};
+    if (!pDescriptor->GetFrame(&frame))
+        frame = STRLipSync::Frame{};
+
+    const Shape cMouth{Clamp01(frame.Open), Clamp01(frame.Wide), Clamp01(frame.Round), Clamp01(frame.Lips), Clamp01(frame.Teeth)};
+    const bool cSpeaking = frame.Speaking != 0;
+
+    if (m_transport.IsOnline())
+        SendLocal(cMouth, cSpeaking);
+
+    if (!aApply)
+        return;
+
+    auto* pPlayer = PlayerCharacter::Get();
+    if (!pPlayer)
+        return;
+
+    // The player's face is the dialogue's business while a conversation is open.
+    static BSFixedString s_dialogueMenu("Dialogue Menu");
+    const UI* pUI = UI::Get();
+    const bool cInDialogue = pUI && pUI->GetMenuOpen(s_dialogueMenu);
+
+    if (pDescriptor->Config->AnimateSelf && !cInDialogue && pPlayer->GetNiNode() && (cSpeaking || !cMouth.IsClosed()))
+        WriteFace(pPlayer, m_localFace, cMouth);
+    else
+        ReleaseFace(pPlayer, m_localFace);
+}
+
+void LipSyncTogetherService::SendLocal(const Shape& acMouth, bool aSpeaking) noexcept
+{
+    const bool cActive = aSpeaking || !acMouth.IsClosed();
+    const double cSince = m_lastSendTime < 0.0 ? 1e9 : m_clock - m_lastSendTime;
+
+    String state;
+    if (cActive)
+    {
+        state = EncodeState(acMouth);
+        if (cSince < kMinSendInterval || (state == m_lastSentState && cSince < kRepeatInterval))
+            return;
+    }
+    else
+    {
+        if (!m_sentSpeaking)
+            return;
+        state = kQuietState;
+    }
+
+    ScriptAnimationRequest request{};
+    request.FormID = kNoObject;
+    request.EventName = fmt::format("{}{:X}|{}", kWirePrefix, m_transport.GetLocalPlayerId(), state.c_str()).c_str();
+    m_transport.Send(request);
+
+    m_lastSentState = state;
+    m_lastSendTime = m_clock;
+    m_sentSpeaking = cActive;
+}
+
+void LipSyncTogetherService::OnNotifyScriptAnimation(const NotifyScriptAnimation& acMessage) noexcept
+{
+    const String& cWire = acMessage.EventName;
+    if (!m_pDescriptor || !StartsWith(cWire, kWirePrefix))
+        return;
+
+    const size_t cStart = strlen(kWirePrefix);
+    const size_t cBar = cWire.find('|', cStart);
+    if (cBar == String::npos || cBar == cStart || cBar - cStart > 8)
+        return;
+
+    const uint32_t cPlayerId = static_cast<uint32_t>(strtoul(cWire.substr(cStart, cBar - cStart).c_str(), nullptr, 16));
+    // 1.8.3 servers send our own states back to us.
+    if (cPlayerId == m_transport.GetLocalPlayerId())
+        return;
+
+    Shape mouth;
+    if (!DecodeState(cWire.substr(cBar + 1), mouth))
+        return;
+
+    auto& remote = m_remotes[cPlayerId];
+    if (remote.Queue.size() >= kMaxQueued)
+        remote.Queue.erase(remote.Queue.begin());
+    remote.Queue.push_back(Received{m_clock, mouth});
+    remote.LastReceived = m_clock;
+}
+
+void LipSyncTogetherService::UpdateRemotes(double aDelta, bool aApply) noexcept
+{
+    if (m_remotes.empty())
+        return;
+
+    const auto* pDescriptor = Descriptor(m_pDescriptor);
+    const double cDelay = pDescriptor->Config->RemoteDelaySeconds;
+    const float cMaxDistance = pDescriptor->Config->MaxDistance;
+
+    for (auto it = m_remotes.begin(); it != m_remotes.end(); ++it)
+    {
+        auto& remote = it.value(); // hopscotch_map: second is read-only
+
+        // Show what arrived a moment ago, so uneven arrival does not make the mouth stutter.
+        size_t due = 0;
+        while (due < remote.Queue.size() && remote.Queue[due].Time + cDelay <= m_clock)
+            remote.Target = remote.Queue[due++].Mouth;
+        if (due > 0)
+            remote.Queue.erase(remote.Queue.begin(), remote.Queue.begin() + due);
+
+        if (m_clock - remote.LastReceived > kRemoteTimeout + cDelay)
+        {
+            remote.Target = Shape{};
+            remote.Queue.clear();
+        }
+
+        SmoothToward(remote.Current, remote.Target, aDelta);
+    }
+
+    if (!aApply)
+        return;
+
+    auto* pPlayer = PlayerCharacter::Get();
+    auto view = m_world.view<PlayerComponent, FormIdComponent>();
+    for (auto entity : view)
+    {
+        const uint32_t cPlayerId = view.get<PlayerComponent>(entity).Id;
+        auto it = m_remotes.find(cPlayerId);
+        if (it == m_remotes.end())
+            continue;
+        auto& remote = it.value();
+
+        auto* pActor = Cast<Actor>(TESForm::GetById(view.get<FormIdComponent>(entity).Id));
+        if (!pActor || !pActor->GetExtension()->IsRemotePlayer())
+        {
+            remote.Face.Forget();
+            continue;
+        }
+
+        bool inRange = pActor->GetNiNode() != nullptr;
+        if (inRange && pPlayer)
+        {
+            const float cDx = pActor->position.x - pPlayer->position.x;
+            const float cDy = pActor->position.y - pPlayer->position.y;
+            const float cDz = pActor->position.z - pPlayer->position.z;
+            inRange = cDx * cDx + cDy * cDy + cDz * cDz <= cMaxDistance * cMaxDistance;
+        }
+
+        if (inRange && !remote.Current.IsClosed())
+            WriteFace(pActor, remote.Face, remote.Current);
+        else
+            ReleaseFace(pActor, remote.Face);
+    }
+}
+
+void LipSyncTogetherService::WriteFace(Actor* apActor, FaceState& aFace, const Shape& acMouth) noexcept
+{
+    if (!m_setPhonemeModifier || !apActor)
+        return;
+
+    // A respawned copy is a new face.
+    if (aFace.FormId != apActor->formID)
+    {
+        aFace.Forget();
+        aFace.FormId = apActor->formID;
+    }
+
+    int values[kPhonemeCount];
+    ToPhonemes(acMouth, Descriptor(m_pDescriptor)->Config->MouthStrength, values);
+
+    for (uint32_t i = 0; i < kPhonemeCount; ++i)
+    {
+        // Leave alone a phoneme this service never raised and has no reason to now.
+        if (aFace.Written[i] == values[i] || (aFace.Written[i] < 0 && values[i] == 0))
+            continue;
+        m_setPhonemeModifier(nullptr, apActor, kModePhoneme, i, values[i]);
+        aFace.Written[i] = static_cast<int8_t>(values[i]);
+        aFace.Owned = true;
+    }
+}
+
+void LipSyncTogetherService::ReleaseFace(Actor* apActor, FaceState& aFace) noexcept
+{
+    if (!aFace.Owned)
+        return;
+
+    // Put back to zero only what this service raised, then forget the face so other mods have it to themselves.
+    if (m_setPhonemeModifier && apActor && aFace.FormId == apActor->formID)
+    {
+        for (uint32_t i = 0; i < kPhonemeCount; ++i)
+        {
+            if (aFace.Written[i] > 0)
+                m_setPhonemeModifier(nullptr, apActor, kModePhoneme, i, 0);
+        }
+    }
+    aFace.Forget();
+}
