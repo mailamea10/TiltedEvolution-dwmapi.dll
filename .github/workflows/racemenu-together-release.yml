@@ -17,6 +17,8 @@ on:
 
 env:
   MOD_VERSION: '1.0.0'
+  # The release page every version is published on.
+  RELEASE_TAG: 'racemenu-together-v1.0.0'
 
 jobs:
   plugin:
@@ -97,12 +99,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="racemenu-together-v${MOD_VERSION}"
-          # Archives already on the release stay as they are; this one is added (or replaced on a rebuild).
+          # Every version is published on the first release's page, so its link stays the one to share; older
+          # archives stay there for download next to the current one. The release's status (pre-release or
+          # not) is left as it was set.
+          tag="${RELEASE_TAG}"
           if ! gh release view "$tag" > /dev/null 2>&1; then
-            gh release create "$tag" --prerelease --target "$GITHUB_SHA" \
-              --title "RaceMenu Together (RaceMenu Appearance Sync) ${MOD_VERSION}" \
+            gh release create "$tag" --target "$GITHUB_SHA" \
+              --title "RaceMenu Together (SKSE RaceMenu Appearance Sync) ${MOD_VERSION}" \
               --notes-file Mods/RaceMenuTogether/RELEASE_NOTES.md
           fi
           gh release upload "$tag" "$ARCHIVE" --clobber
-          gh release edit "$tag" --notes-file Mods/RaceMenuTogether/RELEASE_NOTES.md
+          gh release edit "$tag" --title "RaceMenu Together (SKSE RaceMenu Appearance Sync) ${MOD_VERSION}" \
+            --notes-file Mods/RaceMenuTogether/RELEASE_NOTES.md
