@@ -8,8 +8,9 @@
 // The plugin listens to the microphone and turns the voice into a few mouth shapes. It exports one C function,
 // STRLipSync_GetDescriptor, returning a descriptor that lives as long as the plugin is loaded. The add-on finds it
 // by scanning the loaded modules, so load order does not matter, reads the current mouth shape every frame, puts
-// it on the player's face and relays it to the other players. The add-on in turn exports STRLipSync_HostApiVersion
-// from the launcher; the plugin only opens the microphone when it finds that export.
+// it on the player's face and relays it to the other players. The plugin opens the microphone on the add-on's first
+// GetFrame call, so without the add-on the microphone stays closed. The add-on also exports
+// STRLipSync_HostApiVersion from the launcher, for tools that want to know whether it is there.
 
 #include <cstdint>
 

@@ -11,12 +11,12 @@
 #define NOMINMAX
 #include <windows.h>
 #include <shlobj.h>
-#include <psapi.h>
 #include <mmdeviceapi.h>
 #include <audioclient.h>
 #include <propsys.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdarg>
 #include <cmath>
 #include <cstdint>
@@ -772,8 +772,36 @@ DWORD WINAPI CaptureThread(LPVOID)
 
 // --- STR LipSync API -----------------------------------------------------------------------------------------
 
+std::atomic<bool> s_captureStarted{false};
+
+// Opens the microphone on its own thread, once.
+void StartCapture()
+{
+    if (s_captureStarted.exchange(true))
+        return;
+
+    s_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    HANDLE thread = s_stopEvent ? CreateThread(nullptr, 0, &CaptureThread, nullptr, 0, nullptr) : nullptr;
+    if (!thread)
+    {
+        Log("Could not start the microphone thread");
+        return;
+    }
+    SetThreadPriority(thread, THREAD_PRIORITY_ABOVE_NORMAL);
+    CloseHandle(thread);
+}
+
+// Only the add-on in the Skyrim Together launcher asks for frames, so the first request is what opens the
+// microphone. (Looking for the launcher when SKSE loads the plugin does not work: once the launcher hosts the
+// game, its own image is no longer among the process's listed modules.)
 uint32_t GetFrame(STRLipSync::Frame* apFrame)
 {
+    if (!s_captureStarted.load())
+    {
+        Log("The Skyrim Together add-on asked for the mouth; opening the microphone");
+        StartCapture();
+    }
+
     if (!apFrame)
         return 0;
     AcquireSRWLockShared(&s_frameLock);
@@ -801,48 +829,15 @@ const STRLipSync::Descriptor kDescriptor = {
 
 HMODULE s_module = nullptr;
 
-// The Skyrim Together launcher hosts the game and reports the game's image as the main module, so look for the
-// add-on's export in every loaded module rather than only in GetModuleHandle(nullptr).
-STRLipSync::THostApiVersion FindHost()
-{
-    HMODULE modules[1024];
-    DWORD needed = 0;
-    if (!K32EnumProcessModules(GetCurrentProcess(), modules, sizeof(modules), &needed))
-        return nullptr;
-    const DWORD cCount = std::min<DWORD>(needed / sizeof(HMODULE), 1024);
-    for (DWORD i = 0; i < cCount; ++i)
-    {
-        if (auto host = reinterpret_cast<STRLipSync::THostApiVersion>(GetProcAddress(modules[i], STRLipSync::kHostApiVersionExport)))
-            return host;
-    }
-    return nullptr;
-}
-
 void Start(uint32_t aRuntimeVersion)
 {
     Log("LipSync Together %s loaded on runtime %u.%u.%u", LST_VERSION_STRING, (aRuntimeVersion >> 24) & 0xFF, (aRuntimeVersion >> 16) & 0xFF,
         (aRuntimeVersion >> 4) & 0xFFF);
 
-    const auto cHost = FindHost();
-    if (!cHost)
-    {
-        Log("Skyrim Together add-on not found: the game was started with a SkyrimTogether.exe without the add-on "
-            "(see the README's install steps). The microphone is left alone.");
-        return;
-    }
-    Log("Skyrim Together add-on found (LipSync API %u)", cHost());
-
+    // The add-on reads these settings as soon as it finds the plugin.
     LoadConfig(s_module);
-
-    s_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    HANDLE thread = s_stopEvent ? CreateThread(nullptr, 0, &CaptureThread, nullptr, 0, nullptr) : nullptr;
-    if (!thread)
-    {
-        Log("Could not start the microphone thread");
-        return;
-    }
-    SetThreadPriority(thread, THREAD_PRIORITY_ABOVE_NORMAL);
-    CloseHandle(thread);
+    Log("Waiting for the Skyrim Together add-on (the microphone stays closed if the game was not started with a "
+        "SkyrimTogether.exe that carries it)");
 }
 } // namespace
 
