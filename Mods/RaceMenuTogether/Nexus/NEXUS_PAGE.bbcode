@@ -12,6 +12,7 @@ Your friends see the character you made. Everything you set up in [b]RaceMenu[/b
 [*][b]Works with the official Skyrim Together Reborn 1.8.3[/b] from Nexus: the main file (Skyrim [b]1.7.104[/b]) and the optional file for [b]1.6.1170 / 1.6.1179[/b].
 [*][b]Also works with Skyrim Together Reborn 1.8.5[/b] (absol89), including its [b]1.5.97[/b] port.
 [*][b]No server changes[/b]: it plays on any regular server of your Skyrim Together version.
+[*][b]Plays nicely with SkyParkour Together[/b]: our mods share one launcher, so you can run them together.
 [*][b]RaceMenu itself is untouched[/b]: this mod contains no RaceMenu files; it uses RaceMenu's own preset functions.
 [/list]
 
@@ -69,12 +70,13 @@ MO2 starts a launcher from its real folder on disk, so mod order is not enough. 
 Skyrim Together shares the vanilla face and body only. This mod has two parts:
 [list]
 [*][b]RaceMenuTogether.dll[/b] (SKSE plugin): switches the add-on on, tells it which body morph keys belong to BodyGen and OBody, and checks that RaceMenu answers. It reads no game memory, so one DLL works on every game version.
-[*][b]SkyrimTogether.exe[/b] for your Skyrim Together and game version: that exact Skyrim Together release with a small add-on that exports your appearance with RaceMenu's own preset function, compresses it, sends it through Skyrim Together's existing relay, and loads it onto your character on the other players' screens with RaceMenu's own preset loader. Nothing else in Skyrim Together is changed. On 1.5.97 the installer also adds the files Skyrim Together needs to run on that version.
+[*][b]SkyrimTogether.exe[/b] for your Skyrim Together and game version: that exact Skyrim Together release with our small add-ons. RaceMenu Together's exports your appearance with RaceMenu's own preset function, compresses it, sends it through Skyrim Together's existing relay, and loads it onto your character on the other players' screens with RaceMenu's own preset loader. It is the same launcher our other mods ship, so they never fight over it. Nothing else in Skyrim Together is changed. On 1.5.97 the installer also adds the files Skyrim Together needs to run on that version.
 [/list]
 
 [size=5][b]Compatibility[/b][/size]
 [list]
-[*][b]Other mods that replace SkyrimTogether.exe[/b] (other Skyrim Together forks or patches, [b]SkyParkour Together[/b], STRPluginMessagingAPI) conflict with this mod: only one launcher can be used.
+[*][b]SkyParkour Together[/b]: fully compatible. Both mods ship the identical launcher carrying both add-ons, so install them in any order and both work. Keep both up to date.
+[*][b]Other mods that replace or patch SkyrimTogether.exe[/b] (other Skyrim Together forks, STRPluginMessagingAPI) conflict with this mod: only one launcher can be used.
 [*]Don't combine it with other RaceMenu or body morph sync mods for Skyrim Together.
 [*]BodyGen, OBody and BodySlide work alongside it.
 [/list]

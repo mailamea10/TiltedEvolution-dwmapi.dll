@@ -43,13 +43,21 @@ version. Not sure? You have the official one from Nexus: pick 1.8.3.
 one. Any regular server of that version works; nothing is installed on the
 server.
 
+Works together with
+- SkyParkour Together (and every later mod of ours with a Skyrim Together
+  add-on): they all ship the same Skyrim Together launcher, which carries
+  every one of their add-ons. Install them in any order; whichever mod's
+  SkyrimTogether.exe ends up in use runs all of them. Keep them up to date
+  together, so the launcher in use is the newest one.
+
 Do not use together with
 - other RaceMenu or body morph sync mods for Skyrim Together (for example
   MorphSyncTogether): both would load appearances onto the same characters.
 - STRPluginMessagingAPI: it patches Skyrim Together's own launcher and stops
   the launcher in this mod from starting.
 - the "Combined test build" (Parkour + RaceMenu + Ragdoll) from the same
-  GitHub repository: it already has RaceMenu sync built in.
+  GitHub repository: it is a separate test version of Skyrim Together that
+  already has RaceMenu sync built in.
 
 What is in the archive
 ----------------------
@@ -58,10 +66,13 @@ What is in the archive
   writes a log. One DLL for every game version; it does not touch game
   memory.
 - SkyrimTogetherReborn/SkyrimTogether.exe: the Skyrim Together launcher for
-  your Skyrim Together and game version, built from that release with one
-  small add-on that exports your appearance with RaceMenu, carries it to the
-  other players and loads it onto your character there. Nothing else in
-  Skyrim Together is changed.
+  your Skyrim Together and game version, built from that release with our
+  add-ons. RaceMenu Together's add-on exports your appearance with RaceMenu,
+  carries it to the other players and loads it onto your character there.
+  The same launcher carries the add-ons of our other mods (such as SkyParkour
+  Together); each one stays off unless its own SKSE plugin is installed.
+  Nothing else in Skyrim Together is changed. Docs/RaceMenu Together -
+  launcher manifest.txt lists exactly what it was built from.
   The 1.5.97 option also installs EarlyLoad.dll, TPProcess.exe and
   versionlib-ae-to-se-1-5-97-0.map, because Skyrim Together has no 1.5.97
   launcher of its own.
@@ -103,9 +114,9 @@ Vortex
      Data folder, as you normally start Skyrim Together.
 
 Using it with SkyParkour Together
-  SkyParkour Together also ships a SkyrimTogether.exe, and only one launcher
-  can be in use. Each launcher carries one add-on, so the two mods do not work
-  at the same time yet; pick the one you want for the session.
+  Both mods ship the identical SkyrimTogether.exe. In MO2, copy it from either
+  mod (steps 3-6 once); in Vortex, the file conflict between them does not
+  matter. Both features work with either copy.
 
 Checking that it works
 ----------------------
@@ -123,7 +134,8 @@ Troubleshooting
   started from a folder without the rest of Skyrim Together. In MO2, follow
   steps 3-7 above.
 - The SKSE log says the add-on was not found: the game was started with a
-  different SkyrimTogether.exe. In MO2, check that the copied launcher is the
+  different SkyrimTogether.exe (Skyrim Together's own, another fork's, or one
+  from an older version of our mods). In MO2, check that the copied launcher is the
   one in the Skyrim Together Reborn mod; in Vortex, check the load order.
 - Skyrim Together's log says "RaceMenu Together is off": RaceMenu is not
   installed or did not load (check RaceMenu's own requirements).
