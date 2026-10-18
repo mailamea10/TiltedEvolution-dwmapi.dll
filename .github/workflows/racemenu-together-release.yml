@@ -63,6 +63,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -e
+          trap 'echo "::error::FOMOD assembly failed at line $LINENO: $BASH_COMMAND"' ERR
           root=Mods/RaceMenuTogether
           pkg="pkg"
           mkdir -p "$pkg/fomod/images" "$pkg/00 Core/SKSE/Plugins" "$pkg/00 Core/Docs"
@@ -72,7 +73,7 @@ jobs:
           cp "$root/README.txt" "$pkg/00 Core/Docs/RaceMenu Together - README.txt"
           cp LICENSE "$pkg/00 Core/Docs/RaceMenu Together - LICENSE.txt"
           # The shared launcher, one archive per Skyrim Together release and game version.
-          gh release download together-launcher -p 'TogetherLauncher-*.zip' -p 'LAUNCHER_MANIFEST.txt' -D launcher
+          gh release download together-launcher --repo "$GITHUB_REPOSITORY" -p 'TogetherLauncher-*.zip' -p 'LAUNCHER_MANIFEST.txt' -D launcher
           for archive in launcher/TogetherLauncher-*.zip; do
             unzip -q -o "$archive" -d "$pkg"
           done
