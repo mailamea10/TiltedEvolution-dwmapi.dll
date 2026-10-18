@@ -56,7 +56,8 @@ jobs:
 
       - uses: actions/download-artifact@v7
         with:
-          path: artifacts
+          name: plugin
+          path: artifacts/plugin
 
       - name: Assemble the FOMOD
         env:
