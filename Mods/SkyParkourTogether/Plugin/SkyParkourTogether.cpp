@@ -19,8 +19,8 @@
 
 #define SPT_VERSION_MAJOR 1
 #define SPT_VERSION_MINOR 0
-#define SPT_VERSION_PATCH 0
-#define SPT_VERSION_STRING "1.0.0"
+#define SPT_VERSION_PATCH 1
+#define SPT_VERSION_STRING "1.0.1"
 
 namespace
 {

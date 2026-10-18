@@ -56,7 +56,7 @@ MO2 starts a launcher from its real folder on disk, so mod order is not enough. 
 [size=4][b]Is it working?[/b][/size]
 [list]
 [*][font=Courier New]Documents/My Games/Skyrim Special Edition/SKSE/SkyParkourTogether.log[/font] says [i]"Skyrim Together add-on found"[/i].
-[*]Skyrim Together's log ([font=Courier New]SkyrimTogetherReborn/logs[/font]) contains [i]"mod sync: SkyParkour Together 1.0.0 ... registered"[/i].
+[*]Skyrim Together's log ([font=Courier New]SkyrimTogetherReborn/logs[/font]) contains [i]"mod sync: SkyParkour Together 1.0.1 ... registered"[/i].
 [/list]
 [b]The launcher closes straight away[/b] (no window, no log): it was started from a folder without the rest of Skyrim Together. In MO2, do the copy steps above.
 [b]The SKSE log says the add-on was not found:[/b] the game started with a different [font=Courier New]SkyrimTogether.exe[/font]. In MO2, check the copied launcher is the one in the Skyrim Together Reborn mod; in Vortex, check the load order.
@@ -65,12 +65,13 @@ MO2 starts a launcher from its real folder on disk, so mod order is not enough. 
 SkyParkour plays its animations directly on your character's animation graph, which Skyrim Together does not share, so other players only saw you slide around in a running pose. This mod has two parts:
 [list]
 [*][b]SkyParkourTogether.dll[/b] (SKSE plugin): tells Skyrim Together which of your animations are SkyParkour's and which values pick the right one. It reads no game memory, so one DLL works on every game version.
-[*][b]SkyrimTogether.exe[/b] for your Skyrim Together and game version: that exact Skyrim Together release with a small add-on, the [i]STR Mod Sync API[/i], that sends those animations through Skyrim Together's existing animation relay and plays them on your character on the other players' screens. Nothing else in Skyrim Together is changed. On 1.5.97 the installer also adds the files Skyrim Together needs to run on that version.
+[*][b]SkyrimTogether.exe[/b] for your Skyrim Together and game version: that exact Skyrim Together release with a small add-on, the [i]STR Mod Sync API[/i], that sends those animations through Skyrim Together's existing animation relay and plays them on your character on the other players' screens. It is the same launcher our other mods ship (it also carries RaceMenu Together's add-on, which stays off unless that mod is installed), so they never fight over it. Nothing else in Skyrim Together is changed. On 1.5.97 the installer also adds the files Skyrim Together needs to run on that version.
 [/list]
 
 [size=5][b]Compatibility[/b][/size]
 [list]
-[*][b]Other mods that replace SkyrimTogether.exe[/b] (other Skyrim Together forks or patches) conflict with this mod: only one launcher can win.
+[*][b]RaceMenu Together[/b]: fully compatible. Both mods ship the identical launcher carrying both add-ons, so install them in any order and both work. Keep both up to date.
+[*][b]Other mods that replace or patch SkyrimTogether.exe[/b] (other Skyrim Together forks, STRPluginMessagingAPI) conflict with this mod: only one launcher can be used.
 [*]Works alongside other SkyParkour add-ons and animation mods.
 [*]Mods that add their own parkour animation events outside SkyParkour's names are not shared.
 [/list]
