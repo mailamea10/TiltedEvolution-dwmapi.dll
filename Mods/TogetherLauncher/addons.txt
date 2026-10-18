@@ -1,0 +1,7 @@
+# The Skyrim Together add-ons built into the shared launcher, one per line:
+#   <branch> <path of the add-on's apply_addon.py on that branch> <release workflow on that branch>
+# Every mod release ships the same launcher, so a player can install any of these mods, in any order, and
+# whichever mod's SkyrimTogether.exe ends up in use carries all of them. An add-on stays off until its own SKSE
+# plugin is installed.
+release/skyparkour-together Mods/SkyParkourTogether/StrAddon/apply_addon.py skyparkour-together-release.yml
+release/racemenu-together Mods/RaceMenuTogether/StrAddon/apply_addon.py racemenu-together-release.yml

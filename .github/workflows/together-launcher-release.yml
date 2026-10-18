@@ -1,0 +1,234 @@
+name: Together Launcher release
+
+# Builds the shared Skyrim Together launcher that every SKSE mod release of this repository ships: one launcher
+# per Skyrim Together release and game version, each from that release's source with every add-on listed in
+# Mods/TogetherLauncher/addons.txt and nothing else changed. Publishes the launchers to the together-launcher
+# pre-release, then starts each mod's release workflow so its FOMOD is repackaged with them.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'release/together-launcher'
+
+concurrency:
+  group: together-launcher
+  cancel-in-progress: true
+
+jobs:
+  launcher:
+    name: Launcher (${{ matrix.id }})
+    runs-on: windows-2022
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          # Official Skyrim Together Reborn 1.8.3 (Nexus main file), Skyrim 1.7.104
+          - id: 183-1.7.104
+            base: 4917189f6ac382e874f9ee735c4fef6a350e449e
+            folder: '10 STR 1.8.3 - 1.7.104'
+            version: v1.8.3
+            protocol: '1.8.3'
+            legacy: false
+          # Official 1.8.3 for 1.6.1170 / 1.6.1179 (Nexus optional file): 1.8.3 with the 1.6 runtime layouts
+          - id: 183-1.6.1170
+            base: db8af2cf2758ccb6412b71ac1dcadc8c3a5ad0aa
+            folder: '11 STR 1.8.3 - 1.6.1170'
+            version: v1.8.3
+            protocol: '1.8.3'
+            legacy: false
+          # Skyrim Together Reborn 1.8.5 (absol89), Skyrim 1.7.104
+          - id: 185-1.7.104
+            base: 0f1876e692310959b5c67ae148357e9d4c7ed9ff
+            folder: '20 STR 1.8.5 - 1.7.104'
+            version: v1.8.5
+            protocol: '1.8.5'
+            legacy: false
+          # 1.8.5 for 1.6.1170 / 1.6.1179
+          - id: 185-1.6.1170
+            base: 043dad02c086c158a4b1e24d136e2c97c8a6d15f
+            folder: '21 STR 1.8.5 - 1.6.1170'
+            version: v1.8.5
+            protocol: '1.8.5'
+            legacy: false
+          # 1.8.5 for 1.5.97 (before any of this fork's feature work)
+          - id: 185-1.5.97
+            base: e6a097e1915a58d53343b167c24367f92303bcc0
+            folder: '22 STR 1.8.5 - 1.5.97'
+            version: v1.8.5
+            protocol: '1.8.5'
+            legacy: true
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout launcher branch
+        uses: actions/checkout@v7
+        with:
+          path: launcher
+
+      - name: Checkout Skyrim Together source for ${{ matrix.id }}
+        uses: actions/checkout@v7
+        with:
+          path: str
+          fetch-depth: 0
+
+      - name: Select base commit and pin protocol version
+        working-directory: str
+        run: |
+          git checkout --force "${{ matrix.base }}"
+          git log -1 --format='base: %H %s'
+          git tag -f "${{ matrix.version }}" HEAD
+          echo "client will report version: $(git describe --tags --abbrev=0)"
+          git submodule sync --recursive
+          git submodule update --init --force --recursive --depth=1
+
+      - name: Apply every add-on
+        run: |
+          set -e
+          manifest="manifest-${{ matrix.id }}.txt"
+          echo "${{ matrix.folder }}: Skyrim Together ${{ matrix.version }} at ${{ matrix.base }}" > "$manifest"
+          n=0
+          grep -vE '^\s*(#|$)' launcher/Mods/TogetherLauncher/addons.txt | while read -r branch script workflow; do
+            n=$((n + 1))
+            git -C str worktree add --detach "../addon-$n" "origin/$branch"
+            commit=$(git -C "addon-$n" rev-parse --short HEAD)
+            echo "== $branch ($commit)"
+            python "addon-$n/$script" str --protocol "${{ matrix.protocol }}"
+            echo "  add-on: $branch at $commit" >> "$manifest"
+          done
+          cat "$manifest"
+
+      - name: Restore xmake packages
+        id: pkgcache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/AppData/Local/.xmake/packages
+          key: ${{ runner.os }}-xmake-pkgs-${{ hashFiles('str/**/xmake.lua') }}
+          restore-keys: |
+            ${{ runner.os }}-xmake-pkgs-
+
+      - name: Setup xmake
+        uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: 3.1.0
+          actions-cache-folder: '.xmake-cache'
+          actions-cache-key: windows-2022
+
+      - name: Configure xmake and install dependencies
+        working-directory: str
+        run: xmake config --plat=windows --arch=x64 --mode=releasedbg --yes -vD
+
+      - name: Save xmake packages
+        if: always() && steps.pkgcache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/AppData/Local/.xmake/packages
+          key: ${{ runner.os }}-xmake-pkgs-${{ hashFiles('str/**/xmake.lua') }}-${{ matrix.id }}
+
+      - name: Build the launcher
+        working-directory: str
+        run: |
+          set +e
+          if [ "${{ matrix.legacy }}" = "true" ]; then
+            targets="ImmersiveElf TPProcess SkyrimImmersiveLauncherLegacyNoConsole"
+          else
+            targets="SkyrimImmersiveLauncher"
+          fi
+          status=0
+          for target in $targets; do
+            xmake build -y -vD "$target" 2>&1 | tee -a build.log
+            [ ${PIPESTATUS[0]} -ne 0 ] && status=1 && break
+          done
+          grep -E "error C[0-9]+|error LNK[0-9]+|fatal error|: error:" build.log | sort -u | head -40 | while IFS= read -r line; do echo "::error::${line:0:900}"; done
+          exit $status
+
+      - name: Collect the launcher
+        run: |
+          out=str/build/windows/x64/releasedbg
+          dest="pack/${{ matrix.folder }}/SkyrimTogetherReborn"
+          mkdir -p "$dest"
+          if [ "${{ matrix.legacy }}" = "true" ]; then
+            cp "$out/legacy-noconsole/SkyrimTogether.exe" "$out/EarlyLoad.dll" "$out/TPProcess.exe" "$dest/"
+            cp str/GameFiles/Skyrim/SKSE/Plugins/versionlib-ae-to-se-1-5-97-0.map "$dest/"
+          else
+            cp "$out/SkyrimTogether.exe" "$dest/"
+          fi
+          cp "manifest-${{ matrix.id }}.txt" pack/
+          find pack -type f | sort
+
+      - name: Check the add-on exports
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Recurse pack -Filter SkyrimTogether.exe | Select-Object -First 1
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -property installationPath
+          $dumpbin = Get-ChildItem -Recurse "$vs\VC\Tools\MSVC" -Filter dumpbin.exe | Where-Object { $_.FullName -match 'Hostx64\\x64' } | Select-Object -First 1
+          $exports = & $dumpbin.FullName /exports $exe.FullName
+          $missing = @()
+          foreach ($name in @('STRModSync_HostApiVersion', 'STRRaceMenu_HostApiVersion')) {
+            if (-not ($exports -match $name)) { $missing += $name }
+          }
+          if ($missing.Count -gt 0) { Write-Error "missing exports: $($missing -join ', ')"; exit 1 }
+          Write-Host "add-on exports present"
+
+      - name: Upload the launcher
+        uses: actions/upload-artifact@v7
+        with:
+          name: launcher-${{ matrix.id }}
+          retention-days: 14
+          if-no-files-found: error
+          path: pack
+
+  publish:
+    name: Publish and repackage the mods
+    needs: launcher
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v7
+        with:
+          path: artifacts
+
+      - name: Archive each launcher
+        run: |
+          set -e
+          mkdir -p out
+          for dir in artifacts/launcher-*; do
+            id="${dir#artifacts/launcher-}"
+            (cd "$dir" && zip -r -q "../../out/TogetherLauncher-$id.zip" . -x 'manifest-*')
+          done
+          {
+            echo "Together Launcher, built from $GITHUB_SHA"
+            echo
+            cat artifacts/launcher-*/manifest-*.txt
+          } > out/LAUNCHER_MANIFEST.txt
+          cat out/LAUNCHER_MANIFEST.txt
+          ls -la out
+
+      - name: Publish to the together-launcher pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="together-launcher"
+          if ! gh release view "$tag" > /dev/null 2>&1; then
+            gh release create "$tag" --prerelease --target "$GITHUB_SHA" \
+              --title "Together Launcher (shared Skyrim Together launcher for our SKSE mods)" \
+              --notes-file Mods/TogetherLauncher/README.md
+          fi
+          gh release upload "$tag" out/* --clobber
+          gh release edit "$tag" --notes-file Mods/TogetherLauncher/README.md
+
+      - name: Repackage every mod with these launchers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          grep -vE '^\s*(#|$)' Mods/TogetherLauncher/addons.txt | while read -r branch script workflow; do
+            echo "starting $workflow on $branch"
+            gh workflow run "$workflow" --ref "$branch"
+          done
