@@ -1,0 +1,237 @@
+name: RaceMenu Together release
+
+# Builds the RaceMenu Together FOMOD:
+# - the SKSE plugin (one DLL for every runtime; it touches no game memory),
+# - the Skyrim Together launcher with the RaceMenu Together add-on, once per Skyrim Together release and game
+#   version, each from that release's source with nothing else changed:
+#   official 1.8.3 (Nexus main file 1.7.104, optional file 1.6.1170/1.6.1179) and
+#   absol89's 1.8.5 (1.7.104, 1.6.1170/1.6.1179, and the 1.5.97 port),
+# and adds the archive to the GitHub release, next to any archives already there.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'release/racemenu-together**'
+
+env:
+  MOD_VERSION: '1.0.0'
+
+jobs:
+  str-addon:
+    name: STR add-on (${{ matrix.id }})
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Official Skyrim Together Reborn 1.8.3 (Nexus main file), Skyrim 1.7.104
+          - id: 183-1.7.104
+            base: 4917189f6ac382e874f9ee735c4fef6a350e449e
+            folder: '10 STR 1.8.3 - 1.7.104'
+            version: v1.8.3
+            protocol: '1.8.3'
+            legacy: false
+          # Official 1.8.3 for 1.6.1170 / 1.6.1179 (Nexus optional file): 1.8.3 with the 1.6 runtime layouts
+          - id: 183-1.6.1170
+            base: db8af2cf2758ccb6412b71ac1dcadc8c3a5ad0aa
+            folder: '11 STR 1.8.3 - 1.6.1170'
+            version: v1.8.3
+            protocol: '1.8.3'
+            legacy: false
+          # Skyrim Together Reborn 1.8.5 (absol89), Skyrim 1.7.104
+          - id: 185-1.7.104
+            base: 0f1876e692310959b5c67ae148357e9d4c7ed9ff
+            folder: '20 STR 1.8.5 - 1.7.104'
+            version: v1.8.5
+            protocol: '1.8.5'
+            legacy: false
+          # 1.8.5 for 1.6.1170 / 1.6.1179
+          - id: 185-1.6.1170
+            base: 043dad02c086c158a4b1e24d136e2c97c8a6d15f
+            folder: '21 STR 1.8.5 - 1.6.1170'
+            version: v1.8.5
+            protocol: '1.8.5'
+            legacy: false
+          # 1.8.5 for 1.5.97 (before any of this fork's feature work)
+          - id: 185-1.5.97
+            base: e6a097e1915a58d53343b167c24367f92303bcc0
+            folder: '22 STR 1.8.5 - 1.5.97'
+            version: v1.8.5
+            protocol: '1.8.5'
+            legacy: true
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v7
+        with:
+          path: release
+
+      - name: Checkout Skyrim Together source for ${{ matrix.id }}
+        uses: actions/checkout@v7
+        with:
+          path: str
+          fetch-depth: 0
+
+      - name: Select base commit and pin protocol version
+        working-directory: str
+        run: |
+          git checkout --force "${{ matrix.base }}"
+          git log -1 --format='base: %H %s'
+          git tag -f "${{ matrix.version }}" HEAD
+          echo "client will report version: $(git describe --tags --abbrev=0)"
+          git submodule sync --recursive
+          git submodule update --init --force --recursive --depth=1
+
+      - name: Apply the RaceMenu Together add-on
+        run: python release/Mods/RaceMenuTogether/StrAddon/apply_addon.py str --protocol "${{ matrix.protocol }}"
+
+      - name: Restore xmake packages
+        id: pkgcache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/AppData/Local/.xmake/packages
+          key: ${{ runner.os }}-xmake-pkgs-${{ hashFiles('str/**/xmake.lua') }}
+          restore-keys: |
+            ${{ runner.os }}-xmake-pkgs-
+
+      - name: Setup xmake
+        uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: 3.1.0
+          actions-cache-folder: '.xmake-cache'
+          actions-cache-key: windows-2022
+
+      - name: Configure xmake and install dependencies
+        working-directory: str
+        run: xmake config --plat=windows --arch=x64 --mode=releasedbg --yes -vD
+
+      - name: Save xmake packages
+        if: always() && steps.pkgcache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/AppData/Local/.xmake/packages
+          key: ${{ runner.os }}-xmake-pkgs-${{ hashFiles('str/**/xmake.lua') }}-${{ matrix.id }}
+
+      - name: Build the launcher
+        working-directory: str
+        run: |
+          set +e
+          if [ "${{ matrix.legacy }}" = "true" ]; then
+            targets="ImmersiveElf TPProcess SkyrimImmersiveLauncherLegacyNoConsole"
+          else
+            targets="SkyrimImmersiveLauncher"
+          fi
+          status=0
+          for target in $targets; do
+            xmake build -y -vD "$target" 2>&1 | tee -a build.log
+            [ ${PIPESTATUS[0]} -ne 0 ] && status=1 && break
+          done
+          grep -E "error C[0-9]+|error LNK[0-9]+|fatal error|: error:" build.log | sort -u | head -40 | while IFS= read -r line; do echo "::error::${line:0:900}"; done
+          exit $status
+
+      - name: Collect the add-on files
+        run: |
+          out=str/build/windows/x64/releasedbg
+          dest="addon/${{ matrix.folder }}/SkyrimTogetherReborn"
+          mkdir -p "$dest"
+          if [ "${{ matrix.legacy }}" = "true" ]; then
+            cp "$out/legacy-noconsole/SkyrimTogether.exe" "$out/EarlyLoad.dll" "$out/TPProcess.exe" "$dest/"
+            cp str/GameFiles/Skyrim/SKSE/Plugins/versionlib-ae-to-se-1-5-97-0.map "$dest/"
+          else
+            cp "$out/SkyrimTogether.exe" "$dest/"
+          fi
+          find addon -type f | sort
+
+      - name: Upload the add-on
+        uses: actions/upload-artifact@v7
+        with:
+          name: addon-${{ matrix.id }}
+          retention-days: 14
+          if-no-files-found: error
+          path: addon
+
+  plugin:
+    name: SKSE plugin
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Build RaceMenuTogether.dll
+        shell: cmd
+        run: call Mods\RaceMenuTogether\Plugin\build.bat
+
+      - name: Check the exports
+        shell: cmd
+        run: dumpbin /exports Mods\RaceMenuTogether\Plugin\build\RaceMenuTogether.dll | findstr /C:"SKSEPlugin_" /C:"STRRaceMenu_"
+
+      - name: Upload the plugin
+        uses: actions/upload-artifact@v7
+        with:
+          name: plugin
+          retention-days: 14
+          if-no-files-found: error
+          path: Mods/RaceMenuTogether/Plugin/build/RaceMenuTogether.dll
+
+  package:
+    name: FOMOD
+    needs: [str-addon, plugin]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v7
+        with:
+          path: artifacts
+
+      - name: Assemble the FOMOD
+        run: |
+          set -e
+          root=Mods/RaceMenuTogether
+          pkg="pkg"
+          mkdir -p "$pkg/fomod/images" "$pkg/00 Core/SKSE/Plugins" "$pkg/00 Core/Docs"
+          cp "$root/fomod/info.xml" "$root/fomod/ModuleConfig.xml" "$pkg/fomod/"
+          cp "$root/fomod/images/banner.png" "$pkg/fomod/images/"
+          cp artifacts/plugin/RaceMenuTogether.dll "$pkg/00 Core/SKSE/Plugins/"
+          cp "$root/README.txt" "$pkg/00 Core/Docs/RaceMenu Together - README.txt"
+          cp LICENSE "$pkg/00 Core/Docs/RaceMenu Together - LICENSE.txt"
+          for addon in artifacts/addon-*; do
+            cp -r "$addon"/* "$pkg/"
+          done
+          find "$pkg" -type f | sort
+          name="RaceMenu_Together_Appearance_Sync-${MOD_VERSION}-STR-1.8.3-and-1.8.5.zip"
+          (cd "$pkg" && zip -r -q "../$name" .)
+          ls -la "$name"
+          echo "ARCHIVE=$name" >> "$GITHUB_ENV"
+
+      - name: Upload the FOMOD
+        uses: actions/upload-artifact@v7
+        with:
+          name: RaceMenuTogether-${{ env.MOD_VERSION }}
+          retention-days: 30
+          if-no-files-found: error
+          path: ${{ env.ARCHIVE }}
+
+      - name: Add the archive to the release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="racemenu-together-v${MOD_VERSION}"
+          # Archives already on the release stay as they are; this one is added (or replaced on a rebuild).
+          if ! gh release view "$tag" > /dev/null 2>&1; then
+            gh release create "$tag" --prerelease --target "$GITHUB_SHA" \
+              --title "RaceMenu Together (RaceMenu Appearance Sync) ${MOD_VERSION}" \
+              --notes-file Mods/RaceMenuTogether/RELEASE_NOTES.md
+          fi
+          gh release upload "$tag" "$ARCHIVE" --clobber
+          gh release edit "$tag" --notes-file Mods/RaceMenuTogether/RELEASE_NOTES.md

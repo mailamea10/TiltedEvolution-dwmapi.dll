@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://qconsulting.ca/fo3/ModConfig5.0.xsd">
+  <moduleName>RaceMenu Together (RaceMenu Appearance Sync)</moduleName>
+  <moduleImage path="fomod\images\banner.png" />
+
+  <requiredInstallFiles>
+    <folder source="00 Core" destination="" priority="0" />
+  </requiredInstallFiles>
+
+  <installSteps order="Explicit">
+    <installStep name="Skyrim Together version">
+      <optionalFileGroups order="Explicit">
+        <group name="Which Skyrim Together do you use?" type="SelectExactlyOne">
+          <plugins order="Explicit">
+            <plugin name="Nexus 1.8.3 (official)">
+              <description>The official Skyrim Together Reborn 1.8.3 from its Nexus page: the main file (Skyrim 1.7.104) or the optional file &quot;for 1.6.1170&quot; (Skyrim 1.6.1170/1.6.1179). Pick this if you are not sure.
+
+Plays on any official 1.8.3 server. Everyone in your session must use the same Skyrim Together version.</description>
+              <image path="fomod\images\banner.png" />
+              <conditionFlags>
+                <flag name="str">1.8.3</flag>
+              </conditionFlags>
+              <typeDescriptor>
+                <type name="Recommended" />
+              </typeDescriptor>
+            </plugin>
+            <plugin name="1.8.5 (absol89 / our 1.5.97 port)">
+              <description>Skyrim Together Reborn 1.8.5: absol89's release for 1.7.104 or 1.6.1170/1.6.1179, or the 1.5.97 port built on it.
+
+Plays on 1.8.5 servers only; 1.8.3 and 1.8.5 cannot join each other's servers.</description>
+              <image path="fomod\images\banner.png" />
+              <conditionFlags>
+                <flag name="str">1.8.5</flag>
+              </conditionFlags>
+              <typeDescriptor>
+                <type name="Optional" />
+              </typeDescriptor>
+            </plugin>
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
+
+    <installStep name="Game version (Skyrim Together 1.8.3)">
+      <visible>
+        <flagDependency flag="str" value="1.8.3" />
+      </visible>
+      <optionalFileGroups order="Explicit">
+        <group name="Which Skyrim do you play on? (Skyrim Together 1.8.3)" type="SelectExactlyOne">
+          <plugins order="Explicit">
+            <plugin name="Skyrim 1.7.104">
+              <description>Skyrim Special/Anniversary Edition 1.7.104 with the Skyrim Together Reborn 1.8.3 main file from Nexus (SKSE 2.3.x).
+
+Installs the Skyrim Together launcher with the RaceMenu Together add-on (SkyrimTogetherReborn/SkyrimTogether.exe). Mod Organizer 2 users: after installing, copy it into your Skyrim Together Reborn mod's SkyrimTogetherReborn folder (back up the original first); see the README.</description>
+              <image path="fomod\images\banner.png" />
+              <files>
+                <folder source="10 STR 1.8.3 - 1.7.104" destination="" priority="0" />
+              </files>
+              <typeDescriptor>
+                <type name="Optional" />
+              </typeDescriptor>
+            </plugin>
+            <plugin name="Skyrim 1.6.1170 / 1.6.1179">
+              <description>Skyrim Special/Anniversary Edition 1.6.1170 or 1.6.1179 with the Skyrim Together Reborn 1.8.3 optional file &quot;for 1.6.1170&quot; from Nexus (SKSE 2.2.6).
+
+Installs the Skyrim Together launcher with the RaceMenu Together add-on (SkyrimTogetherReborn/SkyrimTogether.exe). Mod Organizer 2 users: after installing, copy it into your Skyrim Together Reborn mod's SkyrimTogetherReborn folder (back up the original first); see the README.</description>
+              <image path="fomod\images\banner.png" />
+              <files>
+                <folder source="11 STR 1.8.3 - 1.6.1170" destination="" priority="0" />
+              </files>
+              <typeDescriptor>
+                <type name="Optional" />
+              </typeDescriptor>
+            </plugin>
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
+
+    <installStep name="Game version (Skyrim Together 1.8.5)">
+      <visible>
+        <flagDependency flag="str" value="1.8.5" />
+      </visible>
+      <optionalFileGroups order="Explicit">
+        <group name="Which Skyrim do you play on? (Skyrim Together 1.8.5)" type="SelectExactlyOne">
+          <plugins order="Explicit">
+            <plugin name="Skyrim 1.7.104">
+              <description>Skyrim Special/Anniversary Edition 1.7.104 with Skyrim Together Reborn 1.8.5 (absol89).
+
+Installs the Skyrim Together launcher with the RaceMenu Together add-on (SkyrimTogetherReborn/SkyrimTogether.exe). Mod Organizer 2 users: after installing, copy it into your Skyrim Together Reborn mod's SkyrimTogetherReborn folder (back up the original first); see the README.</description>
+              <image path="fomod\images\banner.png" />
+              <files>
+                <folder source="20 STR 1.8.5 - 1.7.104" destination="" priority="0" />
+              </files>
+              <typeDescriptor>
+                <type name="Optional" />
+              </typeDescriptor>
+            </plugin>
+            <plugin name="Skyrim 1.6.1170 / 1.6.1179">
+              <description>Skyrim Special/Anniversary Edition 1.6.1170 or 1.6.1179 with Skyrim Together Reborn 1.8.5 (absol89).
+
+Installs the Skyrim Together launcher with the RaceMenu Together add-on (SkyrimTogetherReborn/SkyrimTogether.exe). Mod Organizer 2 users: after installing, copy it into your Skyrim Together Reborn mod's SkyrimTogetherReborn folder (back up the original first); see the README.</description>
+              <image path="fomod\images\banner.png" />
+              <files>
+                <folder source="21 STR 1.8.5 - 1.6.1170" destination="" priority="0" />
+              </files>
+              <typeDescriptor>
+                <type name="Optional" />
+              </typeDescriptor>
+            </plugin>
+            <plugin name="Skyrim 1.5.97">
+              <description>Skyrim Special Edition 1.5.97 (SKSE 2.0.20) with Skyrim Together Reborn 1.8.5.
+
+Installs the 1.5.97 Skyrim Together launcher with the RaceMenu Together add-on: SkyrimTogetherReborn/SkyrimTogether.exe, EarlyLoad.dll, TPProcess.exe and versionlib-ae-to-se-1-5-97-0.map. Skyrim Together has no 1.5.97 launcher of its own, so this one comes with the mod; you do not need any other 1.5.97 port. Plays on 1.8.5 servers only. Mod Organizer 2 users: after installing, copy these four files into your Skyrim Together Reborn mod's SkyrimTogetherReborn folder (back up the originals first); see the README.</description>
+              <image path="fomod\images\banner.png" />
+              <files>
+                <folder source="22 STR 1.8.5 - 1.5.97" destination="" priority="0" />
+              </files>
+              <typeDescriptor>
+                <type name="Optional" />
+              </typeDescriptor>
+            </plugin>
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
+  </installSteps>
+</config>
