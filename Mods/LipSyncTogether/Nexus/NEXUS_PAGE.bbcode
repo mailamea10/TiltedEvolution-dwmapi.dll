@@ -1,0 +1,100 @@
+[center][size=6][b]LipSync Together[/b][/size]
+[size=4]Voice Lip Sync for Skyrim Together Reborn[/size][/center]
+
+Talk to your friends through your characters. While you speak into your microphone, your character's mouth moves - on your screen and on every other screen in your [b]Skyrim Together Reborn[/b] session - and theirs move on yours. No webcam, no recording: just your voice, read on your own PC.
+
+[size=5][b]Features[/b][/size]
+[list]
+[*][b]Your mouth follows your voice[/b]: the jaw opens and closes with your syllables, and your lips spread or round with your vowels, using Skyrim's own phoneme shapes at about the strength vanilla dialogue uses.
+[*][b]Everyone sees it[/b]: other players see your character talk while you talk, and you see theirs.
+[*][b]Only your voice counts[/b]: keyboard clicks, fans and room noise are ignored, because speech has a pitch and they do not.
+[*][b]Use your usual voice chat[/b]: the microphone is shared, so Discord and the like keep working. Only tiny mouth shapes go over the network, never audio.
+[*][b]Your choice of microphone[/b], optional [b]push-to-talk[/b] and [b]mute[/b] keys, all in one INI file.
+[*][b]Works with the official Skyrim Together Reborn 1.8.3[/b] from Nexus: the main file (Skyrim [b]1.7.104[/b]) and the optional file for [b]1.6.1170 / 1.6.1179[/b].
+[*][b]Also works with Skyrim Together Reborn 1.8.5[/b] (absol89), including its [b]1.5.97[/b] port.
+[*][b]No server changes[/b]: it plays on any regular server of your Skyrim Together version.
+[*][b]Plays nicely with SkyParkour Together and RaceMenu Together[/b]: our mods share one launcher, so you can run them together.
+[/list]
+
+[size=5][b]Requirements[/b][/size]
+[b]Every player in the session[/b] needs all of these:
+[list]
+[*]Skyrim Special/Anniversary Edition [b]1.5.97, 1.6.1170, 1.6.1179 or 1.7.104[/b]
+[*][url=https://skse.silverlock.org/]SKSE64[/url] for your game version
+[*][url=https://www.nexusmods.com/skyrimspecialedition/mods/133568]Mfg Fix NG[/url] or [url=https://www.nexusmods.com/skyrimspecialedition/mods/11669]Mfg Fix[/url] for your game version (not included)
+[*][url=https://www.nexusmods.com/skyrimspecialedition/mods/69993]Skyrim Together Reborn[/url] [b]1.8.3[/b] (the Nexus main or optional file for your game version), or Skyrim Together Reborn [b]1.8.5[/b]
+[*]A microphone, if you want your own mouth to move (without one you still see everyone else's)
+[/list]
+
+[size=5][b]Which Skyrim Together do I have?[/b][/size]
+[list]
+[*][b]1.8.3 (official)[/b]: you downloaded Skyrim Together Reborn from its Nexus page. Main file = Skyrim 1.7.104; optional file "for 1.6.1170" = Skyrim 1.6.1170/1.6.1179. [b]Not sure? This is you.[/b]
+[*][b]1.8.5[/b]: you use absol89's 1.8.5 build, or play on Skyrim 1.5.97 with the 1.5.97 port.
+[/list]
+1.8.3 and 1.8.5 can't join each other's servers, so everyone in your session needs the same one.
+
+[size=5][b]Installation[/b][/size]
+Skyrim Together only starts when its launcher sits in the same folder as the rest of Skyrim Together ([font=Courier New]libcef.dll[/font], [font=Courier New]EarlyLoad.dll[/font], the UI...). How you get this mod's launcher there depends on your mod manager.
+[list=1]
+[*]Install Skyrim Together Reborn and Mfg Fix NG (or Mfg Fix) as usual.
+[*]Install this mod. The installer asks which Skyrim Together you use, then your game version.
+[/list]
+
+[size=4][b]Mod Organizer 2[/b][/size]
+MO2 starts a launcher from its real folder on disk, so mod order is not enough. Copy the launcher once:
+[list=1]
+[*]Right-click [b]LipSync Together[/b] > [i]Open in Explorer[/i] and open its [font=Courier New]SkyrimTogetherReborn[/font] folder.
+[*]Right-click your [b]Skyrim Together Reborn[/b] mod > [i]Open in Explorer[/i] and open its [font=Courier New]SkyrimTogetherReborn[/font] folder.
+[*]In the Skyrim Together folder, rename [font=Courier New]SkyrimTogether.exe[/font] to [font=Courier New]SkyrimTogether.original.exe[/font] (your backup).
+[*]Copy [font=Courier New]SkyrimTogether.exe[/font] from the LipSync Together folder into the Skyrim Together folder. On [b]1.5.97[/b], also copy [font=Courier New]EarlyLoad.dll[/font], [font=Courier New]TPProcess.exe[/font] and [font=Courier New]versionlib-ae-to-se-1-5-97-0.map[/font].
+[*]Keep LipSync Together enabled (it provides the SKSE plugin) and start the game with your usual MO2 entry for Skyrim Together, the one pointing into the Skyrim Together Reborn mod. [b]Don't[/b] point an MO2 entry at the LipSync Together folder: the launcher can't start from there and simply closes.
+[/list]
+
+[size=4][b]Vortex[/b][/size]
+[list=1]
+[*]Set LipSync Together to load [b]after[/b] Skyrim Together Reborn and deploy.
+[*]Start the game from [font=Courier New]SkyrimTogetherReborn/SkyrimTogether.exe[/font] as you normally start Skyrim Together.
+[/list]
+
+[size=4][b]Picking your microphone[/b][/size]
+By default the Windows default communications microphone is used. Some virtual or software audio devices pass only silence to other programs. If your mouth doesn't move, open [font=Courier New]Documents/My Games/Skyrim Special Edition/SKSE/LipSyncTogether.log[/font]: it lists every microphone. Put part of your real microphone's name in [font=Courier New]Device=[/font] in [font=Courier New]SKSE/Plugins/LipSyncTogether.ini[/font] and restart the game.
+
+[size=4][b]Is it working?[/b][/size]
+[list]
+[*][font=Courier New]LipSyncTogether.log[/font] says [i]"The Skyrim Together add-on asked for the mouth; opening the microphone"[/i] and [i]"Listening to ..."[/i] your microphone.
+[*]Skyrim Together's log ([font=Courier New]SkyrimTogetherReborn/logs[/font]) contains [i]"LipSync Together: found LipSync Together 0.2.0"[/i] and [i]"faces are moved with MfgConsoleFunc.SetPhonemeModifier"[/i].
+[/list]
+[b]The launcher closes straight away[/b] (no window, no log): it was started from a folder without the rest of Skyrim Together. In MO2, do the copy steps above.
+[b]The log stops at "Waiting for the Skyrim Together add-on":[/b] the game started with a different [font=Courier New]SkyrimTogether.exe[/font]. In MO2, check the copied launcher is the one in the Skyrim Together Reborn mod; in Vortex, check the load order.
+[b]"SetPhonemeModifier was never registered":[/b] Mfg Fix NG (or Mfg Fix) is missing.
+[b]The mouth moves on noise or misses quiet speech:[/b] raise or lower [font=Courier New]GateDb[/font] and [font=Courier New]VoiceThreshold[/font] in the INI. [b]Too subtle or too strong:[/b] change [font=Courier New]MouthStrength[/font].
+
+[size=5][b]How it works[/b][/size]
+Skyrim Together has no lip sync of its own. This mod has two parts:
+[list]
+[*][b]LipSyncTogether.dll[/b] (SKSE plugin): listens to your microphone, tells your voice apart from noise by its pitch, and turns it into five mouth shapes (jaw, spread, round, closed lips, teeth). It reads no game memory, so one DLL works on every game version.
+[*][b]SkyrimTogether.exe[/b] for your Skyrim Together and game version: that exact Skyrim Together release with our small add-ons. LipSync Together's puts the shapes on your face with Mfg Fix's phoneme function, sends them through Skyrim Together's existing relay (a few bytes, only while you speak), and puts the other players' shapes on their characters. It is the same launcher our other mods ship, so they never fight over it. Nothing else in Skyrim Together is changed. On 1.5.97 the installer also adds the files Skyrim Together needs to run on that version.
+[/list]
+
+[size=5][b]Compatibility[/b][/size]
+[list]
+[*][b]SkyParkour Together and RaceMenu Together[/b]: fully compatible. All our mods ship the identical launcher carrying every add-on, so install them in any order and every feature works. Keep them up to date.
+[*][b]Other mods that replace or patch SkyrimTogether.exe[/b] (other Skyrim Together forks, STRPluginMessagingAPI) conflict with this mod: only one launcher can be used.
+[*]Expression mods keep working: LipSync Together only sets mouth phonemes, never expressions or modifiers, and hands the mouth back when you stop talking.
+[*]Don't combine it with other lip sync mods for Skyrim Together that move the same characters' mouths.
+[/list]
+
+[size=5][b]Privacy[/b][/size]
+The microphone only opens while the game runs with the add-on and is only analysed on your PC. No audio is recorded, stored or sent - only a three-character mouth shape, a few times a second, while you speak.
+
+[size=5][b]Uninstall[/b][/size]
+[b]MO2:[/b] delete the copied [font=Courier New]SkyrimTogether.exe[/font] from the Skyrim Together Reborn mod, rename [font=Courier New]SkyrimTogether.original.exe[/font] back, then remove this mod. [b]Vortex:[/b] remove the mod.
+
+[size=5][b]Credits[/b][/size]
+[list]
+[*]The authors of [b]Mfg Fix NG[/b] and [b]Mfg Fix[/b], whose phoneme function moves the faces. LipSync Together is an [b]unofficial[/b] add-on, not affiliated with or endorsed by them, and includes none of their files.
+[*][b]Tilted Phoques[/b] and every Skyrim Together Reborn contributor, and [b]absol89[/b] for the 1.8.5 release.
+[/list]
+
+[size=5][b]Source and license[/b][/size]
+GPLv3. Source code: [url=https://github.com/mailamea10/TiltedEvolution-dwmapi.dll/tree/release/lipsync-together/Mods/LipSyncTogether]GitHub[/url].

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<fomod>
+  <Name>LipSync Together (Voice Lip Sync)</Name>
+  <Author>mailamea10</Author>
+  <Version MachineVersion="0.2.0">0.2.0</Version>
+  <Website>https://github.com/mailamea10/TiltedEvolution-dwmapi.dll</Website>
+  <Description>Moves your character's mouth while you talk into your microphone, and shows it to every other Skyrim Together Reborn player: talk to your friends through your characters. Voice only, no webcam; keyboard clicks and fan noise are ignored. Requires Mfg Fix NG (or Mfg Fix). Supports Skyrim Together Reborn 1.8.3 from Nexus (Skyrim 1.7.104 and 1.6.1170/1.6.1179) and Skyrim Together Reborn 1.8.5 (Skyrim 1.7.104, 1.6.1170/1.6.1179 and 1.5.97).</Description>
+  <Groups>
+    <element>Immersion</element>
+    <element>Multiplayer</element>
+  </Groups>
+</fomod>

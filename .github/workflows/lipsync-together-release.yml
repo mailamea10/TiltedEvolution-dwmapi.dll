@@ -1,0 +1,119 @@
+name: LipSync Together release
+
+# Builds the LipSync Together FOMOD:
+# - the SKSE plugin (one DLL for every runtime; it touches no game memory) and its INI,
+# - the shared Skyrim Together launcher (release/together-launcher), which carries the add-ons of every mod in
+#   this repository, from the together-launcher pre-release: one per Skyrim Together release and game version,
+#   so this mod's SkyrimTogether.exe is the same file every other mod of ours ships,
+# and adds the archive to the GitHub release, next to any archives already there.
+#
+# The Together Launcher workflow starts this one after every launcher build.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'release/lipsync-together**'
+
+env:
+  MOD_VERSION: '0.2.0'
+  # The release page every version is published on.
+  RELEASE_TAG: 'lipsync-together-v0.2.0'
+
+jobs:
+  plugin:
+    name: SKSE plugin
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Build LipSyncTogether.dll
+        shell: cmd
+        run: call Mods\LipSyncTogether\Plugin\build.bat
+
+      - name: Check the exports
+        shell: cmd
+        run: dumpbin /exports Mods\LipSyncTogether\Plugin\build\LipSyncTogether.dll | findstr /C:"SKSEPlugin_" /C:"STRLipSync_"
+
+      - name: Upload the plugin
+        uses: actions/upload-artifact@v7
+        with:
+          name: plugin
+          retention-days: 14
+          if-no-files-found: error
+          path: Mods/LipSyncTogether/Plugin/build/LipSyncTogether.dll
+
+  package:
+    name: FOMOD
+    needs: [plugin]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: plugin
+          path: artifacts/plugin
+
+      - name: Assemble the FOMOD
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          trap 'echo "::error::FOMOD assembly failed at line $LINENO: $BASH_COMMAND"' ERR
+          root=Mods/LipSyncTogether
+          pkg="pkg"
+          mkdir -p "$pkg/fomod/images" "$pkg/00 Core/SKSE/Plugins" "$pkg/00 Core/Docs"
+          cp "$root/fomod/info.xml" "$root/fomod/ModuleConfig.xml" "$pkg/fomod/"
+          cp "$root/fomod/images/banner.png" "$pkg/fomod/images/"
+          cp artifacts/plugin/LipSyncTogether.dll "$root/Plugin/LipSyncTogether.ini" "$pkg/00 Core/SKSE/Plugins/"
+          cp "$root/README.txt" "$pkg/00 Core/Docs/LipSync Together - README.txt"
+          cp LICENSE "$pkg/00 Core/Docs/LipSync Together - LICENSE.txt"
+          # The shared launcher, one archive per Skyrim Together release and game version.
+          gh release download together-launcher --repo "$GITHUB_REPOSITORY" -p 'TogetherLauncher-*.zip' -p 'LAUNCHER_MANIFEST.txt' -D launcher
+          # A launcher built before this mod joined Mods/TogetherLauncher/addons.txt has no LipSync add-on; never
+          # ship one of those.
+          if ! grep -q 'add-on: release/lipsync-together' launcher/LAUNCHER_MANIFEST.txt; then
+            echo "::error::The together-launcher build does not include release/lipsync-together yet; rebuild it (release/together-launcher) first."
+            exit 1
+          fi
+          for archive in launcher/TogetherLauncher-*.zip; do
+            unzip -q -o "$archive" -d "$pkg"
+          done
+          cp launcher/LAUNCHER_MANIFEST.txt "$pkg/00 Core/Docs/LipSync Together - launcher manifest.txt"
+          find "$pkg" -type f | sort
+          name="LipSync_Together_Voice_Lip_Sync-${MOD_VERSION}-STR-1.8.3-and-1.8.5.zip"
+          (cd "$pkg" && zip -r -q "../$name" .)
+          ls -la "$name"
+          echo "ARCHIVE=$name" >> "$GITHUB_ENV"
+
+      - name: Upload the FOMOD
+        uses: actions/upload-artifact@v7
+        with:
+          name: LipSyncTogether-${{ env.MOD_VERSION }}
+          retention-days: 30
+          if-no-files-found: error
+          path: ${{ env.ARCHIVE }}
+
+      - name: Add the archive to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Every version is published on the first release's page, so its link stays the one to share; older
+          # archives stay there for download next to the current one. The page starts as a pre-release; once
+          # it is set otherwise, that status is left as it was set.
+          tag="${RELEASE_TAG}"
+          if ! gh release view "$tag" > /dev/null 2>&1; then
+            gh release create "$tag" --prerelease --target "$GITHUB_SHA" \
+              --title "LipSync Together (SKSE Voice Lip Sync) ${MOD_VERSION}" \
+              --notes-file Mods/LipSyncTogether/RELEASE_NOTES.md
+          fi
+          gh release upload "$tag" "$ARCHIVE" --clobber
+          gh release edit "$tag" --title "LipSync Together (SKSE Voice Lip Sync) ${MOD_VERSION}" \
+            --notes-file Mods/LipSyncTogether/RELEASE_NOTES.md
