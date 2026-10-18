@@ -167,7 +167,7 @@ jobs:
           $dumpbin = Get-ChildItem -Recurse "$vs\VC\Tools\MSVC" -Filter dumpbin.exe | Where-Object { $_.FullName -match 'Hostx64\\x64' } | Select-Object -First 1
           $exports = & $dumpbin.FullName /exports $exe.FullName
           $missing = @()
-          foreach ($name in @('STRModSync_HostApiVersion', 'STRRaceMenu_HostApiVersion')) {
+          foreach ($name in @('STRModSync_HostApiVersion', 'STRRaceMenu_HostApiVersion', 'STRLipSync_HostApiVersion')) {
             if (-not ($exports -match $name)) { $missing += $name }
           }
           if ($missing.Count -gt 0) { Write-Error "missing exports: $($missing -join ', ')"; exit 1 }

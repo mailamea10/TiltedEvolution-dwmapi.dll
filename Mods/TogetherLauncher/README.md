@@ -3,7 +3,7 @@
 The Skyrim Together launcher (`SkyrimTogether.exe`) that every one of our SKSE mod releases ships, built
 once per supported Skyrim Together release and game version with **all** of our Skyrim Together add-ons in it.
 
-Each mod (SkyParkour Together, RaceMenu Together, ...) has two halves: an SKSE plugin and a small add-on
+Each mod (SkyParkour Together, RaceMenu Together, LipSync Together, ...) has two halves: an SKSE plugin and a small add-on
 inside the Skyrim Together launcher. Only one `SkyrimTogether.exe` can be in use, so if every mod shipped a
 launcher with only its own add-on, installing two of them would switch one off. With one shared launcher:
 
