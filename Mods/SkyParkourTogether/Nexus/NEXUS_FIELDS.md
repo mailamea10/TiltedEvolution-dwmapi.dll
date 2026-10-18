@@ -28,7 +28,7 @@ Off-site requirements:
 - File name: SkyParkour Together (Parkour Animations Sync)
 - File version: 1.0.1
 - Category: Main files
-- Upload: SkyParkour_Together_Parkour_Animations_Sync-1.0.1-STR-1.8.3-and-1.8.5.zip (from the GitHub release skyparkour-together-v1.0.1)
+- Upload: SkyParkour_Together_Parkour_Animations_Sync-1.0.1-STR-1.8.3-and-1.8.5.zip (from the GitHub release skyparkour-together-v1.0.0, which carries every version)
 - File description: FOMOD installer for Skyrim Together Reborn 1.8.3 from Nexus (Skyrim 1.7.104 and 1.6.1170/1.6.1179) and Skyrim Together Reborn 1.8.5 (1.7.104, 1.6.1170/1.6.1179, 1.5.97). Every player needs it.
 
 ## Permissions and credits
