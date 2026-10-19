@@ -4,13 +4,13 @@
 - Only your voice moves the mouth: keyboard clicks, fans and room noise are ignored (speech has a pitch, they do not).
 - The mouth follows your own speaking volume and vowels with Skyrim's own phonemes, at about vanilla dialogue strength. Optional push-to-talk and mute keys; everything is set in `LipSyncTogether.ini`.
 
-One FOMOD for the official **Skyrim Together Reborn 1.8.3** from Nexus (Skyrim **1.7.104** and **1.6.1170 / 1.6.1179**) and **Skyrim Together Reborn 1.8.5** (Skyrim 1.7.104, 1.6.1170 / 1.6.1179 and **1.5.97**). The installer asks which Skyrim Together you use, then your game version.
+One FOMOD for the official **Skyrim Together Reborn 1.8.3** from Nexus (Skyrim **1.7.104** and **1.6.1170 / 1.6.1179**) and **Skyrim Together Reborn 1.8.5** (Skyrim 1.7.104, 1.6.1170 / 1.6.1179 and **1.5.97**), and the **Skyrim Together Reborn 1.8.6 playtest** by absol89 (Skyrim 1.7.104 and 1.6.1170 / 1.6.1179). The installer asks which Skyrim Together you use, then your game version.
 
 **Contents**
 - `SKSE/Plugins/LipSyncTogether.dll` and `LipSyncTogether.ini`: one SKSE plugin for every runtime (it uses no game addresses).
 - `SkyrimTogetherReborn/SkyrimTogether.exe` for your Skyrim Together and game version: the shared launcher every one of our mods ships, that release plus our add-ons (LipSync Together's moves and shares mouths; SkyParkour Together's shares parkour; RaceMenu Together's shares appearances). The 1.5.97 option adds the 1.5.97 launcher files Skyrim Together needs on that version.
 
-**Requirements (every player):** Skyrim Together Reborn 1.8.3 or 1.8.5, SKSE for your game version, and Mfg Fix NG or Mfg Fix for your game version (not included). A microphone only for players who want their own mouth to move. Works with any regular server of your Skyrim Together version.
+**Requirements (every player):** Skyrim Together Reborn 1.8.3, 1.8.5 or the 1.8.6 playtest, SKSE for your game version, and Mfg Fix NG or Mfg Fix for your game version (not included). A microphone only for players who want their own mouth to move. Works with any regular server of your Skyrim Together version.
 
 **Installing:** the launcher has to sit in the same folder as the rest of Skyrim Together.
 - **Mod Organizer 2:** after installing, rename `SkyrimTogether.exe` in your Skyrim Together Reborn mod's `SkyrimTogetherReborn` folder to `SkyrimTogether.original.exe`, copy this mod's `SkyrimTogetherReborn/SkyrimTogether.exe` in (on 1.5.97 also `EarlyLoad.dll`, `TPProcess.exe` and the `.map`), and start the game with your usual Skyrim Together entry. Pointing MO2 at the exe inside this mod does not work: it closes straight away.

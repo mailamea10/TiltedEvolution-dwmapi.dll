@@ -36,6 +36,18 @@ Plays on 1.8.5 servers only; 1.8.3 and 1.8.5 cannot join each other's servers.</
                 <type name="Optional" />
               </typeDescriptor>
             </plugin>
+            <plugin name="1.8.6 playtest (absol89)">
+              <description>Skyrim Together Reborn 1.8.6 playtest by absol89 (TiltedEvolutionScriptFixes): release v1.8.6b for 1.6.1170/1.6.1179, or the 1.7.104 build of the 1.8-playtest-1.7.104 branch.
+
+Plays on 1.8.6 playtest servers of the same game version only; it cannot join 1.8.3 or 1.8.5 servers, and the 1.6.1170 and 1.7.104 builds cannot join each other.</description>
+              <image path="fomod\images\banner.png" />
+              <conditionFlags>
+                <flag name="str">1.8.6</flag>
+              </conditionFlags>
+              <typeDescriptor>
+                <type name="Optional" />
+              </typeDescriptor>
+            </plugin>
           </plugins>
         </group>
       </optionalFileGroups>
@@ -115,6 +127,42 @@ Installs the 1.5.97 Skyrim Together launcher with the LipSync Together add-on: S
               <image path="fomod\images\banner.png" />
               <files>
                 <folder source="22 STR 1.8.5 - 1.5.97" destination="" priority="0" />
+              </files>
+              <typeDescriptor>
+                <type name="Optional" />
+              </typeDescriptor>
+            </plugin>
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
+
+    <installStep name="Game version (Skyrim Together 1.8.6)">
+      <visible>
+        <flagDependency flag="str" value="1.8.6" />
+      </visible>
+      <optionalFileGroups order="Explicit">
+        <group name="Which Skyrim do you play on? (Skyrim Together 1.8.6)" type="SelectExactlyOne">
+          <plugins order="Explicit">
+            <plugin name="Skyrim 1.7.104">
+              <description>Skyrim Special/Anniversary Edition 1.7.104 with the Skyrim Together Reborn 1.8.6 playtest for 1.7.104 (absol89).
+
+Installs the Skyrim Together launcher with the LipSync Together add-on (SkyrimTogetherReborn/SkyrimTogether.exe). Mod Organizer 2 users: after installing, copy it into your Skyrim Together Reborn mod's SkyrimTogetherReborn folder (back up the original first); see the README.</description>
+              <image path="fomod\images\banner.png" />
+              <files>
+                <folder source="30 STR 1.8.6 - 1.7.104" destination="" priority="0" />
+              </files>
+              <typeDescriptor>
+                <type name="Optional" />
+              </typeDescriptor>
+            </plugin>
+            <plugin name="Skyrim 1.6.1170 / 1.6.1179">
+              <description>Skyrim Special/Anniversary Edition 1.6.1170 or 1.6.1179 with the Skyrim Together Reborn 1.8.6 playtest v1.8.6b (absol89).
+
+Installs the Skyrim Together launcher with the LipSync Together add-on (SkyrimTogetherReborn/SkyrimTogether.exe). Mod Organizer 2 users: after installing, copy it into your Skyrim Together Reborn mod's SkyrimTogetherReborn folder (back up the original first); see the README.</description>
+              <image path="fomod\images\banner.png" />
+              <files>
+                <folder source="31 STR 1.8.6 - 1.6.1170" destination="" priority="0" />
               </files>
               <typeDescriptor>
                 <type name="Optional" />
