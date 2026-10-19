@@ -19,11 +19,13 @@ Requirements (every player in the session)
                                1.6.1170 / 1.6.1179 (optional file "for 1.6.1170")
   1.8.5 (absol89)              1.7.104, 1.6.1170 / 1.6.1179
   1.8.5 (1.5.97 port)          1.5.97
+  1.8.6 playtest (absol89)     1.7.104, 1.6.1170 / 1.6.1179
 
 The installer first asks which Skyrim Together you use, then your game
 version. Not sure? You have the official one from Nexus: pick 1.8.3.
 
-1.8.3 and 1.8.5 cannot play together, so everyone in a session uses the same
+1.8.3, 1.8.5 and 1.8.6 cannot play together (nor 1.8.6 on 1.7.104 with 1.8.6 on
+1.6.1170), so everyone in a session uses the same
 one. Any regular server of that version works; nothing is installed on the
 server.
 
