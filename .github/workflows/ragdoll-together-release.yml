@@ -104,10 +104,10 @@ jobs:
           # not) is left as it was set.
           tag="${RELEASE_TAG}"
           if ! gh release view "$tag" > /dev/null 2>&1; then
-            gh release create "$tag" --target "$GITHUB_SHA" --prerelease \
-              --title "Ragdoll Together (SKSE Ragdoll Physics Sync) ${MOD_VERSION}" \
+            gh release create "$tag" --target "$GITHUB_SHA" \
+              --title "Ragdoll/Physics Together SKSE ${MOD_VERSION}" \
               --notes-file Mods/RagdollTogether/RELEASE_NOTES.md
           fi
           gh release upload "$tag" "$ARCHIVE" --clobber
-          gh release edit "$tag" --title "Ragdoll Together (SKSE Ragdoll Physics Sync) ${MOD_VERSION}" \
+          gh release edit "$tag" --title "Ragdoll/Physics Together SKSE ${MOD_VERSION}" \
             --notes-file Mods/RagdollTogether/RELEASE_NOTES.md

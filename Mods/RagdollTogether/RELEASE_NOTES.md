@@ -1,4 +1,4 @@
-**Ragdoll Together (Ragdoll Physics Sync) 1.0.0** shows every Skyrim Together Reborn player the same ragdoll: when a player or NPC is knocked down, flung by a shout, killed or knocked out, the body falls, bounces, comes to rest and gets up on everyone's screen exactly as on the screen of the player who controls it.
+**Ragdoll/Physics Together SKSE 1.0.0** (Ragdoll Together) shows every Skyrim Together Reborn player the same ragdoll: when a player or NPC is knocked down, flung by a shout, killed or knocked out, the body falls, bounces, comes to rest and gets up on everyone's screen exactly as on the screen of the player who controls it.
 
 One FOMOD for the official **Skyrim Together Reborn 1.8.3** from Nexus (Skyrim **1.7.104** and **1.6.1170 / 1.6.1179**) and **Skyrim Together Reborn 1.8.5** (Skyrim 1.7.104, 1.6.1170 / 1.6.1179 and **1.5.97**), and the **Skyrim Together Reborn 1.8.6 playtest** by absol89 (Skyrim 1.7.104 and 1.6.1170 / 1.6.1179). The installer asks which Skyrim Together you use, then your game version.
 
