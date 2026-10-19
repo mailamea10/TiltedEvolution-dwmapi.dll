@@ -6,3 +6,4 @@
 release/skyparkour-together Mods/SkyParkourTogether/StrAddon/apply_addon.py skyparkour-together-release.yml
 release/racemenu-together Mods/RaceMenuTogether/StrAddon/apply_addon.py racemenu-together-release.yml
 release/lipsync-together Mods/LipSyncTogether/StrAddon/apply_addon.py lipsync-together-release.yml
+release/ragdoll-together Mods/RagdollTogether/StrAddon/apply_addon.py ragdoll-together-release.yml
