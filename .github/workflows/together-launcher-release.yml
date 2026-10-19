@@ -58,6 +58,23 @@ jobs:
             version: v1.8.5
             protocol: '1.8.5'
             legacy: true
+          # Skyrim Together Reborn 1.8.6 playtest (absol89), Skyrim 1.7.104: branch 1.8-playtest-1.7.104. Its servers
+          # accept exactly the version its own build reports, so that string is pinned.
+          - id: 186-1.7.104
+            base: 2eb8693f1322f6b7a29611fc145586fce01cc2ad
+            source: https://github.com/absol89/TiltedEvolutionScriptFixes.git
+            folder: '30 STR 1.8.6 - 1.7.104'
+            version: v1.8.6a-22-g2eb8693f
+            protocol: '1.8.5'
+            legacy: false
+          # 1.8.6 playtest for 1.6.1170 / 1.6.1179: release v1.8.6b, branch 1.8-playtest
+          - id: 186-1.6.1170
+            base: 77dfb6447ad561a4678d46039c126e1e222e2668
+            source: https://github.com/absol89/TiltedEvolutionScriptFixes.git
+            folder: '31 STR 1.8.6 - 1.6.1170'
+            version: v1.8.6b-15-g77dfb644
+            protocol: '1.8.5'
+            legacy: false
     defaults:
       run:
         shell: bash
@@ -77,6 +94,11 @@ jobs:
       - name: Select base commit and pin protocol version
         working-directory: str
         run: |
+          # Bases from another repository are fetched by commit, without that repository's tags, so the pinned
+          # version below is the only tag on them.
+          if [ -n "${{ matrix.source }}" ]; then
+            git fetch --no-tags "${{ matrix.source }}" "${{ matrix.base }}"
+          fi
           git checkout --force "${{ matrix.base }}"
           git log -1 --format='base: %H %s'
           git tag -f "${{ matrix.version }}" HEAD

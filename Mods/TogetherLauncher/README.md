@@ -20,6 +20,12 @@ launcher with only its own add-on, installing two of them would switch one off. 
 | `20 STR 1.8.5 - 1.7.104` | 1.8.5 (absol89) | 1.7.104 | `0f1876e6` |
 | `21 STR 1.8.5 - 1.6.1170` | 1.8.5 (absol89) | 1.6.1170 / 1.6.1179 | `043dad02` |
 | `22 STR 1.8.5 - 1.5.97` | 1.8.5, 1.5.97 port | 1.5.97 | `e6a097e1` |
+| `30 STR 1.8.6 - 1.7.104` | 1.8.6 playtest (absol89), reports `v1.8.6a-22-g2eb8693f` | 1.7.104 | `2eb8693f` |
+| `31 STR 1.8.6 - 1.6.1170` | 1.8.6 playtest (absol89, release v1.8.6b), reports `v1.8.6b-15-g77dfb644` | 1.6.1170 / 1.6.1179 | `77dfb644` |
+
+The 1.8.6 playtest bases come from absol89's TiltedEvolutionScriptFixes. Its servers only accept a client that
+reports exactly the version their own build does, so each launcher reports that string; 1.8.6 on 1.7.104 and on
+1.6.1170 therefore play on separate servers.
 
 ## Build
 
