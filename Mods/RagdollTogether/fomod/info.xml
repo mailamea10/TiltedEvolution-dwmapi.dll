@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<fomod>
+  <Name>Ragdoll Together (Ragdoll Physics Sync)</Name>
+  <Author>mailamea10</Author>
+  <Version MachineVersion="1.0.0">1.0.0</Version>
+  <Website>https://github.com/mailamea10/TiltedEvolution-dwmapi.dll</Website>
+  <Description>Shows every Skyrim Together Reborn player the same ragdoll: when a player or NPC is knocked down, flung by a shout, killed or knocked out, everyone sees the body fall, bounce, come to rest and get up exactly as on its owner's screen, instead of a stiff or T-posed body. Supports Skyrim Together Reborn 1.8.3 from Nexus (Skyrim 1.7.104 and 1.6.1170/1.6.1179) and Skyrim Together Reborn 1.8.5 (Skyrim 1.7.104, 1.6.1170/1.6.1179 and 1.5.97).</Description>
+  <Groups>
+    <element>Animation</element>
+    <element>Multiplayer</element>
+  </Groups>
+</fomod>

@@ -1,0 +1,113 @@
+name: Ragdoll Together release
+
+# Builds the Ragdoll Together FOMOD:
+# - the SKSE plugin (one DLL for every runtime; it touches no game memory),
+# - the shared Skyrim Together launcher (release/together-launcher), which carries the add-ons of every mod in
+#   this repository, from the together-launcher pre-release: one per Skyrim Together release and game version,
+#   so this mod's SkyrimTogether.exe is the same file every other mod of ours ships,
+# and adds the archive to the GitHub release, next to any archives already there.
+#
+# The Together Launcher workflow starts this one after every launcher build.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'release/ragdoll-together**'
+
+env:
+  MOD_VERSION: '1.0.0'
+  # The release page every version is published on.
+  RELEASE_TAG: 'ragdoll-together-v1.0.0'
+
+jobs:
+  plugin:
+    name: SKSE plugin
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Build RagdollTogether.dll
+        shell: cmd
+        run: call Mods\RagdollTogether\Plugin\build.bat
+
+      - name: Check the exports
+        shell: cmd
+        run: dumpbin /exports Mods\RagdollTogether\Plugin\build\RagdollTogether.dll | findstr /C:"SKSEPlugin_" /C:"STRRagdoll_"
+
+      - name: Upload the plugin
+        uses: actions/upload-artifact@v7
+        with:
+          name: plugin
+          retention-days: 14
+          if-no-files-found: error
+          path: Mods/RagdollTogether/Plugin/build/RagdollTogether.dll
+
+  package:
+    name: FOMOD
+    needs: [plugin]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: plugin
+          path: artifacts/plugin
+
+      - name: Assemble the FOMOD
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          trap 'echo "::error::FOMOD assembly failed at line $LINENO: $BASH_COMMAND"' ERR
+          root=Mods/RagdollTogether
+          pkg="pkg"
+          mkdir -p "$pkg/fomod/images" "$pkg/00 Core/SKSE/Plugins" "$pkg/00 Core/Docs"
+          cp "$root/fomod/info.xml" "$root/fomod/ModuleConfig.xml" "$pkg/fomod/"
+          cp "$root/fomod/images/banner.png" "$pkg/fomod/images/"
+          cp artifacts/plugin/RagdollTogether.dll "$pkg/00 Core/SKSE/Plugins/"
+          cp "$root/README.txt" "$pkg/00 Core/Docs/Ragdoll Together - README.txt"
+          cp LICENSE "$pkg/00 Core/Docs/Ragdoll Together - LICENSE.txt"
+          # The shared launcher, one archive per Skyrim Together release and game version.
+          gh release download together-launcher --repo "$GITHUB_REPOSITORY" -p 'TogetherLauncher-*.zip' -p 'LAUNCHER_MANIFEST.txt' -D launcher
+          for archive in launcher/TogetherLauncher-*.zip; do
+            unzip -q -o "$archive" -d "$pkg"
+          done
+          cp launcher/LAUNCHER_MANIFEST.txt "$pkg/00 Core/Docs/Ragdoll Together - launcher manifest.txt"
+          find "$pkg" -type f | sort
+          name="Ragdoll_Together_Physics_Sync-${MOD_VERSION}-STR-1.8.3-and-1.8.5.zip"
+          (cd "$pkg" && zip -r -q "../$name" .)
+          ls -la "$name"
+          echo "ARCHIVE=$name" >> "$GITHUB_ENV"
+
+      - name: Upload the FOMOD
+        uses: actions/upload-artifact@v7
+        with:
+          name: RagdollTogether-${{ env.MOD_VERSION }}
+          retention-days: 30
+          if-no-files-found: error
+          path: ${{ env.ARCHIVE }}
+
+      - name: Add the archive to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Every version is published on the first release's page, so its link stays the one to share; older
+          # archives stay there for download next to the current one. The release's status (pre-release or
+          # not) is left as it was set.
+          tag="${RELEASE_TAG}"
+          if ! gh release view "$tag" > /dev/null 2>&1; then
+            gh release create "$tag" --target "$GITHUB_SHA" --prerelease \
+              --title "Ragdoll Together (SKSE Ragdoll Physics Sync) ${MOD_VERSION}" \
+              --notes-file Mods/RagdollTogether/RELEASE_NOTES.md
+          fi
+          gh release upload "$tag" "$ARCHIVE" --clobber
+          gh release edit "$tag" --title "Ragdoll Together (SKSE Ragdoll Physics Sync) ${MOD_VERSION}" \
+            --notes-file Mods/RagdollTogether/RELEASE_NOTES.md
