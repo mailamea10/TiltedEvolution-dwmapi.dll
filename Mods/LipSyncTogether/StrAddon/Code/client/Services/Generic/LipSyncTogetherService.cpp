@@ -377,7 +377,7 @@ void LipSyncTogetherService::ScanForPlugin() noexcept
 
         m_pDescriptor = pDescriptor;
         for (auto it = m_pendingVoiceKeys.begin(); it != m_pendingVoiceKeys.end(); ++it)
-            m_pDescriptor->AddVoiceKey(it->first, it->second.c_str());
+            Descriptor(m_pDescriptor)->AddVoiceKey(it->first, it->second.c_str());
         m_pendingVoiceKeys.clear();
         m_window.SetDescriptor(pDescriptor);
         spdlog::info("LipSync Together: found {} {} in {} (own face {}, strength {:.2f}, remote delay {:.0f} ms, max distance {:.0f})",
@@ -550,7 +550,7 @@ void LipSyncTogetherService::OnNotifyScriptAnimation(const NotifyScriptAnimation
                 return;
         }
         if (m_pDescriptor)
-            m_pDescriptor->AddVoiceKey(cPlayerId, cKey.c_str());
+            Descriptor(m_pDescriptor)->AddVoiceKey(cPlayerId, cKey.c_str());
         else if (m_pendingVoiceKeys.size() < 256)
             m_pendingVoiceKeys[cPlayerId] = cKey;
 
