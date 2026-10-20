@@ -11,6 +11,8 @@
 #include <Messages/NotifyScriptAnimation.h>
 #include <Messages/ScriptAnimationRequest.h>
 
+#include <Services/ImguiService.h>
+#include <Services/OverlayService.h>
 #include <Services/TransportService.h>
 
 #include <Actor.h>
@@ -24,7 +26,10 @@
 
 #include <algorithm>
 #include <atomic>
+#include <mutex>
+#include <string>
 #include <cmath>
+#include <cctype>
 #include <cstdlib>
 #include <cstring>
 
@@ -43,6 +48,7 @@ namespace
 #define STR_LIPSYNC_NO_OBJECT 0xFFFFFFFFu
 #endif
 constexpr const char* kWirePrefix = "STRLS1|";
+constexpr const char* kVoiceKeyPrefix = "STRVK1|";
 constexpr uint32_t kNoObject = STR_LIPSYNC_NO_OBJECT;
 
 // A mouth state is three characters: the jaw (0-7), the strongest lip shape (N none, W wide, R round, L lips
@@ -91,6 +97,25 @@ enum Phoneme : uint32_t
 using Shape = LipSyncTogetherService::Shape;
 
 std::atomic<NativeFunction*> s_setPhonemeModifier{nullptr};
+
+// The server the game last dialled ("host:port"), from the connect handler.
+std::mutex s_endpointLock;
+std::string s_endpoint;
+
+// "host:port" or "[v6]:port" -> host.
+std::string HostOf(const std::string& acEndpoint)
+{
+    if (!acEndpoint.empty() && acEndpoint.front() == '[')
+    {
+        const size_t cClose = acEndpoint.find(']');
+        return cClose == std::string::npos ? std::string{} : acEndpoint.substr(1, cClose - 1);
+    }
+    const size_t cColon = acEndpoint.rfind(':');
+    // More than one colon without brackets is a bare IPv6 address.
+    if (cColon == std::string::npos || acEndpoint.find(':') != cColon)
+        return acEndpoint;
+    return acEndpoint.substr(0, cColon);
+}
 
 bool StartsWith(const String& acText, const char* acpPrefix) noexcept
 {
@@ -301,6 +326,12 @@ void LipSyncTogether_OnNativeRegistered(NativeFunction* apFunction) noexcept
         s_setPhonemeModifier.store(apFunction);
 }
 
+void LipSyncTogether_OnConnect(const char* acpEndpoint) noexcept
+{
+    std::lock_guard guard(s_endpointLock);
+    s_endpoint = acpEndpoint ? acpEndpoint : "";
+}
+
 void LipSyncTogetherService::FaceState::Forget() noexcept
 {
     std::fill(std::begin(Written), std::end(Written), static_cast<int8_t>(-1));
@@ -310,6 +341,7 @@ void LipSyncTogetherService::FaceState::Forget() noexcept
 LipSyncTogetherService::LipSyncTogetherService(World& aWorld, TransportService& aTransport, entt::dispatcher& aDispatcher) noexcept
     : m_world(aWorld)
     , m_transport(aTransport)
+    , m_window(aWorld.ctx().at<ImguiService>())
 {
     m_updateConnection = aDispatcher.sink<UpdateEvent>().connect<&LipSyncTogetherService::OnUpdate>(this);
     m_notifyConnection = aDispatcher.sink<NotifyScriptAnimation>().connect<&LipSyncTogetherService::OnNotifyScriptAnimation>(this);
@@ -333,7 +365,10 @@ void LipSyncTogetherService::ScanForPlugin() noexcept
         K32GetModuleBaseNameA(GetCurrentProcess(), modules[i], path, MAX_PATH);
 
         const STRLipSync::Descriptor* pDescriptor = getDescriptor();
-        if (!pDescriptor || pDescriptor->ApiVersion != STRLipSync::kApiVersion || !pDescriptor->GetFrame || !pDescriptor->Config)
+        if (!pDescriptor || pDescriptor->ApiVersion != STRLipSync::kApiVersion || !pDescriptor->GetFrame || !pDescriptor->Config ||
+            !pDescriptor->GetSettingCount || !pDescriptor->GetSettingInfo || !pDescriptor->GetSetting || !pDescriptor->SetSetting ||
+            !pDescriptor->SaveSettings || !pDescriptor->ReloadSettings || !pDescriptor->HasUnsavedChanges || !pDescriptor->ListDevices ||
+            !pDescriptor->GetMeter || !pDescriptor->GetVoiceStatus || !pDescriptor->GetVoiceKey || !pDescriptor->AddVoiceKey)
         {
             spdlog::warn("LipSync Together: {} has a descriptor this add-on cannot use (API {}, add-on API {})", path, pDescriptor ? pDescriptor->ApiVersion : 0,
                          STRLipSync::kApiVersion);
@@ -341,6 +376,10 @@ void LipSyncTogetherService::ScanForPlugin() noexcept
         }
 
         m_pDescriptor = pDescriptor;
+        for (auto it = m_pendingVoiceKeys.begin(); it != m_pendingVoiceKeys.end(); ++it)
+            m_pDescriptor->AddVoiceKey(it->first, it->second.c_str());
+        m_pendingVoiceKeys.clear();
+        m_window.SetDescriptor(pDescriptor);
         spdlog::info("LipSync Together: found {} {} in {} (own face {}, strength {:.2f}, remote delay {:.0f} ms, max distance {:.0f})",
                      pDescriptor->ModName ? pDescriptor->ModName : "?", pDescriptor->ModVersion ? pDescriptor->ModVersion : "", path,
                      pDescriptor->Config->AnimateSelf ? "on" : "off", pDescriptor->Config->MouthStrength, pDescriptor->Config->RemoteDelaySeconds * 1000.f,
@@ -417,7 +456,9 @@ void LipSyncTogetherService::OnUpdate(const UpdateEvent& acEvent) noexcept
     if (m_applyTimer <= 0.0)
         m_applyTimer = kApplyInterval;
 
+    UpdateWindow();
     UpdateLocal(acEvent.Delta, cApply);
+    UpdateVoice(cOnline, cApply);
     if (cOnline)
         UpdateRemotes(acEvent.Delta, cApply);
 }
@@ -490,6 +531,34 @@ void LipSyncTogetherService::SendLocal(const Shape& acMouth, bool aSpeaking) noe
 void LipSyncTogetherService::OnNotifyScriptAnimation(const NotifyScriptAnimation& acMessage) noexcept
 {
     const String& cWire = acMessage.EventName;
+
+    // The current player's random voice key goes through the existing server string relay. A player hosting the
+    // voice relay accepts only the keys it has received this way.
+    if (StartsWith(cWire, kVoiceKeyPrefix))
+    {
+        const size_t cStart = strlen(kVoiceKeyPrefix);
+        const size_t cBar = cWire.find('|', cStart);
+        if (cBar == String::npos || cBar == cStart || cBar - cStart > 8)
+            return;
+        const uint32_t cPlayerId = static_cast<uint32_t>(strtoul(cWire.substr(cStart, cBar - cStart).c_str(), nullptr, 16));
+        const String cKey = cWire.substr(cBar + 1);
+        if (cKey.size() != 32)
+            return;
+        for (const char c : cKey)
+        {
+            if (!isxdigit(static_cast<unsigned char>(c)))
+                return;
+        }
+        if (m_pDescriptor)
+            m_pDescriptor->AddVoiceKey(cPlayerId, cKey.c_str());
+        else if (m_pendingVoiceKeys.size() < 256)
+            m_pendingVoiceKeys[cPlayerId] = cKey;
+
+
+
+        return;
+    }
+
     if (!m_pDescriptor || !StartsWith(cWire, kWirePrefix))
         return;
 
@@ -539,6 +608,16 @@ void LipSyncTogetherService::UpdateRemotes(double aDelta, bool aApply) noexcept
     for (auto it = m_remotes.begin(); it != m_remotes.end(); ++it)
     {
         auto& remote = it.value(); // hopscotch_map: second is read-only
+
+        // A player whose voice is heard: the mouth follows the voice as it plays.
+        STRLipSync::Frame voiced{};
+        if (m_voiceSession && pDescriptor->GetRemoteMouth && pDescriptor->GetRemoteMouth(it->first, &voiced))
+        {
+            remote.Queue.clear();
+            remote.Target = Shape{Clamp01(voiced.Open), Clamp01(voiced.Wide), Clamp01(voiced.Round), Clamp01(voiced.Lips), Clamp01(voiced.Teeth)};
+            remote.Current = remote.Target;
+            continue;
+        }
 
         // Show what arrived a moment ago, so uneven arrival does not make the mouth stutter.
         size_t due = 0;
@@ -666,4 +745,158 @@ void LipSyncTogetherService::ReportTiming(double aDelta) noexcept
     m_frameTimeSum = 0.0;
     m_longestFrame = 0.0;
     m_frameCount = 0;
+}
+
+void LipSyncTogetherService::UpdateVoice(bool aOnline, bool aMix) noexcept
+{
+    const auto* pDescriptor = Descriptor(m_pDescriptor);
+    if (!pDescriptor->SetSession || !pDescriptor->SetMix)
+        return;
+    if (!pDescriptor->Config->VoiceChat)
+    {
+        // Switched off in the settings window: leave the voice session.
+        if (m_voiceSession)
+        {
+            pDescriptor->SetSession(nullptr, 0);
+            m_voiceSession = false;
+            m_voiceHost.clear();
+            spdlog::info("LipSync Together: voice chat switched off");
+        }
+        return;
+    }
+
+    // The session follows the connection: the server's host, where the relay runs, and our player id.
+    std::string host;
+    {
+        std::lock_guard guard(s_endpointLock);
+        host = HostOf(s_endpoint);
+    }
+    const uint32_t cPlayerId = m_transport.GetLocalPlayerId();
+    if (aOnline && !host.empty())
+    {
+        if (!m_voiceSession || m_voiceHost != host.c_str() || m_voicePlayer != cPlayerId)
+        {
+            pDescriptor->SetSession(host.c_str(), cPlayerId);
+            m_voiceSession = true;
+            m_voiceHost = host.c_str();
+            m_voicePlayer = cPlayerId;
+
+            // Publish our random voice key once per STR session. The server retains distinct relayed strings and
+            // delivers them to later joiners, so the host can authenticate their relay hello packets.
+            char voiceKey[33]{};
+            if (pDescriptor->GetVoiceKey(voiceKey, sizeof(voiceKey)))
+            {
+                ScriptAnimationRequest request{};
+                request.FormID = kNoObject;
+                request.EventName = fmt::format("{}{:X}|{}", kVoiceKeyPrefix, cPlayerId, voiceKey).c_str();
+                m_transport.Send(request);
+            }
+
+            spdlog::info("LipSync Together: voice chat on the server at {} as player {:X}", host, cPlayerId);
+        }
+    }
+    else if (m_voiceSession)
+    {
+        pDescriptor->SetSession(nullptr, 0);
+        m_voiceSession = false;
+        m_voiceHost.clear();
+        spdlog::info("LipSync Together: voice chat stopped (left the server)");
+    }
+
+    if (!aMix || !m_voiceSession)
+        return;
+
+    // Who might be heard and from which side, panned by where they stand relative to the way the player faces. The
+    // plugin turns the distance into a volume with the range each voice carries right now (a yell reaches further),
+    // so everyone up to the furthest a yell carries is listed.
+    const float cReach = std::max(pDescriptor->Config->FarDistance, pDescriptor->Config->NearDistance + 1.f) *
+                         std::max(1.f, pDescriptor->Config->MaxRangeScale);
+    auto* pPlayer = PlayerCharacter::Get();
+    m_mix.clear();
+    if (pPlayer)
+    {
+        auto view = m_world.view<PlayerComponent, FormIdComponent>();
+        for (auto entity : view)
+        {
+            auto* pActor = Cast<Actor>(TESForm::GetById(view.get<FormIdComponent>(entity).Id));
+            if (!pActor || !pActor->GetExtension()->IsRemotePlayer() || !pActor->GetNiNode())
+                continue;
+
+            const float cDx = pActor->position.x - pPlayer->position.x;
+            const float cDy = pActor->position.y - pPlayer->position.y;
+            const float cDz = pActor->position.z - pPlayer->position.z;
+            const float cDistance = std::sqrt(cDx * cDx + cDy * cDy + cDz * cDz);
+            if (cDistance >= cReach)
+                continue;
+
+            // Skyrim's heading: 0 faces +Y (north), growing clockwise; the angle to the speaker the same way.
+            const float cAngle = std::atan2(cDx, cDy) - pPlayer->rotation.z;
+            const float cPan = 0.8f * std::sin(cAngle);
+
+            const uint32_t cPlayerId = view.get<PlayerComponent>(entity).Id;
+            m_mix.push_back(STRLipSync::MixEntry{cPlayerId, cDistance, cPan});
+            // So the voice-driven mouth is applied even before any relayed mouth state arrives.
+            m_remotes[cPlayerId];
+        }
+    }
+    pDescriptor->SetMix(m_mix.data(), static_cast<uint32_t>(m_mix.size()));
+}
+
+void LipSyncTogetherService::UpdateWindow() noexcept
+{
+    const auto* pDescriptor = Descriptor(m_pDescriptor);
+    auto& overlay = m_world.ctx().at<OverlayService>();
+
+    // The window key (Shift+V by default), only while the game has the focus and the window is not waiting for a
+    // key to assign.
+    bool toggle = false;
+    const uint32_t cOpenKey = pDescriptor->Config->OpenKey;
+    if (cOpenKey && !m_window.CapturingKey)
+    {
+        DWORD processId = 0;
+        GetWindowThreadProcessId(GetForegroundWindow(), &processId);
+        const bool cFocus = processId == GetCurrentProcessId();
+        const bool cDown = cFocus && (GetAsyncKeyState(static_cast<int>(cOpenKey)) & 0x8000) != 0;
+        const bool cShift = !pDescriptor->Config->OpenKeyShift || (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+        toggle = cDown && !m_openKeyDown && cShift;
+        m_openKeyDown = cDown;
+    }
+
+    const bool cVisible = m_window.Visible;
+    if (m_window.CloseRequested.exchange(false) || (toggle && cVisible))
+    {
+        CloseWindow();
+        return;
+    }
+    if (toggle && !cVisible)
+    {
+        if (!overlay.GetInGame())
+            return;
+        m_window.RefreshDevices = true;
+        m_window.Visible = true;
+        // Skyrim Together's overlay shows the cursor and keeps clicks from reaching the game.
+        if (!overlay.GetActive())
+        {
+            overlay.SetActive(true);
+            m_windowOpenedOverlay = true;
+        }
+        spdlog::info("LipSync Together: settings window opened");
+        return;
+    }
+    // Skyrim Together's menu was closed (its own key or Escape): the window goes with it.
+    if (cVisible && !overlay.GetActive())
+    {
+        m_window.Visible = false;
+        m_windowOpenedOverlay = false;
+    }
+}
+
+void LipSyncTogetherService::CloseWindow() noexcept
+{
+    m_window.Visible = false;
+    auto& overlay = m_world.ctx().at<OverlayService>();
+    if (m_windowOpenedOverlay && overlay.GetActive())
+        overlay.SetActive(false);
+    m_windowOpenedOverlay = false;
+    spdlog::info("LipSync Together: settings window closed");
 }

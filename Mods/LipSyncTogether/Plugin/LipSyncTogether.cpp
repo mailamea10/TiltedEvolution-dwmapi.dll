@@ -1,146 +1,31 @@
-// LipSync Together - moves Skyrim Together players' mouths while they talk.
+// LipSync Together - moves Skyrim Together players' mouths while they talk, and optionally carries their voices.
 //
 // This plugin never touches game memory. It listens to the chosen microphone (WASAPI, shared mode, so voice chat
 // programs keep working), gates out background noise, and turns the voice into five mouth shapes: jaw open from
 // loudness, and lips spread, rounded, closed or teeth together from where the voice's energy sits in the spectrum.
 // The LipSync Together add-on in the Skyrim Together launcher reads those shapes through the STR LipSync API, puts
 // them on the player's face and relays them to the other players, so this one DLL works on every runtime SKSE
-// supports (1.5.97, 1.6.x and 1.7.x).
+// supports (1.5.97, 1.6.x and 1.7.x). With VoiceChat=1 it also sends the voice itself and plays the other players'
+// voices louder the closer they are (Voice.cpp).
 
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#include <windows.h>
-#include <shlobj.h>
-#include <mmdeviceapi.h>
-#include <audioclient.h>
-#include <propsys.h>
+#include "Analyzer.h"
+#include "Common.h"
+#include "Settings.h"
+#include "Voice.h"
 
-#include <algorithm>
 #include <atomic>
-#include <cstdarg>
-#include <cmath>
-#include <cstdint>
-#include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <cwctype>
 #include <fstream>
-#include <string>
 #include <vector>
 
-#include "../StrAddon/Code/client/LipSyncTogether/STRLipSyncAPI.h"
-
-#define LST_VERSION_MAJOR 0
-#define LST_VERSION_MINOR 2
-#define LST_VERSION_PATCH 0
-#define LST_VERSION_STRING "0.2.0"
+using namespace LipSync;
 
 namespace
 {
-// --- log -----------------------------------------------------------------------------------------------------
+// --- settings ---------------------------------------------------------------------------------------------
 
-SRWLOCK s_logLock = SRWLOCK_INIT;
-
-void Log(const char* acpFormat, ...)
-{
-    static std::wstring s_path;
-
-    char line[1024];
-    va_list args;
-    va_start(args, acpFormat);
-    vsnprintf(line, sizeof(line), acpFormat, args);
-    va_end(args);
-
-    AcquireSRWLockExclusive(&s_logLock);
-    if (s_path.empty())
-    {
-        PWSTR pDocuments = nullptr;
-        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Documents, 0, nullptr, &pDocuments)))
-        {
-            std::wstring base = std::wstring(pDocuments) + L"\\My Games\\";
-            CoTaskMemFree(pDocuments);
-
-            // GOG installs keep their own folder.
-            std::wstring folder = base + L"Skyrim Special Edition GOG\\SKSE";
-            if (GetFileAttributesW(folder.c_str()) == INVALID_FILE_ATTRIBUTES)
-                folder = base + L"Skyrim Special Edition\\SKSE";
-            SHCreateDirectoryExW(nullptr, folder.c_str(), nullptr);
-            s_path = folder + L"\\LipSyncTogether.log";
-            DeleteFileW(s_path.c_str());
-        }
-    }
-
-    FILE* pFile = nullptr;
-    if (!s_path.empty() && _wfopen_s(&pFile, s_path.c_str(), L"a") == 0 && pFile)
-    {
-        SYSTEMTIME time;
-        GetLocalTime(&time);
-        fprintf(pFile, "[%02d:%02d:%02d] %s\n", time.wHour, time.wMinute, time.wSecond, line);
-        fclose(pFile);
-    }
-    ReleaseSRWLockExclusive(&s_logLock);
-}
-
-std::string ToUtf8(const wchar_t* acpText)
-{
-    if (!acpText || !*acpText)
-        return {};
-    const int cSize = WideCharToMultiByte(CP_UTF8, 0, acpText, -1, nullptr, 0, nullptr, nullptr);
-    std::string out(cSize > 0 ? cSize - 1 : 0, '\0');
-    if (cSize > 1)
-        WideCharToMultiByte(CP_UTF8, 0, acpText, -1, out.data(), cSize, nullptr, nullptr);
-    return out;
-}
-
-std::wstring ToWide(const std::string& acText)
-{
-    if (acText.empty())
-        return {};
-    const int cSize = MultiByteToWideChar(CP_UTF8, 0, acText.c_str(), -1, nullptr, 0);
-    std::wstring out(cSize > 0 ? cSize - 1 : 0, L'\0');
-    if (cSize > 1)
-        MultiByteToWideChar(CP_UTF8, 0, acText.c_str(), -1, out.data(), cSize);
-    return out;
-}
-
-std::wstring Lower(std::wstring aText)
-{
-    for (auto& c : aText)
-        c = static_cast<wchar_t>(std::towlower(c));
-    return aText;
-}
-
-// --- settings ------------------------------------------------------------------------------------------------
-
-struct Config
-{
-    std::string Device;        // part of the microphone's name; empty for the Windows default communications device
-    float GateDb = 10.f;       // how far above the background noise counts as speech
-    float MinLevelDb = -55.f;  // anything quieter never counts as speech
-    float Sensitivity = 1.f;     // scales how far the jaw opens
-    float HoldSeconds = 0.2f;    // the gate stays open this long after the voice drops, so words do not flutter
-    bool NoiseFilter = true;     // only a voice (a sound with a pitch) opens the gate, not clicks or fans
-    float VoiceThreshold = 0.5f; // how clearly pitched a sound must be to count as a voice (0 to 1)
-    bool ShapesEnabled = true; // false: jaw only
-    uint32_t PushToTalkKey = 0;
-    uint32_t MuteToggleKey = 0;
-    bool LogLevels = false;
-
-    STRLipSync::Settings Shared{1, 1.f, 0.04f, 4096.f, 0};
-};
-
-Config s_config;
-
-std::string Trim(const std::string& acText)
-{
-    const size_t cBegin = acText.find_first_not_of(" \t\r\n");
-    if (cBegin == std::string::npos)
-        return {};
-    const size_t cEnd = acText.find_last_not_of(" \t\r\n");
-    return acText.substr(cBegin, cEnd - cBegin + 1);
-}
-
-// LipSyncTogether.ini next to the DLL. Read with plain file I/O so Mod Organizer's virtual file system serves it.
+// LipSyncTogether.ini next to the DLL, read with plain file I/O so Mod Organizer's virtual file system serves it.
 void LoadConfig(HMODULE aModule)
 {
     wchar_t path[MAX_PATH]{};
@@ -149,89 +34,29 @@ void LoadConfig(HMODULE aModule)
     const size_t cDot = iniPath.find_last_of(L'.');
     if (cDot != std::wstring::npos)
         iniPath.resize(cDot);
-    iniPath += L".ini";
+    g_config.IniPath = iniPath + L".ini";
 
-    std::ifstream file(iniPath);
-    if (!file)
-    {
-        Log("%s not found, using the default settings", ToUtf8(iniPath.c_str()).c_str());
-        return;
-    }
-
-    std::string line;
-    while (std::getline(file, line))
-    {
-        const size_t cComment = line.find_first_of(";#");
-        if (cComment != std::string::npos)
-            line.resize(cComment);
-        const size_t cEquals = line.find('=');
-        if (cEquals == std::string::npos)
-            continue;
-
-        std::string key = Trim(line.substr(0, cEquals));
-        const std::string cValue = Trim(line.substr(cEquals + 1));
-        for (auto& c : key)
-            c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
-
-        const float cNumber = static_cast<float>(atof(cValue.c_str()));
-        const uint32_t cInteger = static_cast<uint32_t>(strtoul(cValue.c_str(), nullptr, 0));
-
-        if (key == "device")
-            s_config.Device = cValue;
-        else if (key == "gatedb")
-            s_config.GateDb = std::clamp(cNumber, 0.f, 40.f);
-        else if (key == "minleveldb")
-            s_config.MinLevelDb = std::clamp(cNumber, -90.f, -10.f);
-        else if (key == "sensitivity")
-            s_config.Sensitivity = std::clamp(cNumber, 0.1f, 5.f);
-        else if (key == "noisefilter")
-            s_config.NoiseFilter = cInteger != 0;
-        else if (key == "voicethreshold")
-            s_config.VoiceThreshold = std::clamp(cNumber, 0.f, 1.f);
-        else if (key == "holdms")
-            s_config.HoldSeconds = std::clamp(cNumber, 0.f, 2000.f) / 1000.f;
-        else if (key == "mode")
-            s_config.ShapesEnabled = _stricmp(cValue.c_str(), "jaw") != 0;
-        else if (key == "pushtotalkkey")
-            s_config.PushToTalkKey = cInteger & 0xFF;
-        else if (key == "mutetogglekey")
-            s_config.MuteToggleKey = cInteger & 0xFF;
-        else if (key == "loglevels")
-        {
-            s_config.LogLevels = cInteger != 0;
-            s_config.Shared.Debug = s_config.LogLevels ? 1 : 0;
-        }
-        else if (key == "animateself")
-            s_config.Shared.AnimateSelf = cInteger != 0 ? 1 : 0;
-        else if (key == "mouthstrength")
-            s_config.Shared.MouthStrength = std::clamp(cNumber, 0.f, 2.f);
-        else if (key == "remotedelayms")
-            s_config.Shared.RemoteDelaySeconds = std::clamp(cNumber, 0.f, 1000.f) / 1000.f;
-        else if (key == "maxdistance")
-            s_config.Shared.MaxDistance = std::clamp(cNumber, 100.f, 100000.f);
-    }
-
-    Log("Settings: device '%s', gate %.1f dB over the noise (never below %.1f dB), voice filter %s (threshold %.2f), sensitivity %.2f, "
-        "hold %.0f ms, mode %s, push-to-talk key 0x%02X, mute toggle key 0x%02X, own face %s, mouth strength %.2f, remote delay %.0f ms, "
-        "max distance %.0f",
-        s_config.Device.empty() ? "(Windows default)" : s_config.Device.c_str(), s_config.GateDb, s_config.MinLevelDb, s_config.NoiseFilter ? "on" : "off",
-        s_config.VoiceThreshold, s_config.Sensitivity, s_config.HoldSeconds * 1000.f, s_config.ShapesEnabled ? "shapes" : "jaw", s_config.PushToTalkKey,
-        s_config.MuteToggleKey,
-        s_config.Shared.AnimateSelf ? "on" : "off", s_config.Shared.MouthStrength, s_config.Shared.RemoteDelaySeconds * 1000.f,
-        s_config.Shared.MaxDistance);
+    Settings::Load();
+    Settings::LogSummary();
+    if (!g_config.Shared.VoiceChat)
+        Log("Voice chat: off (VoiceChat=0); only mouths are shared");
+    if (g_config.Shared.OpenKey)
+        Log("Settings window: %s+key 0x%02X in game", g_config.Shared.OpenKeyShift ? "Shift" : "no modifier", g_config.Shared.OpenKey);
 }
 
 // --- the published mouth -------------------------------------------------------------------------------------
 
 SRWLOCK s_frameLock = SRWLOCK_INIT;
 STRLipSync::Frame s_frame{};
+STRLipSync::Meter s_meter{};
 bool s_haveFrame = false;
 std::string s_deviceName;
 
-void Publish(const STRLipSync::Frame& acFrame)
+void Publish(const Analyzer& acAnalyzer)
 {
     AcquireSRWLockExclusive(&s_frameLock);
-    s_frame = acFrame;
+    s_frame = acAnalyzer.Current();
+    s_meter = acAnalyzer.Meter();
     s_haveFrame = true;
     ReleaseSRWLockExclusive(&s_frameLock);
 }
@@ -245,515 +70,17 @@ void SetDeviceName(const std::string& acName)
     ReleaseSRWLockExclusive(&s_frameLock);
 }
 
-// --- analysis ------------------------------------------------------------------------------------------------
-
-// Second-order IIR section (RBJ cookbook), transposed direct form II.
-struct Biquad
-{
-    float b0{}, b1{}, b2{}, a1{}, a2{};
-    float z1{}, z2{};
-    bool Enabled{false};
-
-    float Run(float aIn) noexcept
-    {
-        const float cOut = b0 * aIn + z1;
-        z1 = b1 * aIn - a1 * cOut + z2;
-        z2 = b2 * aIn - a2 * cOut;
-        return cOut;
-    }
-
-    static Biquad BandPass(float aRate, float aCenter, float aQ) noexcept
-    {
-        Biquad f;
-        if (aCenter >= aRate * 0.45f)
-            return f;
-        const float cW = 2.f * 3.14159265f * aCenter / aRate;
-        const float cAlpha = std::sin(cW) / (2.f * aQ);
-        const float cA0 = 1.f + cAlpha;
-        f.b0 = cAlpha / cA0;
-        f.b1 = 0.f;
-        f.b2 = -cAlpha / cA0;
-        f.a1 = -2.f * std::cos(cW) / cA0;
-        f.a2 = (1.f - cAlpha) / cA0;
-        f.Enabled = true;
-        return f;
-    }
-
-    static Biquad LowPass(float aRate, float aCutoff) noexcept
-    {
-        Biquad f;
-        const float cW = 2.f * 3.14159265f * aCutoff / aRate;
-        const float cAlpha = std::sin(cW) / (2.f * 0.7071f);
-        const float cCos = std::cos(cW);
-        const float cA0 = 1.f + cAlpha;
-        f.b0 = (1.f - cCos) / 2.f / cA0;
-        f.b1 = (1.f - cCos) / cA0;
-        f.b2 = (1.f - cCos) / 2.f / cA0;
-        f.a1 = -2.f * cCos / cA0;
-        f.a2 = (1.f - cAlpha) / cA0;
-        f.Enabled = true;
-        return f;
-    }
-
-    static Biquad HighPass(float aRate, float aCutoff) noexcept
-    {
-        Biquad f;
-        const float cW = 2.f * 3.14159265f * aCutoff / aRate;
-        const float cAlpha = std::sin(cW) / (2.f * 0.7071f);
-        const float cCos = std::cos(cW);
-        const float cA0 = 1.f + cAlpha;
-        f.b0 = (1.f + cCos) / 2.f / cA0;
-        f.b1 = -(1.f + cCos) / cA0;
-        f.b2 = (1.f + cCos) / 2.f / cA0;
-        f.a1 = -2.f * cCos / cA0;
-        f.a2 = (1.f - cAlpha) / cA0;
-        f.Enabled = true;
-        return f;
-    }
-};
-
-float Clamp01(float aValue) noexcept
-{
-    return std::clamp(aValue, 0.f, 1.f);
-}
-
-// Rises from 0 at aLow to 1 at aHigh.
-float Ramp(float aValue, float aLow, float aHigh) noexcept
-{
-    return Clamp01((aValue - aLow) / (aHigh - aLow));
-}
-
-bool GameHasFocus() noexcept
-{
-    DWORD processId = 0;
-    GetWindowThreadProcessId(GetForegroundWindow(), &processId);
-    return processId == GetCurrentProcessId();
-}
-
-// Turns mono samples into mouth shapes, one block (16 ms) at a time.
-//
-// Speech is told apart from other sounds by its pitch: a voiced sound repeats every 2.5 to 12.5 ms (80 to 400 Hz),
-// which keyboard clicks, fans and most room noise do not. With NoiseFilter on, the gate only opens after voicing
-// above the noise in two of the last three blocks, and stays open through the unvoiced consonants that follow
-// for HoldMs. The jaw follows loudness against the speaker's own recent peak, so it opens and closes with the
-// syllables whatever the microphone's gain, and the lip shapes follow how each vowel's spectrum differs from the
-// speaker's own average, so an ordinary voice reads as neutral speech rather than as one fixed vowel.
-struct Analyzer
-{
-    static constexpr float kBlockSeconds = 0.016f;
-    static constexpr float kPitchSeconds = 0.032f;
-
-    explicit Analyzer(float aRate)
-        : m_rate(aRate)
-        , m_blockSamples(std::max<uint32_t>(64, static_cast<uint32_t>(aRate * kBlockSeconds)))
-    {
-        m_highPass = Biquad::HighPass(aRate, 80.f);
-        // First formant / back-vowel second formant, mid, front-vowel second formant, and fricative hiss.
-        m_bands[0] = Biquad::BandPass(aRate, 550.f, 0.8f);
-        m_bands[1] = Biquad::BandPass(aRate, 1350.f, 1.6f);
-        m_bands[2] = Biquad::BandPass(aRate, 2500.f, 1.6f);
-        m_bands[3] = Biquad::BandPass(aRate, 5500.f, 1.0f);
-
-        // Pitch is looked for in the voice brought down to about 8 kHz.
-        m_decimation = std::max<uint32_t>(1, static_cast<uint32_t>(std::lround(aRate / 8000.f)));
-        m_pitchRate = aRate / m_decimation;
-        m_antiAlias = Biquad::LowPass(aRate, 3400.f);
-        m_minLag = std::max<uint32_t>(2, static_cast<uint32_t>(m_pitchRate / 400.f));
-        m_maxLag = static_cast<uint32_t>(m_pitchRate / 80.f);
-        m_window = static_cast<uint32_t>(m_pitchRate * kPitchSeconds);
-        m_history.assign(m_window + m_maxLag, 0.f);
-        m_linear.assign(m_history.size(), 0.f);
-    }
-
-    void Push(float aSample) noexcept
-    {
-        const float cHigh = m_highPass.Run(aSample);
-        m_sumSquares += cHigh * cHigh;
-        for (int b = 0; b < 4; ++b)
-        {
-            if (m_bands[b].Enabled)
-            {
-                const float cBand = m_bands[b].Run(cHigh);
-                m_bandEnergy[b] += cBand * cBand;
-            }
-        }
-        const bool cPositive = cHigh >= 0.f;
-        if (cPositive != m_lastPositive && std::fabs(cHigh) > 1e-4f)
-            ++m_crossings;
-        m_lastPositive = cPositive;
-
-        m_decimationSum += m_antiAlias.Run(cHigh);
-        if (++m_decimationCount >= m_decimation)
-        {
-            m_history[m_historyPos] = m_decimationSum / m_decimation;
-            m_historyPos = (m_historyPos + 1) % m_history.size();
-            m_decimationSum = 0.f;
-            m_decimationCount = 0;
-        }
-
-        if (++m_count >= m_blockSamples)
-            FinishBlock();
-    }
-
-    // No audio arrived for a while (device paused or gone): let the mouth close.
-    void Silence(float aSeconds) noexcept
-    {
-        m_gateOpen = false;
-        m_hold = 0.f;
-        m_voicedHistory = 0;
-        Smooth(STRLipSync::Frame{}, aSeconds);
-        PublishCurrent(false);
-    }
-
-private:
-    // How strongly the last 32 ms repeat at some pitch between 80 and 400 Hz: about 0.8 or more for a held vowel,
-    // well under 0.4 for clicks, hiss and fan noise.
-    float Voicing() noexcept
-    {
-        const size_t cSize = m_history.size();
-        for (size_t i = 0; i < cSize; ++i)
-            m_linear[i] = m_history[(m_historyPos + i) % cSize];
-
-        const float* pNow = m_linear.data() + m_maxLag;
-        float energyNow = 0.f;
-        for (uint32_t n = 0; n < m_window; ++n)
-            energyNow += pNow[n] * pNow[n];
-        if (energyNow < 1e-9f)
-            return 0.f;
-
-        float best = 0.f;
-        for (uint32_t lag = m_minLag; lag <= m_maxLag; ++lag)
-        {
-            const float* pThen = pNow - lag;
-            float cross = 0.f;
-            float energyThen = 0.f;
-            for (uint32_t n = 0; n < m_window; ++n)
-            {
-                cross += pNow[n] * pThen[n];
-                energyThen += pThen[n] * pThen[n];
-            }
-            best = std::max(best, cross / std::sqrt(energyNow * energyThen + 1e-12f));
-        }
-        return Clamp01(best);
-    }
-
-    void FinishBlock() noexcept
-    {
-        const float cCount = static_cast<float>(m_count);
-        const bool cDigitalSilence = m_sumSquares == 0.f;
-        const float cLevel = 10.f * std::log10(m_sumSquares / cCount + 1e-12f);
-        const float cZeroCrossingRate = m_crossings / cCount * m_rate;
-        const float cVoicing = Voicing();
-
-        float energy[4];
-        float total = 1e-12f;
-        for (int b = 0; b < 4; ++b)
-        {
-            energy[b] = m_bandEnergy[b];
-            total += energy[b];
-        }
-
-        m_count = 0;
-        m_crossings = 0;
-        m_sumSquares = 0.f;
-        std::fill(std::begin(m_bandEnergy), std::end(m_bandEnergy), 0.f);
-
-        const float cDt = kBlockSeconds;
-
-        // Exact zeros are not a quiet room: the device is muted, or a virtual one with nothing routed into it.
-        if (!m_reportedSilence)
-        {
-            m_digitalSilence = cDigitalSilence ? m_digitalSilence + cDt : 0.f;
-            if (m_digitalSilence >= 5.f)
-            {
-                m_reportedSilence = true;
-                Log("This microphone has sent nothing but digital silence for 5 seconds: it is muted, or it is a virtual "
-                    "audio device with nothing routed into it. Set Device= in "
-                    "LipSyncTogether.ini to part of another name from the list above, then restart the game.");
-            }
-        }
-
-        // Background noise: follows a quieter room quickly, a louder one slowly (barely at all while speaking),
-        // so a long sentence does not teach the gate that speech is noise.
-        if (!m_floorReady)
-        {
-            m_floor = cLevel;
-            m_floorReady = true;
-        }
-        else if (cLevel < m_floor)
-            m_floor += (cLevel - m_floor) * std::min(1.f, cDt / 0.3f);
-        else
-            m_floor += (m_gateOpen ? 0.2f : 1.5f) * cDt;
-        m_floor = std::clamp(m_floor, -100.f, -25.f);
-
-        const float cThreshold = std::max(m_floor + s_config.GateDb, s_config.MinLevelDb);
-        const bool cLoudEnough = cLevel > cThreshold;
-        const bool cVoiced = cLoudEnough && cVoicing >= s_config.VoiceThreshold;
-
-        if (s_config.NoiseFilter)
-        {
-            m_voicedHistory = ((m_voicedHistory << 1) | (cVoiced ? 1u : 0u)) & 0x7u;
-            const uint32_t cVoicedBlocks = (m_voicedHistory & 1u) + ((m_voicedHistory >> 1) & 1u) + ((m_voicedHistory >> 2) & 1u);
-            if (cVoicedBlocks >= 2)
-            {
-                m_gateOpen = true;
-                m_hold = s_config.HoldSeconds;
-            }
-            else if (m_gateOpen)
-            {
-                m_hold -= cDt;
-                if (m_hold <= 0.f)
-                    m_gateOpen = false;
-            }
-        }
-        else if (cLoudEnough)
-        {
-            m_gateOpen = true;
-            m_hold = s_config.HoldSeconds;
-        }
-        else if (cLevel < cThreshold - 3.f)
-        {
-            m_hold -= cDt;
-            if (m_hold <= 0.f)
-                m_gateOpen = false;
-        }
-
-        // Keys: push-to-talk and the mute toggle only count while the game has the focus.
-        const bool cFocus = (s_config.PushToTalkKey || s_config.MuteToggleKey) && GameHasFocus();
-        if (s_config.MuteToggleKey)
-        {
-            const bool cDown = cFocus && (GetAsyncKeyState(static_cast<int>(s_config.MuteToggleKey)) & 0x8000) != 0;
-            if (cDown && !m_muteKeyDown)
-            {
-                m_muted = !m_muted;
-                Log("Microphone %s", m_muted ? "muted (the mouth stays still)" : "unmuted");
-            }
-            m_muteKeyDown = cDown;
-        }
-        const bool cTalkKey = !s_config.PushToTalkKey || (cFocus && (GetAsyncKeyState(static_cast<int>(s_config.PushToTalkKey)) & 0x8000) != 0);
-        const bool cSpeaking = m_gateOpen && cTalkKey && !m_muted;
-
-        // The speaker's recent peak: rises at once, sinks 4 dB a second, and stays at least 12 dB over the gate.
-        const float cBase = cThreshold - 3.f;
-        m_peak = std::max(m_peak - 4.f * cDt, cBase + 12.f);
-        if (cSpeaking && cVoiced)
-            m_peak = std::max(m_peak, cLevel);
-
-        STRLipSync::Frame target{};
-        if (cSpeaking)
-        {
-            const float cLoud = Ramp(cLevel, cBase, m_peak);
-            float open = Clamp01(std::pow(cLoud, 1.4f) * s_config.Sensitivity);
-            // Consonants without voice ("s", "f", "t") barely move the jaw.
-            if (!cVoiced)
-                open *= 0.6f;
-
-            if (s_config.ShapesEnabled)
-            {
-                const float cVowelEnergy = energy[0] + energy[1] + energy[2];
-                if (cVoiced && cVowelEnergy > 1e-12f)
-                {
-                    // Where the vowel's energy sits (log2 Hz), against the speaker's own average.
-                    const float cCentre = std::log2((energy[0] * 550.f + energy[1] * 1350.f + energy[2] * 2500.f) / cVowelEnergy);
-                    if (!m_haveCentre)
-                    {
-                        m_centre = cCentre;
-                        m_haveCentre = true;
-                    }
-                    else
-                        m_centre += (cCentre - m_centre) * std::min(1.f, cDt / 3.f);
-
-                    const float cDeviation = cCentre - m_centre;
-                    target.Wide = Ramp(cDeviation, 0.12f, 0.45f);   // brighter than usual: "ee", "i"
-                    target.Round = Ramp(-cDeviation, 0.12f, 0.45f); // darker than usual: "oo", "o"
-                }
-                else if (!cVoiced)
-                {
-                    // Hiss with many zero crossings: "s", "f", "sh" - teeth together.
-                    target.Teeth = Ramp(energy[3] / total, 0.3f, 0.6f) * Ramp(cZeroCrossingRate, 2000.f, 4000.f);
-                }
-
-                // Dips between syllables close the lips a little, as speech does.
-                target.Lips = 0.5f * Ramp(0.15f - cLoud, 0.f, 0.15f);
-                open *= (1.f - 0.6f * target.Lips) * (1.f - 0.5f * target.Teeth);
-            }
-            target.Open = open;
-        }
-
-        Smooth(target, cDt);
-        PublishCurrent(cSpeaking);
-
-        if (s_config.LogLevels)
-        {
-            m_logTimer -= cDt;
-            if (m_logTimer <= 0.f)
-            {
-                m_logTimer = 1.f;
-                Log("level %.1f dB, noise %.1f dB, gate %.1f dB, voicing %.2f, %s | open %.2f wide %.2f round %.2f lips %.2f teeth %.2f",
-                    cLevel, m_floor, cThreshold, cVoicing,
-                    cSpeaking ? "speaking"
-                              : (m_muted ? "muted" : (m_gateOpen ? "waiting for push-to-talk" : (cLoudEnough ? "noise (not a voice)" : "quiet"))),
-                    m_current.Open, m_current.Wide, m_current.Round, m_current.Lips, m_current.Teeth);
-            }
-        }
-    }
-
-    // Opens quickly, closes a little slower, so syllables read without jitter.
-    void Smooth(const STRLipSync::Frame& acTarget, float aDt) noexcept
-    {
-        const float cAttack = 1.f - std::exp(-aDt / 0.025f);
-        const float cRelease = 1.f - std::exp(-aDt / 0.06f);
-        auto step = [&](float& aValue, float aTarget) {
-            aValue += (aTarget - aValue) * (aTarget > aValue ? cAttack : cRelease);
-            if (aValue < 0.005f)
-                aValue = 0.f;
-        };
-        step(m_current.Open, acTarget.Open);
-        step(m_current.Wide, acTarget.Wide);
-        step(m_current.Round, acTarget.Round);
-        step(m_current.Lips, acTarget.Lips);
-        step(m_current.Teeth, acTarget.Teeth);
-    }
-
-    void PublishCurrent(bool aSpeaking) noexcept
-    {
-        m_current.Speaking = aSpeaking ? 1 : 0;
-        ++m_current.Sequence;
-        Publish(m_current);
-    }
-
-    float m_rate;
-    uint32_t m_blockSamples;
-    Biquad m_highPass;
-    Biquad m_bands[4];
-
-    uint32_t m_count{};
-    uint32_t m_crossings{};
-    bool m_lastPositive{};
-    float m_sumSquares{};
-    float m_bandEnergy[4]{};
-
-    // Pitch detection.
-    Biquad m_antiAlias;
-    uint32_t m_decimation{1};
-    float m_pitchRate{};
-    uint32_t m_minLag{};
-    uint32_t m_maxLag{};
-    uint32_t m_window{};
-    std::vector<float> m_history;
-    std::vector<float> m_linear;
-    size_t m_historyPos{};
-    float m_decimationSum{};
-    uint32_t m_decimationCount{};
-    uint32_t m_voicedHistory{};
-
-    float m_digitalSilence{};
-    bool m_reportedSilence{};
-
-    bool m_floorReady{};
-    float m_floor{-60.f};
-    float m_peak{-40.f};
-    bool m_haveCentre{};
-    float m_centre{};
-    bool m_gateOpen{};
-    float m_hold{};
-    bool m_muted{};
-    bool m_muteKeyDown{};
-    float m_logTimer{};
-
-    STRLipSync::Frame m_current{};
-};
-
 // --- capture -------------------------------------------------------------------------------------------------
 
 HANDLE s_stopEvent = nullptr;
-bool s_listedDevices = false;
-
-// PKEY_Device_FriendlyName.
-const PROPERTYKEY kFriendlyName = {{0xa45c254e, 0xdf1c, 0x4efd, {0x80, 0x20, 0x67, 0xd1, 0x46, 0xa8, 0x50, 0xe0}}, 14};
-
-template <class T> struct ComPtr
-{
-    T* p = nullptr;
-    ~ComPtr()
-    {
-        if (p)
-            p->Release();
-    }
-    T** operator&() noexcept { return &p; }
-    T* operator->() const noexcept { return p; }
-    explicit operator bool() const noexcept { return p != nullptr; }
-};
-
-std::wstring FriendlyName(IMMDevice* apDevice)
-{
-    std::wstring name;
-    ComPtr<IPropertyStore> store;
-    if (SUCCEEDED(apDevice->OpenPropertyStore(STGM_READ, &store)))
-    {
-        PROPVARIANT value;
-        PropVariantInit(&value);
-        if (SUCCEEDED(store->GetValue(kFriendlyName, &value)) && value.vt == VT_LPWSTR && value.pwszVal)
-            name = value.pwszVal;
-        PropVariantClear(&value);
-    }
-    return name;
-}
-
-// The microphone named in the settings, else the Windows default communications microphone.
-bool PickDevice(IMMDeviceEnumerator* apEnumerator, IMMDevice** appDevice, std::wstring& aName)
-{
-    ComPtr<IMMDeviceCollection> devices;
-    UINT count = 0;
-    if (SUCCEEDED(apEnumerator->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &devices)))
-        devices->GetCount(&count);
-
-    const std::wstring cWanted = Lower(ToWide(s_config.Device));
-    IMMDevice* pMatch = nullptr;
-    for (UINT i = 0; i < count; ++i)
-    {
-        IMMDevice* pDevice = nullptr;
-        if (FAILED(devices->Item(i, &pDevice)))
-            continue;
-        const std::wstring cName = FriendlyName(pDevice);
-        if (!s_listedDevices)
-            Log("  microphone %u: %s", i + 1, ToUtf8(cName.c_str()).c_str());
-        if (!pMatch && !cWanted.empty() && Lower(cName).find(cWanted) != std::wstring::npos)
-        {
-            pMatch = pDevice;
-            aName = cName;
-            continue;
-        }
-        pDevice->Release();
-    }
-    if (!s_listedDevices)
-    {
-        s_listedDevices = true;
-        if (count == 0)
-            Log("  no microphone is connected");
-    }
-
-    if (pMatch)
-    {
-        *appDevice = pMatch;
-        return true;
-    }
-
-    if (!cWanted.empty())
-        Log("No microphone matches Device=%s; using the Windows default communications microphone", s_config.Device.c_str());
-
-    if (FAILED(apEnumerator->GetDefaultAudioEndpoint(eCapture, eCommunications, appDevice)) &&
-        FAILED(apEnumerator->GetDefaultAudioEndpoint(eCapture, eConsole, appDevice)))
-        return false;
-    aName = FriendlyName(*appDevice);
-    return true;
-}
+bool s_listedMicrophones = false;
+std::atomic<bool> s_restartCapture{false};
 
 enum class CaptureEnd
 {
     Stopped,
-    Retry,     // the device went away or changed; try again soon
-    Failed,    // could not open anything; try again later
+    Retry,  // the device went away or changed; try again soon
+    Failed, // could not open anything; try again later
 };
 
 CaptureEnd RunCapture()
@@ -767,7 +94,7 @@ CaptureEnd RunCapture()
 
     ComPtr<IMMDevice> device;
     std::wstring name;
-    if (!PickDevice(enumerator.p, &device, name))
+    if (!PickDevice(enumerator.p, eCapture, eCommunications, GetInputDeviceSetting(), "microphone", s_listedMicrophones, &device, name))
     {
         Log("No microphone to listen to; checking again in a few seconds");
         return CaptureEnd::Failed;
@@ -783,29 +110,16 @@ CaptureEnd RunCapture()
     WAVEFORMATEX* pFormat = nullptr;
     if (FAILED(client->GetMixFormat(&pFormat)) || !pFormat)
         return CaptureEnd::Failed;
-
-    // The shared-mode format is nearly always 32-bit float; take integer PCM too.
-    bool isFloat = pFormat->wFormatTag == WAVE_FORMAT_IEEE_FLOAT;
-    bool isPcm = pFormat->wFormatTag == WAVE_FORMAT_PCM;
-    if (pFormat->wFormatTag == WAVE_FORMAT_EXTENSIBLE && pFormat->cbSize >= 22)
-    {
-        const auto* pExtensible = reinterpret_cast<const WAVEFORMATEXTENSIBLE*>(pFormat);
-        isFloat = pExtensible->SubFormat.Data1 == WAVE_FORMAT_IEEE_FLOAT;
-        isPcm = pExtensible->SubFormat.Data1 == WAVE_FORMAT_PCM;
-    }
-    const uint32_t cChannels = std::max<uint32_t>(1, pFormat->nChannels);
-    const uint32_t cSampleBytes = pFormat->nBlockAlign / cChannels;
-    const float cRate = static_cast<float>(pFormat->nSamplesPerSec);
-    const bool cUsable = (isFloat && cSampleBytes == 4) || (isPcm && (cSampleBytes == 2 || cSampleBytes == 3 || cSampleBytes == 4));
+    const SampleFormat cFormat = DescribeFormat(pFormat);
 
     HRESULT hr = E_FAIL;
-    if (cUsable)
+    if (cFormat.Usable)
         hr = client->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, 200000 /* 20 ms */, 0, pFormat, nullptr);
     const uint32_t cBits = pFormat->wBitsPerSample;
     CoTaskMemFree(pFormat);
-    if (!cUsable || FAILED(hr))
+    if (!cFormat.Usable || FAILED(hr))
     {
-        Log("Could not listen to %s (format %s %u-bit, error 0x%08X)", ToUtf8(name.c_str()).c_str(), isFloat ? "float" : "integer", cBits,
+        Log("Could not listen to %s (format %s %u-bit, error 0x%08X)", ToUtf8(name.c_str()).c_str(), cFormat.Float ? "float" : "integer", cBits,
             static_cast<unsigned>(hr));
         return CaptureEnd::Failed;
     }
@@ -822,10 +136,11 @@ CaptureEnd RunCapture()
     }
 
     const std::string cName = ToUtf8(name.c_str());
-    Log("Listening to %s (%.0f Hz, %u channel%s)", cName.c_str(), cRate, cChannels, cChannels == 1 ? "" : "s");
+    Log("Listening to %s (%u Hz, %u channel%s)", cName.c_str(), cFormat.Rate, cFormat.Channels, cFormat.Channels == 1 ? "" : "s");
     SetDeviceName(cName);
 
-    Analyzer analyzer(cRate);
+    Analyzer analyzer(static_cast<float>(cFormat.Rate), true);
+    std::vector<float> mono;
     CaptureEnd end = CaptureEnd::Stopped;
     ULONGLONG lastAudio = GetTickCount64();
     const HANDLE cWaits[2] = {s_stopEvent, audioEvent};
@@ -835,11 +150,20 @@ CaptureEnd RunCapture()
         const DWORD cWait = WaitForMultipleObjects(2, cWaits, FALSE, 100);
         if (cWait == WAIT_OBJECT_0)
             break;
+        if (s_restartCapture.exchange(false))
+        {
+            Log("Switching the microphone");
+            end = CaptureEnd::Retry;
+            break;
+        }
 
         if (cWait == WAIT_TIMEOUT)
         {
             if (GetTickCount64() - lastAudio > 200)
+            {
                 analyzer.Silence(0.1f);
+                Publish(analyzer);
+            }
             continue;
         }
 
@@ -854,45 +178,24 @@ CaptureEnd RunCapture()
                 break;
 
             const bool cSilent = (flags & AUDCLNT_BUFFERFLAGS_SILENT) != 0 || !pData;
+            mono.resize(frames);
             for (UINT32 f = 0; f < frames; ++f)
             {
                 float sum = 0.f;
                 if (!cSilent)
                 {
-                    const BYTE* pFrame = pData + static_cast<size_t>(f) * cChannels * cSampleBytes;
-                    for (uint32_t c = 0; c < cChannels; ++c)
-                    {
-                        const BYTE* p = pFrame + c * cSampleBytes;
-                        if (isFloat)
-                        {
-                            float v;
-                            memcpy(&v, p, 4);
-                            sum += v;
-                        }
-                        else if (cSampleBytes == 2)
-                        {
-                            int16_t v;
-                            memcpy(&v, p, 2);
-                            sum += v / 32768.f;
-                        }
-                        else if (cSampleBytes == 3)
-                        {
-                            const int32_t v = static_cast<int32_t>((static_cast<uint32_t>(p[0]) << 8) | (static_cast<uint32_t>(p[1]) << 16) | (static_cast<uint32_t>(p[2]) << 24));
-                            sum += v / 2147483648.f;
-                        }
-                        else
-                        {
-                            int32_t v;
-                            memcpy(&v, p, 4);
-                            sum += v / 2147483648.f;
-                        }
-                    }
+                    const BYTE* pFrame = pData + static_cast<size_t>(f) * cFormat.Channels * cFormat.SampleBytes;
+                    for (uint32_t c = 0; c < cFormat.Channels; ++c)
+                        sum += ReadSample(pFrame + c * cFormat.SampleBytes, cFormat);
                 }
-                analyzer.Push(sum / cChannels);
+                mono[f] = sum / cFormat.Channels;
+                if (analyzer.Push(mono[f]))
+                    Publish(analyzer);
             }
-
             capture->ReleaseBuffer(frames);
             lastAudio = GetTickCount64();
+
+            Voice::OnMicSamples(mono.data(), mono.size(), cFormat.Rate, analyzer.Current().Speaking != 0, analyzer.RangeScale());
         }
 
         if (FAILED(hr))
@@ -917,7 +220,7 @@ DWORD WINAPI CaptureThread(LPVOID)
         const CaptureEnd cEnd = RunCapture();
         if (cEnd == CaptureEnd::Stopped)
             break;
-        if (WaitForSingleObject(s_stopEvent, cEnd == CaptureEnd::Retry ? 1000 : 5000) == WAIT_OBJECT_0)
+        if (WaitForSingleObject(s_stopEvent, cEnd == CaptureEnd::Retry ? 200 : 5000) == WAIT_OBJECT_0)
             break;
     }
     if (SUCCEEDED(cCom))
@@ -978,8 +281,115 @@ uint32_t GetDeviceName(char* apBuffer, uint32_t aSize)
     return cOpen ? 1 : 0;
 }
 
+void SetSession(const char* acpServerHost, uint32_t aLocalPlayerId)
+{
+    Voice::SetSession(acpServerHost, aLocalPlayerId);
+}
+
+void SetMix(const STRLipSync::MixEntry* apEntries, uint32_t aCount)
+{
+    Voice::SetMix(apEntries, aCount);
+}
+
+uint32_t GetRemoteMouth(uint32_t aPlayerId, STRLipSync::Frame* apFrame)
+{
+    return Voice::GetRemoteMouth(aPlayerId, apFrame);
+}
+
+uint32_t CopyText(const std::string& acText, char* apBuffer, uint32_t aSize)
+{
+    if (!apBuffer || aSize == 0)
+        return 0;
+    strncpy_s(apBuffer, aSize, acText.c_str(), _TRUNCATE);
+    return 1;
+}
+
+uint32_t GetSettingCount()
+{
+    return Settings::Count();
+}
+
+const STRLipSync::SettingInfo* GetSettingInfo(uint32_t aIndex)
+{
+    return Settings::Info(aIndex);
+}
+
+uint32_t GetSetting(uint32_t aIndex, char* apBuffer, uint32_t aSize)
+{
+    return aIndex < Settings::Count() ? CopyText(Settings::Get(aIndex), apBuffer, aSize) : 0;
+}
+
+uint32_t SetSetting(uint32_t aIndex, const char* acpValue)
+{
+    return acpValue && Settings::Set(aIndex, acpValue) ? 1 : 0;
+}
+
+uint32_t SaveSettings()
+{
+    return Settings::Save() ? 1 : 0;
+}
+
+uint32_t ReloadSettings()
+{
+    // Reading the INI again puts every value back; the device and relay follow if they differ.
+    const std::string cDevice = GetInputDeviceSetting();
+    const std::string cOutput = GetOutputDeviceSetting();
+    const uint32_t cHost = g_config.HostVoiceRelay;
+    const uint16_t cPort = g_config.VoicePort;
+    const uint32_t cBitrate = g_config.VoiceBitrate;
+    Settings::Load();
+    Log("Settings reloaded from the INI");
+    if (GetInputDeviceSetting() != cDevice)
+        RequestCaptureRestart();
+    if (GetOutputDeviceSetting() != cOutput)
+        Voice::RestartPlayback();
+    if (g_config.HostVoiceRelay != cHost || g_config.VoicePort != cPort)
+        Voice::OnRelaySettingsChanged();
+    if (g_config.VoiceBitrate != cBitrate)
+        Voice::OnBitrateChanged();
+    return 1;
+}
+
+uint32_t HasUnsavedChanges()
+{
+    return Settings::HasUnsavedChanges() ? 1 : 0;
+}
+
+uint32_t ListDevices(uint32_t aOutput, char* apBuffer, uint32_t aSize)
+{
+    return CopyText(Settings::ListDevices(aOutput != 0), apBuffer, aSize);
+}
+
+uint32_t GetMeter(STRLipSync::Meter* apMeter)
+{
+    if (!apMeter)
+        return 0;
+    AcquireSRWLockShared(&s_frameLock);
+    const bool cHave = s_haveFrame;
+    *apMeter = s_meter;
+    ReleaseSRWLockShared(&s_frameLock);
+    return cHave ? 1 : 0;
+}
+
+uint32_t GetVoiceStatus(char* apBuffer, uint32_t aSize)
+{
+    return CopyText(Voice::DescribeStatus(), apBuffer, aSize);
+}
+
+uint32_t GetVoiceKey(char* apBuffer, uint32_t aSize)
+{
+    return Voice::GetVoiceKey(apBuffer, aSize);
+}
+
+void AddVoiceKey(uint32_t aPlayerId, const char* acpKey)
+{
+    Voice::AddVoiceKey(aPlayerId, acpKey);
+}
+
 const STRLipSync::Descriptor kDescriptor = {
-    STRLipSync::kApiVersion, "LipSync Together", LST_VERSION_STRING, &s_config.Shared, &GetFrame, &GetDeviceName,
+    STRLipSync::kApiVersion, "LipSync Together", LST_VERSION_STRING, &g_config.Shared, &GetFrame, &GetDeviceName, &SetSession, &SetMix, &GetRemoteMouth,
+    &GetSettingCount, &GetSettingInfo, &GetSetting, &SetSetting, &SaveSettings, &ReloadSettings, &HasUnsavedChanges, &ListDevices, &GetMeter, &GetVoiceStatus,
+    &GetVoiceKey, &AddVoiceKey,
 };
 
 HMODULE s_module = nullptr;
@@ -995,6 +405,11 @@ void Start(uint32_t aRuntimeVersion)
         "SkyrimTogether.exe that carries it)");
 }
 } // namespace
+
+void LipSync::RequestCaptureRestart() noexcept
+{
+    s_restartCapture = true;
+}
 
 extern "C" __declspec(dllexport) const STRLipSync::Descriptor* STRLipSync_GetDescriptor()
 {

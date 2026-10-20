@@ -11,12 +11,9 @@ name: LipSync Together release
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - 'release/lipsync-together**'
 
 env:
-  MOD_VERSION: '0.2.0'
+  MOD_VERSION: '0.8.0'
   # The release page every version is published on.
   RELEASE_TAG: 'lipsync-together-v0.2.0'
 
@@ -70,8 +67,7 @@ jobs:
           root=Mods/LipSyncTogether
           pkg="pkg"
           mkdir -p "$pkg/fomod/images" "$pkg/00 Core/SKSE/Plugins" "$pkg/00 Core/Docs"
-          cp "$root/fomod/info.xml" "$root/fomod/ModuleConfig.xml" "$pkg/fomod/"
-          cp "$root/fomod/images/banner.png" "$pkg/fomod/images/"
+          cp -a "$root/fomod/." "$pkg/fomod/"
           cp artifacts/plugin/LipSyncTogether.dll "$root/Plugin/LipSyncTogether.ini" "$pkg/00 Core/SKSE/Plugins/"
           cp "$root/README.txt" "$pkg/00 Core/Docs/LipSync Together - README.txt"
           cp LICENSE "$pkg/00 Core/Docs/LipSync Together - LICENSE.txt"
@@ -88,7 +84,7 @@ jobs:
           done
           cp launcher/LAUNCHER_MANIFEST.txt "$pkg/00 Core/Docs/LipSync Together - launcher manifest.txt"
           find "$pkg" -type f | sort
-          name="LipSync_Together_Voice_Lip_Sync-${MOD_VERSION}-STR-1.8.3-and-1.8.5.zip"
+          name="LipSync_Together_Voice_Lip_Sync-${MOD_VERSION}-STR-1.8.3-1.8.5-1.8.6.zip"
           (cd "$pkg" && zip -r -q "../$name" .)
           ls -la "$name"
           echo "ARCHIVE=$name" >> "$GITHUB_ENV"
@@ -105,15 +101,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Every version is published on the first release's page, so its link stays the one to share; older
-          # archives stay there for download next to the current one. The page starts as a pre-release; once
-          # it is set otherwise, that status is left as it was set.
+          # Every version is published on the existing release page; older archives stay available there.
           tag="${RELEASE_TAG}"
           if ! gh release view "$tag" > /dev/null 2>&1; then
-            gh release create "$tag" --prerelease --target "$GITHUB_SHA" \
+            gh release create "$tag" --target "$GITHUB_SHA" \
               --title "LipSync Together (SKSE Voice Lip Sync) ${MOD_VERSION}" \
               --notes-file Mods/LipSyncTogether/RELEASE_NOTES.md
           fi
           gh release upload "$tag" "$ARCHIVE" --clobber
           gh release edit "$tag" --title "LipSync Together (SKSE Voice Lip Sync) ${MOD_VERSION}" \
             --notes-file Mods/LipSyncTogether/RELEASE_NOTES.md
+          release_id=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq .id)
+          gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" --method PATCH -F prerelease=false > /dev/null

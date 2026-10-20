@@ -3,8 +3,11 @@
 Usage: python apply_addon.py <path to the STR source tree> [--protocol 1.8.5|1.8.3]
 
 Copies the add-on's client sources into Code/client, registers LipSyncTogetherService in
-Code/client/World.cpp, and has the papyrus registration hook in Code/client/Games/Misc/BSScript.cpp hand each
-native to the add-on (it needs Mfg Fix's function object, not only the address the papyrus service records).
+Code/client/World.cpp, has the papyrus registration hook in Code/client/Games/Misc/BSScript.cpp hand each
+native to the add-on (it needs Mfg Fix's function object, not only the address the papyrus service records), and
+has the connect handler in Code/client/Services/Generic/OverlayClient.cpp report the server it dials (voice chat
+reaches its relay on that host), and has Code/client/Services/Generic/ImguiService.cpp give the settings window a
+moment between frames to load its fonts.
 Nothing else in the tree changes, and the server is not touched: mouth states travel through the script
 animation relay every Skyrim Together server already has.
 
@@ -83,6 +86,21 @@ def main() -> None:
                          "    LipSyncTogether_OnNativeRegistered(apFunction);\n", script)
     script.write_text(text, encoding="utf-8")
     print(f"apply_addon: papyrus registration hook in {script.relative_to(tree)} reports natives to LipSync Together")
+
+    overlay = tree / "Code" / "client" / "Services" / "Generic" / "OverlayClient.cpp"
+    text = overlay.read_text(encoding="utf-8")
+    text = insert_after(text, "#include <Services/OverlayClient.h>", "#include <LipSyncTogether/LipSyncNatives.h>\n", overlay)
+    text = insert_after(text, 'std::string endpoint = baseIp + ":" + std::to_string(port);',
+                        "    LipSyncTogether_OnConnect(endpoint.c_str());\n", overlay)
+    overlay.write_text(text, encoding="utf-8")
+    print(f"apply_addon: the connect handler in {overlay.relative_to(tree)} tells LipSync Together which server it dials")
+
+    imgui = tree / "Code" / "client" / "Services" / "Generic" / "ImguiService.cpp"
+    text = imgui.read_text(encoding="utf-8")
+    text = insert_after(text, "#include <Services/ImguiService.h>", "#include <LipSyncTogether/LipSyncNatives.h>\n", imgui)
+    text = insert_before(text, "    ImGui_ImplDX11_NewFrame();", "    LipSyncTogether_BeforeImGuiFrame();\n", imgui)
+    imgui.write_text(text, encoding="utf-8")
+    print(f"apply_addon: {imgui.relative_to(tree)} lets LipSync Together add its fonts between ImGui frames")
 
 
 if __name__ == "__main__":

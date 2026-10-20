@@ -172,5 +172,31 @@ Installs the Skyrim Together launcher with the LipSync Together add-on (SkyrimTo
         </group>
       </optionalFileGroups>
     </installStep>
+      <installStep name="Voice relay access">
+      <optionalFileGroups order="Explicit">
+        <group name="Who can join voice chat?" type="SelectExactlyOne">
+          <plugins order="Explicit">
+            <plugin name="Require a server-relayed key (recommended)">
+              <description>Uses a random session key relayed through Skyrim Together. The relay rejects clients without a key from this server. Skyrim Together retains keys until its server restarts, so former players can still connect until then.</description>
+              <files>
+                <file source="fomod\security\LipSyncTogether-Secure.ini" destination="SKSE\Plugins\LipSyncTogether.ini" />
+              </files>
+              <typeDescriptor>
+                <type name="Recommended" />
+              </typeDescriptor>
+            </plugin>
+            <plugin name="Open relay (as tested)">
+              <description>Anyone who can reach the host's voice relay port can join and hear voice chat. Use only on a trusted network.</description>
+              <files>
+                <file source="fomod\security\LipSyncTogether-Open.ini" destination="SKSE\Plugins\LipSyncTogether.ini" />
+              </files>
+              <typeDescriptor>
+                <type name="Optional" />
+              </typeDescriptor>
+            </plugin>
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
   </installSteps>
 </config>

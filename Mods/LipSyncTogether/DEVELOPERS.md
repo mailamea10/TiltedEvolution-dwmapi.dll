@@ -6,7 +6,7 @@ Everything needed to put LipSync Together into a Skyrim Together tree, alone or 
 
 | Path | What |
 |---|---|
-| `Plugin/` | SKSE plugin (`build.bat` from an x64 VS prompt; no dependencies), default `LipSyncTogether.ini` |
+| `Plugin/` | SKSE plugin (`build.bat` from an x64 VS prompt; fetches and statically builds pinned Opus on first run), default `LipSyncTogether.ini` |
 | `StrAddon/Code/client/` | add-on sources copied into the STR tree |
 | `StrAddon/apply_addon.py` | applies the add-on to an STR tree |
 | `fomod/`, `README.txt`, `RELEASE_NOTES.md`, `Nexus/` | packaging and docs |
@@ -28,21 +28,21 @@ It is idempotent and only touches:
 - `--protocol 1.8.3` switches the relay's object id to 0 (1.8.3 skips id 0; 1.8.5 resolves a server id, so
   `0xFFFFFFFF` is used).
 
-Both anchors exist on every launcher base (`4917189f`, `db8af2cf`, `0f1876e6`, `043dad02`, `e6a097e1`) and on the
-legacy feature branches. Applying it next to SkyParkour Together and RaceMenu Together in any order is fine.
+Both anchors exist on every launcher base (`4917189f`, `db8af2cf`, `0f1876e6`, `043dad02`, `e6a097e1`, `2eb8693f`, `77dfb644`) and on the
+legacy feature branches. Applying it next to SkyParkour Together, RaceMenu Together and Ragdoll Together in any order is fine.
 
 ## Independence from the other add-ons
 
 - Own service (`LipSyncTogetherService`), own wire prefix `STRLS1|` on the script animation relay.
 - Exports `STRLipSync_HostApiVersion` from the launcher; the plugin exports `STRLipSync_GetDescriptor`
-  (API version 2, `LipSyncTogether/STRLipSyncAPI.h`).
-- No server change. Messages are one of 104 fixed mouth states per player, because the server's string cache
+  (API version 8, `LipSyncTogether/STRLipSyncAPI.h`; voice-key exchange uses `STRVK1|` over the same server relay).
+- No server change. Messages are one of 104 fixed mouth states per player plus a session voice-key message plus a session voice-key message plus a session voice-key message, because the server's string cache
   keeps every distinct relayed string until it restarts.
 
 ## Shared launcher
 
 LipSync Together is listed in `Mods/TogetherLauncher/addons.txt` on `release/together-launcher`. Pushing that
-branch rebuilds the five launchers with every listed add-on and then runs every mod's release workflow, this one
+branch rebuilds all seven launchers with every listed add-on and then runs every mod's release workflow, this one
 included. This workflow refuses to package a launcher whose manifest does not list `release/lipsync-together`.
 
 ## Local test build
