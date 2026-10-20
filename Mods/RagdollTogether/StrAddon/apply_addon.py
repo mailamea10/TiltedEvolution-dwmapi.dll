@@ -54,7 +54,12 @@ def main() -> None:
         if default not in text:
             sys.exit(f"apply_addon: '{default}' not found in {service}")
         # 1.8.3: the stock client skips script animations for object id 0.
-        service.write_text(text.replace(default, "#define STR_RAGDOLL_NO_OBJECT 0u"), encoding="utf-8")
+        text = text.replace(default, "#define STR_RAGDOLL_NO_OBJECT 0u")
+        # 1.8.3: no send modes and no playback clock (see STR_RAGDOLL_PROTOCOL_183).
+        legacy = "#define STR_RAGDOLL_PROTOCOL_183 0"
+        if legacy not in text:
+            sys.exit(f"apply_addon: '{legacy}' not found in {service}")
+        service.write_text(text.replace(legacy, "#define STR_RAGDOLL_PROTOCOL_183 1"), encoding="utf-8")
         print("apply_addon: protocol 1.8.3")
 
     world = tree / "Code" / "client" / "World.cpp"

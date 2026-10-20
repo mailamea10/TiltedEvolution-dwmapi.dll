@@ -41,6 +41,15 @@ using Bone = RagdollTogetherBone;
 constexpr const char* kWirePrefix = "STRRD1|";
 constexpr uint32_t kNoObject = STR_RAGDOLL_NO_OBJECT;
 
+// 1.8.3 sends every message reliably and plays remote movement a fixed time behind the server clock, without the
+// playback clock of 1.8.5 (apply_addon.py --protocol 1.8.3 defines this).
+#ifndef STR_RAGDOLL_PROTOCOL_183
+#define STR_RAGDOLL_PROTOCOL_183 0
+#endif
+#if STR_RAGDOLL_PROTOCOL_183
+constexpr double kLegacyMovementDelay = 300.0;
+#endif
+
 // The plugin can load late, so keep looking for it for a while.
 constexpr double kScanInterval = 1.0;
 constexpr double kScanDuration = 60.0;
@@ -949,10 +958,15 @@ void RagdollTogetherService::Send(Vector<OutgoingPose>& aStreaming, Vector<Outgo
         ScriptAnimationRequest request{};
         request.FormID = kNoObject;
         request.EventName = wire;
+#if STR_RAGDOLL_PROTOCOL_183
+        (void)aReliable;
+        m_transport.Send(request);
+#else
         if (aReliable)
             m_transport.Send(request);
         else
             m_transport.Send(request, TiltedPhoques::kUnreliableNoNagle);
+#endif
     };
 
     // Streaming poses can be lost (the next one replaces them); the ones that end a ragdoll or hold a body at rest
@@ -992,8 +1006,13 @@ void RagdollTogetherService::UpdateRemote(double aDelta) noexcept
         // behind so that the pose after the one shown has normally arrived. Never back in time, unless the movement
         // clock jumped back a long way.
         double renderTick = static_cast<double>(remote.Snapshots.back().Tick);
+#if STR_RAGDOLL_PROTOCOL_183
+        const double cMovementTick = static_cast<double>(m_transport.GetClock().GetCurrentTick()) - kLegacyMovementDelay;
+        renderTick = std::max<double>(cMovementTick, renderTick - kMaxPlaybackLag);
+#else
         if (auto* pInterpolation = m_world.try_get<InterpolationComponent>(entity); pInterpolation && pInterpolation->Clock.IsRunning())
-            renderTick = std::max(pInterpolation->Clock.GetRenderTick() - kPlaybackDelay, renderTick - kMaxPlaybackLag);
+            renderTick = std::max<double>(pInterpolation->Clock.GetRenderTick() - kPlaybackDelay, renderTick - kMaxPlaybackLag);
+#endif
         if (renderTick < remote.RenderTick && remote.RenderTick - renderTick < kMaxPlaybackLag)
             renderTick = remote.RenderTick;
         remote.RenderTick = renderTick;

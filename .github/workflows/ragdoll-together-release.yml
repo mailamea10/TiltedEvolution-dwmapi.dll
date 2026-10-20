@@ -77,6 +77,16 @@ jobs:
           cp LICENSE "$pkg/00 Core/Docs/Ragdoll Together - LICENSE.txt"
           # The shared launcher, one archive per Skyrim Together release and game version.
           gh release download together-launcher --repo "$GITHUB_REPOSITORY" -p 'TogetherLauncher-*.zip' -p 'LAUNCHER_MANIFEST.txt' -D launcher
+          # Publish only launchers that carry this add-on in every target; otherwise wait for the Together Launcher
+          # workflow, which starts this one again once it has rebuilt them.
+          targets=$(grep -c ': Skyrim Together ' launcher/LAUNCHER_MANIFEST.txt || true)
+          carrying=$(grep -c 'add-on: release/ragdoll-together ' launcher/LAUNCHER_MANIFEST.txt || true)
+          if [ "$targets" -eq 0 ] || [ "$carrying" -ne "$targets" ]; then
+            echo "::notice::The published launchers do not all carry Ragdoll Together yet ($carrying of $targets); not publishing."
+            echo "PUBLISH=0" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          echo "PUBLISH=1" >> "$GITHUB_ENV"
           for archive in launcher/TogetherLauncher-*.zip; do
             unzip -q -o "$archive" -d "$pkg"
           done
@@ -88,6 +98,7 @@ jobs:
           echo "ARCHIVE=$name" >> "$GITHUB_ENV"
 
       - name: Upload the FOMOD
+        if: env.PUBLISH == '1'
         uses: actions/upload-artifact@v7
         with:
           name: RagdollTogether-${{ env.MOD_VERSION }}
@@ -96,6 +107,7 @@ jobs:
           path: ${{ env.ARCHIVE }}
 
       - name: Add the archive to the release
+        if: env.PUBLISH == '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -104,7 +116,7 @@ jobs:
           # not) is left as it was set.
           tag="${RELEASE_TAG}"
           if ! gh release view "$tag" > /dev/null 2>&1; then
-            gh release create "$tag" --target "$GITHUB_SHA" \
+            gh release create "$tag" --target "$GITHUB_SHA" --prerelease \
               --title "Ragdoll/Physics Together SKSE ${MOD_VERSION}" \
               --notes-file Mods/RagdollTogether/RELEASE_NOTES.md
           fi
