@@ -89,4 +89,23 @@ for game, label in [("1.7.104", "187-1.7.104"), ("1.6.1170", "187-1.6.1170")]:
         if source.exists():
             shutil.copy2(source, dest / filename)
 
+# The published add-on archives contain older 1.5.97 launcher overlays. Replace
+# that selection with the bundle's own STR 1.8.5 legacy launcher, built from the
+# KiLoader-support commit so the selected compatibility option cannot silently
+# fall back to a stale launcher from whichever add-on archive was processed first.
+legacy_source = root / "bundle-output/legacy-ki-loader/SkyrimTogetherReborn"
+legacy_dest = out / "Launchers/185-1.5.97/SkyrimTogetherReborn"
+required_legacy_files = (
+    "SkyrimTogether.exe",
+    "EarlyLoad.dll",
+    "TPProcess.exe",
+    "versionlib-ae-to-se-1-5-97-0.map",
+)
+missing_legacy_files = [name for name in required_legacy_files if not (legacy_source / name).is_file()]
+if missing_legacy_files:
+    raise SystemExit(f"KiLoader-patched STR 1.8.5 / Skyrim 1.5.97 launcher is missing: {missing_legacy_files}")
+legacy_dest.mkdir(parents=True, exist_ok=True)
+for filename in required_legacy_files:
+    shutil.copy2(legacy_source / filename, legacy_dest / filename)
+
 print(f"Assembled FOMOD at {out}")

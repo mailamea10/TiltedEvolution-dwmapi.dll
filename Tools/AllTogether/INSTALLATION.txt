@@ -14,7 +14,8 @@ Installer choices
 2. Choose the STR version used by your server. Every player in the session
    must use that same STR version.
 3. Choose your Skyrim runtime. The installer places SkyrimTogether.exe and any
-   extra 1.5.97 launcher files in the AllTogether mod folder.
+   extra 1.5.97 launcher files in the AllTogether mod folder. The 1.5.97
+   launcher is rebuilt with the KiLoader dependency search path fix.
 4. If LipSync Together is selected, choose Secure relay (recommended) or Open
    relay. Secure mode admits players whose key was relayed through your STR
    server. Open mode allows anyone who can reach the host's UDP port 10579.

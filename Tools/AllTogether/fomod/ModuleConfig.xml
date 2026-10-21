@@ -6,10 +6,10 @@
   <installSteps order="Explicit">
     <installStep name="Select add-ons">
       <optionalFileGroups order="Explicit"><group name="Choose the add-ons to install" type="SelectAny"><plugins order="Explicit">
-        <plugin name="Ragdoll/Physics Together 1.0.0"><description>Synchronizes ragdoll and physics motion. Requires STR and SKSE. SKSE: https://skse.silverlock.org/</description><image path="fomod\images\Ragdoll-Together.png" /><files><folder source="Add-ons\Ragdoll" destination="" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
-        <plugin name="LipSync Together 0.8.0"><description>Synchronizes mouth movement and optional voice chat. Requires SKSE and Mfg Fix NG or Mfg Fix for your runtime. Mfg Fix NG: https://www.nexusmods.com/skyrimspecialedition/mods/133568 | Mfg Fix: https://www.nexusmods.com/skyrimspecialedition/mods/11669</description><image path="fomod\images\LipSync-Together.jpg" /><conditionFlags><flag name="lipsync">1</flag></conditionFlags><files><folder source="Add-ons\LipSync" destination="" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
-        <plugin name="RaceMenu Together 1.0.0"><description>Synchronizes RaceMenu appearance. Requires RaceMenu for your Skyrim runtime, SKSE, and Address Library on 1.6.x/1.7.x. RaceMenu: https://www.nexusmods.com/skyrimspecialedition/mods/19080 | Address Library: https://www.nexusmods.com/skyrimspecialedition/mods/32444</description><image path="fomod\images\RaceMenu-Together.jpg" /><files><folder source="Add-ons\RaceMenu" destination="" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
-        <plugin name="SkyParkour Together 1.0.1"><description>Synchronizes SkyParkour animations. Requires SkyParkour, SKSE, and Address Library. SkyParkour: https://www.nexusmods.com/skyrimspecialedition/mods/132292 | Address Library: https://www.nexusmods.com/skyrimspecialedition/mods/32444</description><image path="fomod\images\SkyParkour-Together.png" /><files><folder source="Add-ons\SkyParkour" destination="" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
+        <plugin name="Ragdoll/Physics Together 1.0.0"><description>Synchronizes ragdoll and physics motion. Requires STR and SKSE. SKSE: https://skse.silverlock.org/</description><image path="fomod\images\Ragdoll-Together.png" /><files><folder source="Add-ons\Ragdoll\SKSE\Plugins" destination="SKSE\Plugins" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
+        <plugin name="LipSync Together 0.8.0"><description>Synchronizes mouth movement and optional voice chat. Requires SKSE and Mfg Fix NG or Mfg Fix for your runtime. Mfg Fix NG: https://www.nexusmods.com/skyrimspecialedition/mods/133568 | Mfg Fix: https://www.nexusmods.com/skyrimspecialedition/mods/11669</description><image path="fomod\images\LipSync-Together.jpg" /><conditionFlags><flag name="lipsync">1</flag></conditionFlags><files><folder source="Add-ons\LipSync\SKSE\Plugins" destination="SKSE\Plugins" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
+        <plugin name="RaceMenu Together 1.0.0"><description>Synchronizes RaceMenu appearance. Requires RaceMenu for your Skyrim runtime, SKSE, and Address Library on 1.6.x/1.7.x. RaceMenu: https://www.nexusmods.com/skyrimspecialedition/mods/19080 | Address Library: https://www.nexusmods.com/skyrimspecialedition/mods/32444</description><image path="fomod\images\RaceMenu-Together.jpg" /><files><folder source="Add-ons\RaceMenu\SKSE\Plugins" destination="SKSE\Plugins" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
+        <plugin name="SkyParkour Together 1.0.1"><description>Synchronizes SkyParkour animations. Requires SkyParkour, SKSE, and Address Library. SkyParkour: https://www.nexusmods.com/skyrimspecialedition/mods/132292 | Address Library: https://www.nexusmods.com/skyrimspecialedition/mods/32444</description><image path="fomod\images\SkyParkour-Together.png" /><files><folder source="Add-ons\SkyParkour\SKSE\Plugins" destination="SKSE\Plugins" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
       </plugins></group></optionalFileGroups>
     </installStep>
     <installStep name="Choose Skyrim Together version">
@@ -23,27 +23,27 @@
 
     <installStep name="Skyrim runtime (STR 1.8.7)"><visible><flagDependency flag="str" value="187" /></visible>
       <optionalFileGroups order="Explicit"><group name="Select your Skyrim runtime" type="SelectExactlyOne"><plugins order="Explicit">
-        <plugin name="Skyrim 1.7.104"><description>Skyrim AE 1.7.104.</description><files><folder source="Launchers\187-1.7.104" destination="" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
-        <plugin name="Skyrim 1.6.1170 / 1.6.1179"><description>One launcher supports both 1.6.1170 and 1.6.1179.</description><files><folder source="Launchers\187-1.6.1170" destination="" priority="0" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+        <plugin name="Skyrim 1.7.104"><description>Skyrim AE 1.7.104.</description><files><folder source="Launchers\187-1.7.104\SkyrimTogetherReborn" destination="SkyrimTogetherReborn" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
+        <plugin name="Skyrim 1.6.1170 / 1.6.1179"><description>One launcher supports both 1.6.1170 and 1.6.1179.</description><files><folder source="Launchers\187-1.6.1170\SkyrimTogetherReborn" destination="SkyrimTogetherReborn" priority="0" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
       </plugins></group></optionalFileGroups>
     </installStep>
     <installStep name="Skyrim runtime (STR 1.8.6)"><visible><flagDependency flag="str" value="186" /></visible>
       <optionalFileGroups order="Explicit"><group name="Select your Skyrim runtime" type="SelectExactlyOne"><plugins order="Explicit">
-        <plugin name="Skyrim 1.7.104"><files><folder source="Launchers\186-1.7.104" destination="" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
-        <plugin name="Skyrim 1.6.1170 / 1.6.1179"><files><folder source="Launchers\186-1.6.1170" destination="" priority="0" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+        <plugin name="Skyrim 1.7.104"><files><folder source="Launchers\186-1.7.104\SkyrimTogetherReborn" destination="SkyrimTogetherReborn" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
+        <plugin name="Skyrim 1.6.1170 / 1.6.1179"><files><folder source="Launchers\186-1.6.1170\SkyrimTogetherReborn" destination="SkyrimTogetherReborn" priority="0" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
       </plugins></group></optionalFileGroups>
     </installStep>
     <installStep name="Skyrim runtime (STR 1.8.5)"><visible><flagDependency flag="str" value="185" /></visible>
       <optionalFileGroups order="Explicit"><group name="Select your Skyrim runtime" type="SelectExactlyOne"><plugins order="Explicit">
-        <plugin name="Skyrim 1.7.104"><files><folder source="Launchers\185-1.7.104" destination="" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
-        <plugin name="Skyrim 1.6.1170 / 1.6.1179"><files><folder source="Launchers\185-1.6.1170" destination="" priority="0" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
-        <plugin name="Skyrim 1.5.97"><description>Only supported with STR 1.8.5.</description><files><folder source="Launchers\185-1.5.97" destination="" priority="0" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+        <plugin name="Skyrim 1.7.104"><files><folder source="Launchers\185-1.7.104\SkyrimTogetherReborn" destination="SkyrimTogetherReborn" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
+        <plugin name="Skyrim 1.6.1170 / 1.6.1179"><files><folder source="Launchers\185-1.6.1170\SkyrimTogetherReborn" destination="SkyrimTogetherReborn" priority="0" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+        <plugin name="Skyrim 1.5.97"><description>Only supported with STR 1.8.5. This build includes the KiLoader dependency search path fix.</description><files><folder source="Launchers\185-1.5.97\SkyrimTogetherReborn" destination="SkyrimTogetherReborn" priority="0" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
       </plugins></group></optionalFileGroups>
     </installStep>
     <installStep name="Skyrim runtime (STR 1.8.3)"><visible><flagDependency flag="str" value="183" /></visible>
       <optionalFileGroups order="Explicit"><group name="Select your Skyrim runtime" type="SelectExactlyOne"><plugins order="Explicit">
-        <plugin name="Skyrim 1.7.104"><files><folder source="Launchers\183-1.7.104" destination="" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
-        <plugin name="Skyrim 1.6.1170 / 1.6.1179"><files><folder source="Launchers\183-1.6.1170" destination="" priority="0" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+        <plugin name="Skyrim 1.7.104"><files><folder source="Launchers\183-1.7.104\SkyrimTogetherReborn" destination="SkyrimTogetherReborn" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
+        <plugin name="Skyrim 1.6.1170 / 1.6.1179"><files><folder source="Launchers\183-1.6.1170\SkyrimTogetherReborn" destination="SkyrimTogetherReborn" priority="0" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
       </plugins></group></optionalFileGroups>
     </installStep>
 

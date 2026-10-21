@@ -152,17 +152,139 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  legacy-ki-loader:
+    name: STR 1.8.5 / Skyrim 1.5.97 with KiLoader support
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: mailamea10/TiltedEvolution-dwmapi.dll
+          ref: e6a097e1915a58d53343b167c24367f92303bcc0
+          path: str
+          fetch-depth: 0
+
+      - uses: actions/checkout@v7
+        with:
+          path: bundle
+
+      - name: Checkout pinned add-on commits
+        shell: bash
+        run: |
+          set -euo pipefail
+          i=0
+          while read -r branch commit script label; do
+            [[ -z "$branch" || "$branch" == \#* ]] && continue
+            i=$((i + 1))
+            git clone --no-checkout "https://github.com/mailamea10/TiltedEvolution-dwmapi.dll.git" "addon-$i"
+            git -C "addon-$i" fetch --depth 1 origin "$commit"
+            git -C "addon-$i" checkout --detach FETCH_HEAD
+            test "$(git -C "addon-$i" rev-parse HEAD)" = "$commit"
+          done < bundle/Tools/AllTogether/addons.lock
+          test "$i" -eq 4
+
+      - name: Apply all four add-ons to the legacy source
+        shell: bash
+        run: |
+          set -euo pipefail
+          i=0
+          while read -r branch commit script label; do
+            [[ -z "$branch" || "$branch" == \#* ]] && continue
+            i=$((i + 1))
+            python "addon-$i/$script" str --protocol 1.8.5
+          done < bundle/Tools/AllTogether/addons.lock
+
+      - name: Pin STR protocol version and checkout submodules
+        working-directory: str
+        run: |
+          git tag -f v1.8.5 HEAD
+          git submodule sync --recursive
+          git submodule update --init --force --recursive --depth=1
+          grep -q 'Data.*KiLoader.*Dependencies' Code/immersive_launcher/loader/PathRerouting.cpp
+
+      - name: Restore xmake packages
+        id: pkgcache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/AppData/Local/.xmake/packages
+          key: windows-2022-xmake-pkgs-legacy-ki-loader-${{ hashFiles('str/**/xmake.lua') }}
+          restore-keys: |
+            windows-2022-xmake-pkgs-legacy-ki-loader-
+            windows-2022-xmake-pkgs-
+
+      - name: Configure xmake
+        uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: 3.1.0
+          actions-cache-folder: '.xmake-cache'
+          actions-cache-key: windows-2022
+
+      - name: Configure MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Configure xmake and save packages
+        working-directory: str
+        run: |
+          xmake config --plat=windows --arch=x64 --mode=releasedbg --yes -vD
+
+      - name: Build KiLoader-enabled legacy launcher files
+        working-directory: str
+        run: |
+          xmake build -y -vD SkyrimImmersiveLauncherLegacyNoConsole
+          xmake build -y -vD TPProcess
+          xmake build -y -vD SkyrimTogetherSKSE
+
+      - name: Save xmake packages
+        if: always() && steps.pkgcache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/AppData/Local/.xmake/packages
+          key: windows-2022-xmake-pkgs-legacy-ki-loader-${{ hashFiles('str/**/xmake.lua') }}
+
+      - name: Collect and validate legacy launcher files
+        working-directory: str
+        run: |
+          set -euo pipefail
+          out=build/windows/x64/releasedbg
+          target=../bundle/bundle-output/legacy-ki-loader/SkyrimTogetherReborn
+          mkdir -p "$target"
+          cp "$out/legacy-noconsole/SkyrimTogether.exe" "$out/EarlyLoad.dll" "$out/TPProcess.exe" \
+            GameFiles/Skyrim/SKSE/Plugins/versionlib-ae-to-se-1-5-97-0.map "$target/"
+          test -f "$target/SkyrimTogether.exe"
+          test -f "$target/EarlyLoad.dll"
+          test -f "$target/TPProcess.exe"
+          test -f "$target/versionlib-ae-to-se-1-5-97-0.map"
+
+      - name: Upload KiLoader legacy launcher artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: legacy-ki-loader
+          path: bundle/bundle-output/legacy-ki-loader/SkyrimTogetherReborn
+          if-no-files-found: error
+          retention-days: 14
+
   release:
-    needs: launcher
-    if: ${{ always() && (needs.launcher.result == 'success' || inputs.launcher-run-id != '') }}
+    needs: [launcher, legacy-ki-loader]
+    if: ${{ always() && (needs.launcher.result == 'success' || inputs.launcher-run-id != '') && needs['legacy-ki-loader'].result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v7
+      - name: Download 1.8.7 launcher artifacts
+        uses: actions/download-artifact@v7
         with:
           path: bundle-output
+          pattern: launcher-1.8.7-*
           run-id: ${{ inputs.launcher-run-id || github.run_id }}
           github-token: ${{ github.token }}
+      - name: Download KiLoader legacy launcher artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: legacy-ki-loader
+          path: bundle-output/legacy-ki-loader
       - name: Download latest released add-on packages
         env:
           GH_TOKEN: ${{ github.token }}
@@ -181,14 +303,13 @@ jobs:
           set -euo pipefail
           python Tools/AllTogether/assemble_fomod.py "$PWD" bundle-output/fomod-package
           cp Tools/AllTogether/SOURCES.txt bundle-output/fomod-package/Docs/
-          (cd bundle-output/fomod-package && zip -qr "$GITHUB_WORKSPACE/AllTogether-SKSE-Bundle-1.zip" .)
+          (cd bundle-output/fomod-package && zip -qr "$GITHUB_WORKSPACE/AllTogether-SKSE-Bundle-1-KiLoader-Fix.zip" .)
           tag=alltogether-skse-bundle-1
           title='AllTogether SKSE (Skyrim Together Add-ons Bundle 1)'
           if gh release view "$tag" > /dev/null 2>&1; then
-            gh release upload "$tag" AllTogether-SKSE-Bundle-1.zip --clobber
-            gh release edit "$tag" --title "$title" --notes-file Tools/AllTogether/RELEASE_NOTES.md
+            gh release upload "$tag" AllTogether-SKSE-Bundle-1-KiLoader-Fix.zip
           else
-            gh release create "$tag" AllTogether-SKSE-Bundle-1.zip \
+            gh release create "$tag" AllTogether-SKSE-Bundle-1-KiLoader-Fix.zip \
               --title "$title" \
               --notes-file Tools/AllTogether/RELEASE_NOTES.md
           fi
