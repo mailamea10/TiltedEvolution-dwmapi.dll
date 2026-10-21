@@ -13,6 +13,15 @@ Pinned source patches:
 Requested PR930 and the relevant v1.8.6/v1.8.6b feature changes are already present in the v1.8.7 base.
 PR931's core nametag and UI work is already present there; only its two follow-up fixes listed above are applied.
 
+PR #16 (absol89/TiltedEvolutionScriptFixes, feat/nametag-privacy) is not merged as a pull request,
+but its nametag and player UI features are already in the selected v1.8.7 source under equivalent
+commits: 84213dffc2 -> 44917d0a, e15d4e78e0 -> c34f666c, 35c6110774 -> e1c84cd8, and
+275437fb27 -> cee0754e. Its two privacy/name-label fixes, 137db0271b and e4cbeee3d8, are applied
+above as source patches. The PR's final commit a7c098ed17 is a UI/code refactor to keep nametag
+changes clear of player-trading changes; it does not add a user-facing nametag feature. Therefore
+the STR 1.8.7 option already ships the PR #16 nametag features and fixes. A second optional launcher
+for those same embedded features would install a duplicate SkyrimTogether.exe.
+
 Add-ons (release branches):
   Ragdoll/Physics Together 1.0.0: release/ragdoll-together at 41df81ff7cda3dcadb84c1ab4e6d81790b400eff
   LipSync Together 0.8.0: release/lipsync-together at c338ca718476737fdf5c054eba12ceac754ab2c8
