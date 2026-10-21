@@ -77,6 +77,16 @@ jobs:
             python "addon-$i/$script" str --protocol 1.8.5
           done < bundle/Tools/AllTogether/addons.lock
 
+      - name: Restore xmake packages
+        id: pkgcache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/AppData/Local/.xmake/packages
+          key: windows-2022-xmake-pkgs-${{ hashFiles('str/**/xmake.lua') }}-${{ matrix.game-version }}
+          restore-keys: |
+            windows-2022-xmake-pkgs-${{ hashFiles('str/**/xmake.lua') }}-
+            windows-2022-xmake-pkgs-
+
       - name: Configure xmake
         uses: xmake-io/github-action-setup-xmake@v1
         with:
@@ -88,6 +98,13 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
+
+      - name: Save xmake packages
+        if: always() && steps.pkgcache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/AppData/Local/.xmake/packages
+          key: windows-2022-xmake-pkgs-${{ hashFiles('str/**/xmake.lua') }}-${{ matrix.game-version }}
 
       - name: Build launcher
         working-directory: str
@@ -111,9 +128,9 @@ jobs:
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
           $vs = & $vswhere -latest -property installationPath
           $dumpbin = Get-ChildItem -Recurse "$vs\VC\Tools\MSVC" -Filter dumpbin.exe | Where-Object { $_.FullName -match 'Hostx64\\x64' } | Select-Object -First 1
-          $exports = & $dumpbin.FullName /exports "$dir/SkyrimTogether.exe"
+          $exports = (& $dumpbin.FullName /exports "$dir/SkyrimTogether.exe") -join "`n"
           foreach ($name in @('STRModSync_HostApiVersion','STRRaceMenu_HostApiVersion','STRLipSync_HostApiVersion','STRRagdoll_HostApiVersion')) {
-            if ($exports -notmatch $name) { throw "Missing required add-on export: $name" }
+            if (-not ($exports -match [regex]::Escape($name))) { throw "Missing required add-on export: $name" }
           }
 
       - name: Upload launcher artifact
