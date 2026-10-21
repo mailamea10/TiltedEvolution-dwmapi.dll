@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://qconsulting.ca/fo3/ModConfig5.0.xsd">
+  <moduleName>AllTogether SKSE (Skyrim Together Add-ons Bundle 1)</moduleName>
+  <moduleImage path="fomod\images\banner.png" />
+  <requiredInstallFiles><folder source="Docs" destination="Docs" priority="0" /></requiredInstallFiles>
+  <installSteps order="Explicit">
+    <installStep name="Choose add-ons">
+      <optionalFileGroups order="Explicit"><group name="Select each add-on you want" type="SelectAny"><plugins order="Explicit">
+        <plugin name="Ragdoll/Physics Together 1.0.0"><description>Synchronizes ragdoll and physics motion between players.</description><files><folder source="Add-ons\Ragdoll" destination="" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
+        <plugin name="LipSync Together 0.8.0"><description>Synchronizes player lip movement while using voice chat.</description><files><folder source="Add-ons\LipSync" destination="" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
+        <plugin name="RaceMenu Together 1.0.0"><description>Synchronizes supported RaceMenu appearance data.</description><files><folder source="Add-ons\RaceMenu" destination="" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
+        <plugin name="SkyParkour Together 1.0.1"><description>Synchronizes supported parkour animations.</description><files><folder source="Add-ons\SkyParkour" destination="" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
+      </plugins></group></optionalFileGroups>
+    </installStep>
+    <installStep name="Choose Skyrim Together version">
+      <optionalFileGroups order="Explicit"><group name="Which Skyrim Together version do you use?" type="SelectExactlyOne"><plugins order="Explicit">
+        <plugin name="STR 1.8.7 (AllTogether, recommended)"><description>Use with the 1.8.7 server and Skyrim 1.7.104 or 1.6.1170/1.6.1179. The combined launcher is built from the requested 1.8.7 target.</description><conditionFlags><flag name="str">187</flag></conditionFlags><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
+        <plugin name="STR 1.8.6 (absol89 playtest)"><description>Use with matching 1.8.6 playtest servers.</description><conditionFlags><flag name="str">186</flag></conditionFlags><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+        <plugin name="STR 1.8.5 (absol89)"><description>Use with 1.8.5 servers, including legacy Skyrim 1.5.97.</description><conditionFlags><flag name="str">185</flag></conditionFlags><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+        <plugin name="STR 1.8.3 (official Nexus)"><description>Use with official 1.8.3 servers.</description><conditionFlags><flag name="str">183</flag></conditionFlags><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+      </plugins></group></optionalFileGroups>
+    </installStep>
+    <installStep name="Choose Skyrim runtime">
+      <optionalFileGroups order="Explicit"><group name="Which Skyrim runtime do you use?" type="SelectExactlyOne"><plugins order="Explicit">
+        <plugin name="Skyrim 1.7.104"><description>Current Anniversary Edition runtime.</description><conditionalFileInstalls><patterns order="Explicit">
+          <pattern><dependencies><flagDependency flag="str" value="187" /></dependencies><files><folder source="Launchers\187-1.7.104" destination="" priority="0" /></files></pattern>
+          <pattern><dependencies><flagDependency flag="str" value="183" /></dependencies><files><folder source="Launchers\183-1.7.104" destination="" priority="0" /></files></pattern>
+          <pattern><dependencies><flagDependency flag="str" value="185" /></dependencies><files><folder source="Launchers\185-1.7.104" destination="" priority="0" /></files></pattern>
+          <pattern><dependencies><flagDependency flag="str" value="186" /></dependencies><files><folder source="Launchers\186-1.7.104" destination="" priority="0" /></files></pattern>
+        </patterns></conditionalFileInstalls><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+        <plugin name="Skyrim 1.6.1170 / 1.6.1179"><description>Select for either 1.6.1170 or 1.6.1179.</description><conditionalFileInstalls><patterns order="Explicit">
+          <pattern><dependencies><flagDependency flag="str" value="187" /></dependencies><files><folder source="Launchers\187-1.6.1170" destination="" priority="0" /></files></pattern>
+          <pattern><dependencies><flagDependency flag="str" value="183" /></dependencies><files><folder source="Launchers\183-1.6.1170" destination="" priority="0" /></files></pattern>
+          <pattern><dependencies><flagDependency flag="str" value="185" /></dependencies><files><folder source="Launchers\185-1.6.1170" destination="" priority="0" /></files></pattern>
+          <pattern><dependencies><flagDependency flag="str" value="186" /></dependencies><files><folder source="Launchers\186-1.6.1170" destination="" priority="0" /></files></pattern>
+        </patterns></conditionalFileInstalls><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+        <plugin name="Skyrim 1.5.97"><description>Only supported with STR 1.8.5. Installs the legacy launcher files supplied with the add-on releases.</description><conditionalFileInstalls><patterns order="Explicit"><pattern><dependencies><flagDependency flag="str" value="185" /></dependencies><files><folder source="Launchers\185-1.5.97" destination="" priority="0" /></files></pattern></patterns></conditionalFileInstalls><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+      </plugins></group></optionalFileGroups>
+    </installStep>
+  </installSteps>
+</config>

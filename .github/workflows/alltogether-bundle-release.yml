@@ -176,10 +176,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          cp Tools/AllTogether/INSTALLATION.txt bundle-output/
-          cp Tools/AllTogether/SOURCES.txt bundle-output/
-          find bundle-output/launcher-* -name addons.resolved.txt -print -quit | xargs -r cp -t bundle-output/
-          (cd bundle-output && zip -qr ../AllTogether-SKSE-Bundle-1.zip .)
+          python Tools/AllTogether/assemble_fomod.py "$PWD" bundle-output/fomod-package
+          cp Tools/AllTogether/SOURCES.txt bundle-output/fomod-package/Docs/
+          (cd bundle-output/fomod-package && zip -qr "$GITHUB_WORKSPACE/AllTogether-SKSE-Bundle-1.zip" .)
           tag=alltogether-skse-bundle-1
           title='AllTogether SKSE (Skyrim Together Add-ons Bundle 1)'
           if gh release view "$tag" > /dev/null 2>&1; then
