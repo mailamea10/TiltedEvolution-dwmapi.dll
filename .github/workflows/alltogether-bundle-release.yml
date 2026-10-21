@@ -92,7 +92,11 @@ jobs:
       - name: Build launcher
         working-directory: str
         run: |
-          xmake config --plat=windows --arch=x64 --mode=releasedbg --skyrim_version=${{ matrix.game-version == '1.6.1170' && '1.6.1170' || 'latest' }} --yes -vD
+          if [[ '${{ matrix.game-version }}' == '1.6.1170' ]]; then
+            xmake config --plat=windows --arch=x64 --mode=releasedbg --skyrim_version=1.6.1170 --yes -vD
+          else
+            xmake config --plat=windows --arch=x64 --mode=releasedbg --yes -vD
+          fi
           xmake build -y -vD SkyrimImmersiveLauncher
 
       - name: Collect launcher
