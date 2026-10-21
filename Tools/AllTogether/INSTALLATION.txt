@@ -1,60 +1,89 @@
 AllTogether SKSE (Skyrim Together Add-ons Bundle 1)
 ==================================================
 
-Install this FOMOD with Mod Organizer 2 or Vortex. Select the add-ons you want,
-then choose the Skyrim Together version and Skyrim runtime that match your game
-and the server you join. Every player must use the same Skyrim Together version.
+Use the FOMOD with Mod Organizer 2 or Vortex. It installs the selected SKSE
+plugins, the matching Skyrim Together launcher files, and the LipSync settings
+you choose. The four original add-on installers use the same STR/runtime
+choices; this installer combines those shared choices so you choose once.
 
-Supported combinations
-----------------------
-- STR 1.8.7: Skyrim 1.7.104 or 1.6.1170 / 1.6.1179.
-- STR 1.8.6: Skyrim 1.7.104 or 1.6.1170 / 1.6.1179.
-- STR 1.8.5: Skyrim 1.7.104, 1.6.1170 / 1.6.1179, or 1.5.97.
-- STR 1.8.3: Skyrim 1.7.104 or 1.6.1170 / 1.6.1179.
+Installer choices
+-----------------
+1. Choose any combination of Ragdoll/Physics Together, LipSync Together,
+   RaceMenu Together, and SkyParkour Together. The add-on banner is shown with
+   its choice.
+2. Choose the STR version used by your server. Every player in the session
+   must use that same STR version.
+3. Choose your Skyrim runtime. The installer places SkyrimTogether.exe and any
+   extra 1.5.97 launcher files in the AllTogether mod folder.
+4. If LipSync Together is selected, choose Secure relay (recommended) or Open
+   relay. Secure mode admits players whose key was relayed through your STR
+   server. Open mode allows anyone who can reach the host's UDP port 10579.
 
-STR 1.8.7 launchers in this bundle include all four add-on integrations. The
-1.8.7 launcher also includes the nametag and player UI features from absol89's
-PR #16, including its name privacy fixes. Configure those features in Skyrim
-Together's player UI settings; a separate installer file would duplicate the
-same launcher code. The older STR versions use the latest matching launchers
-from each add-on release.
-Skyrim 1.5.97 is supported only with STR 1.8.5. Do not select 1.5.97 with
-another STR version; there is no compatible launcher in those packages.
+The 1.8.7 launcher includes all four add-on integrations and the PR #16 nametag
+and player UI features. Skyrim 1.5.97 is supported only with STR 1.8.5.
 
-Requirements
-------------
-- Skyrim Special Edition and SKSE for the selected Skyrim runtime.
-- Address Library for SKSE Plugins on Skyrim 1.6.x and 1.7.x.
-- Skyrim Together Reborn installed as a mod, matching the selected STR version.
-- Windows 8 or newer.
+Requirements and downloads
+--------------------------
+Common: install SKSE matching your exact Skyrim runtime:
+  https://skse.silverlock.org/
+
+Address Library for SKSE Plugins is required for RaceMenu Together and
+SkyParkour Together, and for Skyrim Together on 1.6.x/1.7.x. Select the file
+matching your game version:
+  https://www.nexusmods.com/skyrimspecialedition/mods/32444
+
+Install Skyrim Together Reborn separately as a mod. Get official STR 1.8.3
+from Nexus, or the matching 1.8.5/1.8.6/1.8.7 version from absol89's releases.
+The bundle supplies the add-on launcher, not STR's UI, libraries, or server.
+  https://www.nexusmods.com/skyrimspecialedition/mods/69993
+  https://github.com/absol89/TiltedEvolutionScriptFixes/releases
+
+Only when selecting LipSync Together:
+  Mfg Fix NG (recommended; select a file for your Skyrim runtime):
+  https://www.nexusmods.com/skyrimspecialedition/mods/133568
+  Original Mfg Fix (alternative for supported runtimes):
+  https://www.nexusmods.com/skyrimspecialedition/mods/11669
+
+Only when selecting RaceMenu Together:
+  RaceMenu by expired6978, matching your Skyrim runtime:
+  https://www.nexusmods.com/skyrimspecialedition/mods/19080
+
+Only when selecting SkyParkour Together:
+  SkyParkour by Tsptds:
+  https://www.nexusmods.com/skyrimspecialedition/mods/132292
 
 Mod Organizer 2
 ---------------
-MO2 starts SkyrimTogether.exe from the real folder on disk, so file priority
-does not replace the launcher. After installing this FOMOD:
+MO2 starts SkyrimTogether.exe from the real folder on disk; mod priority alone
+does not replace it. After installing this FOMOD:
 
 1. Right-click AllTogether SKSE > Open in Explorer.
-2. Copy the installed SkyrimTogetherReborn folder into your Skyrim Together
-   Reborn mod's SkyrimTogetherReborn folder, replacing SkyrimTogether.exe.
-   Back up the original first. For Skyrim 1.5.97, copy all four files in that
-   folder, including EarlyLoad.dll, TPProcess.exe and the version map.
-3. Keep AllTogether SKSE enabled for the selected SKSE add-on plugins.
-4. Start using your usual MO2 executable entry for Skyrim Together Reborn.
-   Do not start the launcher from the AllTogether SKSE mod folder; it needs the
-   rest of Skyrim Together's files beside it.
+2. Open the AllTogether SKSE folder. The selected runtime's launcher is installed
+   at SkyrimTogetherReborn/SkyrimTogether.exe.
+3. Copy the SkyrimTogetherReborn folder into your Skyrim Together Reborn
+   mod's SkyrimTogetherReborn folder. Back up the existing files first. For
+   Skyrim 1.5.97, copy all four files, including EarlyLoad.dll, TPProcess.exe
+   and versionlib-ae-to-se-1-5-97-0.map.
+4. Keep AllTogether SKSE enabled so its selected SKSE plugins remain active.
+5. Start the game with your usual MO2 executable entry for Skyrim Together
+   Reborn. Do not run the launcher from the AllTogether SKSE folder: it needs
+   the rest of Skyrim Together's files beside it.
 
 Vortex
 ------
 Install and deploy the FOMOD. Set AllTogether SKSE to load after Skyrim
-Together Reborn so its launcher wins the file conflict, then start the game
-through SkyrimTogetherReborn/SkyrimTogether.exe as usual.
+Together Reborn so its launcher wins the file conflict. Start through
+SkyrimTogetherReborn/SkyrimTogether.exe as usual.
 
-All selected add-ons install their SKSE plugin under SKSE/Plugins. You may
-select one or several. Each add-on works independently; a feature requires its
-own plugin to be installed. Everyone in the session should install the same
-add-ons and compatible versions. No server-side mod is required.
+Troubleshooting the launcher
+----------------------------
+After installation, the AllTogether SKSE mod folder must contain
+SkyrimTogetherReborn/SkyrimTogether.exe. If it does not, the runtime choice did not
+correctly; reinstall this updated FOMOD and select the Skyrim version matching
+your game. If the launcher closes immediately, copy it into the existing STR
+folder as described above, then launch it from that folder.
 
 Uninstall
 ---------
-For MO2, restore the backed-up launcher files in the Skyrim Together Reborn
-mod, then remove AllTogether SKSE. For Vortex, remove the mod and redeploy.
+For MO2, restore the backed-up files in the Skyrim Together Reborn mod, then
+remove AllTogether SKSE. For Vortex, remove the mod and redeploy.

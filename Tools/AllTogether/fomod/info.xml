@@ -2,8 +2,8 @@
 <fomod>
   <Name>AllTogether SKSE (Skyrim Together Add-ons Bundle 1)</Name>
   <Author>mailamea10</Author>
-  <Version MachineVersion="1.0.0">1.0.0</Version>
+  <Version MachineVersion="1.0.1">1.0.1</Version>
   <Website>https://github.com/mailamea10/TiltedEvolution-dwmapi.dll/releases/tag/alltogether-skse-bundle-1</Website>
-  <Description>One installer for Ragdoll/Physics Together, LipSync Together, RaceMenu Together, and SkyParkour Together, with a shared Skyrim Together launcher for STR 1.8.3, 1.8.5, 1.8.6, or 1.8.7.</Description>
+  <Description>Choose any of the four add-ons, then select one STR version and Skyrim runtime. Installs the matching shared launcher and preserves LipSync's secure/open voice relay choice. See the installed Docs for MO2/Vortex setup and requirement download links.</Description>
   <Groups><element>Animation</element><element>Gameplay</element><element>Multiplayer</element></Groups>
 </fomod>
