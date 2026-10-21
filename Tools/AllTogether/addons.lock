@@ -1,0 +1,5 @@
+# Branch, immutable commit, package label
+release/skyparkour-together 5f98d383f0e412aeb898ad877b951a5c3ef697d5 Mods/SkyParkourTogether/StrAddon/apply_addon.py SkyParkour-Together-1.0.1
+release/racemenu-together 16bf293b519af64c78fa47157c9876ce8340265c Mods/RaceMenuTogether/StrAddon/apply_addon.py RaceMenu-Together-1.0.0
+release/lipsync-together c338ca718476737fdf5c054eba12ceac754ab2c8 Mods/LipSyncTogether/StrAddon/apply_addon.py LipSync-Together-0.8.0
+release/ragdoll-together 41df81ff7cda3dcadb84c1ab4e6d81790b400eff Mods/RagdollTogether/StrAddon/apply_addon.py Ragdoll-Physics-Together-1.0.0

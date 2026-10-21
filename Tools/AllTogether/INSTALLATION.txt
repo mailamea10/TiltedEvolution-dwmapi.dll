@@ -1,0 +1,22 @@
+AllTogether SKSE (Skyrim Together Add-ons Bundle 1)
+
+This bundle contains four separate SKSE add-ons and launchers built from Skyrim Together Reborn 1.8.7.
+
+Install the add-ons you want through your mod manager. Each add-on remains inactive unless its SKSE plugin is
+installed. Do not install multiple copies of the shared SkyrimTogether.exe: use the bundled 1.8.7 launcher for
+the matching Skyrim runtime. Older STR versions use the launcher shipped inside each add-on's own archive.
+
+Included add-ons:
+  Ragdoll/Physics Together 1.0.0
+  LipSync Together 0.8.0
+  RaceMenu Together 1.0.0
+  SkyParkour Together 1.0.1
+
+The bundled new launchers support Skyrim 1.7.104 and 1.6.1170/1.6.1179. The 1.6.1170 executable uses the same
+runtime layout for 1.6.1179. Skyrim 1.5.97 is supported by the legacy STR 1.8.5 package inside the add-on
+archives; STR 1.8.7 does not provide a 1.5.97 build.
+
+The add-on archives retain their published STR 1.8.3, 1.8.5, and 1.8.6 launchers. Use the archive corresponding
+to your Skyrim Together version and game runtime.
+
+All add-ons and launcher downloads are optional. This bundle makes no add-on a dependency of another.

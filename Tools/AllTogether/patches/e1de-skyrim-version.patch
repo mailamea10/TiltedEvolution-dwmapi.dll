@@ -1,0 +1,263 @@
+From e1de917ce206d8df35982584e11272a6d569c1bc Mon Sep 17 00:00:00 2001
+From: Daniil Zakharov <miredirex@gmail.com>
+Date: Wed, 21 Oct 2026 01:48:59 +0300
+Subject: [PATCH] Add a skyrim_version build option for 1.6.1170 support;
+ update CI
+
+1.6.1170 used to be built in a fork by reverting the 1.7 port and
+patching the version string. It's now an xmake option instead.
+---
+ .github/workflows/release.yml                |  2 ++
+ .github/workflows/windows-playable-build.yml |  5 +++++
+ .github/workflows/windows.yml                | 22 +++++++++++++-------
+ AGENTS.md                                    |  3 ++-
+ Code/client/Games/Skyrim/Misc/GameVM.h       | 13 +++++++++++-
+ Code/client/Games/Skyrim/PlayerCharacter.h   | 13 ++++++++++++
+ Code/client/main.cpp                         |  4 ++++
+ Code/client/xmake.lua                        |  5 +++++
+ xmake.lua                                    | 12 +++++++++++
+ 9 files changed, 70 insertions(+), 9 deletions(-)
+
+diff --git a/.github/workflows/release.yml b/.github/workflows/release.yml
+index 25eab4f61..538881317 100644
+--- a/.github/workflows/release.yml
++++ b/.github/workflows/release.yml
+@@ -34,6 +34,8 @@ jobs:
+           expected_assets=(
+             "SkyrimTogether-${version}-windows-x64.zip"
+             "SkyrimTogether-${version}-windows-x64-debug-symbols.zip"
++            "SkyrimTogether-${version}-windows-x64-sse1.6.1170.zip"
++            "SkyrimTogether-${version}-windows-x64-sse1.6.1170-debug-symbols.zip"
+             "SkyrimTogetherServer-${version}-linux-amd64.tar.gz"
+             "SkyrimTogetherServer-${version}-linux-arm64.tar.gz"
+           )
+diff --git a/.github/workflows/windows-playable-build.yml b/.github/workflows/windows-playable-build.yml
+index 27acb7894..8a83e0e5b 100644
+--- a/.github/workflows/windows-playable-build.yml
++++ b/.github/workflows/windows-playable-build.yml
+@@ -13,7 +13,12 @@ on:
+ jobs:
+   build-windows:
+     if: ${{ github.repository_owner == 'tiltedphoques' || github.event_name != 'schedule' }} # Disable cron runs in forks
++    strategy:
++      fail-fast: false
++      matrix:
++        skyrim-version: ['latest', '1.6.1170']
+     uses: ./.github/workflows/windows.yml
+     with:
+       build-mode: release
++      skyrim-version: ${{ matrix.skyrim-version }}
+       upload-build-for-next-job: true
+diff --git a/.github/workflows/windows.yml b/.github/workflows/windows.yml
+index 807dab471..67a555759 100644
+--- a/.github/workflows/windows.yml
++++ b/.github/workflows/windows.yml
+@@ -11,6 +11,10 @@ on:
+         required: false
+         type: string
+         default: releasedbg
++      skyrim-version:
++        required: false
++        type: string
++        default: 'latest'
+       upload-build-for-next-job:
+         required: false
+         type: boolean
+@@ -18,6 +22,7 @@ on:
+ 
+ env:
+   BUILD_MODE: ${{ inputs.build-mode || 'releasedbg' }}
++  SKYRIM_VERSION: ${{ inputs.skyrim-version || 'latest' }}
+ 
+ jobs:
+   build:
+@@ -54,6 +59,9 @@ jobs:
+         run: |
+           version="$(git describe --tags --always)"
+           echo "ARTIFACT_VERSION=${version#v}" >> "$GITHUB_ENV"
++          if [ "$SKYRIM_VERSION" != "latest" ]; then
++            echo "ASSET_SUFFIX=-sse${SKYRIM_VERSION}" >> "$GITHUB_ENV"
++          fi
+ 
+       - name: Cache xmake dependencies
+         uses: actions/cache@v6
+@@ -70,7 +78,7 @@ jobs:
+           actions-cache-key: ${{ matrix.os }}
+ 
+       - name: Configure xmake and install dependencies
+-        run: xmake config --plat=windows --arch=${{ matrix.arch }} --mode="$BUILD_MODE" --yes -vD
++        run: xmake config --plat=windows --arch=${{ matrix.arch }} --mode="$BUILD_MODE" --skyrim_version="$SKYRIM_VERSION" --yes -vD
+ 
+       # Build the client
+       - name: Build with xmake
+@@ -129,30 +137,30 @@ jobs:
+         run: |
+           mkdir -p release-assets
+           (cd str-build && 7z a -tzip \
+-            "../release-assets/SkyrimTogether-${ARTIFACT_VERSION}-windows-${{ matrix.arch }}.zip" \
++            "../release-assets/SkyrimTogether-${ARTIFACT_VERSION}-windows-${{ matrix.arch }}${{ env.ASSET_SUFFIX }}.zip" \
+             .)
+           (cd str-pdb && 7z a -tzip \
+-            "../release-assets/SkyrimTogether-${ARTIFACT_VERSION}-windows-${{ matrix.arch }}-debug-symbols.zip" \
++            "../release-assets/SkyrimTogether-${ARTIFACT_VERSION}-windows-${{ matrix.arch }}${{ env.ASSET_SUFFIX }}-debug-symbols.zip" \
+             .)
+ 
+       - name: Upload playable build
+         if: ${{ inputs.upload-build-for-next-job }}
+         uses: actions/upload-artifact@v7
+         with:
+-          name: SkyrimTogether-${{ env.ARTIFACT_VERSION }}-windows-${{ matrix.arch }}
++          name: SkyrimTogether-${{ env.ARTIFACT_VERSION }}-windows-${{ matrix.arch }}${{ env.ASSET_SUFFIX }}
+           # Direct downloads should receive the existing zip without another zip layer
+           archive: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+           retention-days: 7
+           if-no-files-found: error
+-          path: release-assets/SkyrimTogether-${{ env.ARTIFACT_VERSION }}-windows-${{ matrix.arch }}.zip
++          path: release-assets/SkyrimTogether-${{ env.ARTIFACT_VERSION }}-windows-${{ matrix.arch }}${{ env.ASSET_SUFFIX }}.zip
+ 
+       - name: Upload debug symbols
+         if: ${{ inputs.upload-build-for-next-job }}
+         uses: actions/upload-artifact@v7
+         with:
+-          name: SkyrimTogether-${{ env.ARTIFACT_VERSION }}-windows-${{ matrix.arch }}-debug-symbols
++          name: SkyrimTogether-${{ env.ARTIFACT_VERSION }}-windows-${{ matrix.arch }}${{ env.ASSET_SUFFIX }}-debug-symbols
+           # Direct downloads should receive the existing zip without another zip layer
+           archive: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+           retention-days: 7
+           if-no-files-found: error
+-          path: release-assets/SkyrimTogether-${{ env.ARTIFACT_VERSION }}-windows-${{ matrix.arch }}-debug-symbols.zip
++          path: release-assets/SkyrimTogether-${{ env.ARTIFACT_VERSION }}-windows-${{ matrix.arch }}${{ env.ASSET_SUFFIX }}-debug-symbols.zip
+diff --git a/AGENTS.md b/AGENTS.md
+index 85fd9d683..9c84177f3 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -8,7 +8,8 @@ questing, combat and exploration for 2-8 players.
+ - Platforms: the client and launcher are Windows x64 only. The server also runs on Linux (amd64 and arm64),
+   so keep server and shared code portable.
+ - Game versions: SE **1.7.104** is the main target (`kSupportedGameVersions` in `Code/client/main.cpp`).
+-  1.6.1170 is unofficially supported. Engine code and address IDs are effectively identical.
++  1.6.1170 is also supported (guarded by `#ifdef TP_SKYRIM_1_6_1170`). Engine code and address IDs are
++  effectively identical.
+ - Branches: open PRs against `dev`. `master` is the release branch.
+ - Logs: `build\windows\x64\<mode>\logs`.
+ 
+diff --git a/Code/client/Games/Skyrim/Misc/GameVM.h b/Code/client/Games/Skyrim/Misc/GameVM.h
+index 614010eb0..f8c4e127f 100644
+--- a/Code/client/Games/Skyrim/Misc/GameVM.h
++++ b/Code/client/Games/Skyrim/Misc/GameVM.h
+@@ -8,13 +8,24 @@ struct SkyrimVM
+ 
+     static SkyrimVM* Get();
+ 
++#ifdef TP_SKYRIM_1_6_1170
++    uint8_t pad8[0x200 - 0x8];
++    BSScript::IVirtualMachine* virtualMachine;
++    uint8_t pad208[0x680 - 0x208];
++#else
+     uint8_t pad8[0x210 - 0x8];
+     BSScript::IVirtualMachine* virtualMachine;
+     uint8_t pad218[0x690 - 0x218];
+-    int32_t inactive;
++#endif
++    uint8_t inactive;
+ };
+ 
++#ifdef TP_SKYRIM_1_6_1170
++static_assert(offsetof(SkyrimVM, virtualMachine) == 0x200);
++static_assert(offsetof(SkyrimVM, inactive) == 0x680);
++#else
+ static_assert(offsetof(SkyrimVM, virtualMachine) == 0x210);
+ static_assert(offsetof(SkyrimVM, inactive) == 0x690);
++#endif
+ 
+ using GameVM = SkyrimVM;
+diff --git a/Code/client/Games/Skyrim/PlayerCharacter.h b/Code/client/Games/Skyrim/PlayerCharacter.h
+index ee9f98763..8172bdf8e 100644
+--- a/Code/client/Games/Skyrim/PlayerCharacter.h
++++ b/Code/client/Games/Skyrim/PlayerCharacter.h
+@@ -133,7 +133,11 @@ struct PlayerCharacter : Actor
+         uint64_t instanceCount;
+     };
+ 
++#ifdef TP_SKYRIM_1_6_1170
++    uint8_t pad1[0x588 - sizeof(Actor)];
++#else
+     uint8_t pad1[0x590 - sizeof(Actor)];
++#endif
+     GameArray<ObjectiveInstance> objectives;
+     uint8_t pad588[0x9B0 - 0x598];
+     Skills** pSkills;
+@@ -148,9 +152,18 @@ struct PlayerCharacter : Actor
+     uint8_t padPlayerEnd[0xBE0 - 0xB30];
+ };
+ 
++#ifdef TP_SKYRIM_1_6_1170
++static_assert(offsetof(PlayerCharacter, objectives) == 0x588);
++static_assert(offsetof(PlayerCharacter, pSkills) == 0x9B8);
++static_assert(offsetof(PlayerCharacter, locationForm) == 0xAD0);
++static_assert(offsetof(PlayerCharacter, baseTints) == 0xB18);
++static_assert(offsetof(PlayerCharacter, overlayTints) == 0xB30);
++static_assert(sizeof(PlayerCharacter) == 0xBE8);
++#else
+ static_assert(offsetof(PlayerCharacter, objectives) == 0x590);
+ static_assert(offsetof(PlayerCharacter, pSkills) == 0x9C0);
+ static_assert(offsetof(PlayerCharacter, locationForm) == 0xAD8);
+ static_assert(offsetof(PlayerCharacter, baseTints) == 0xB20);
+ static_assert(offsetof(PlayerCharacter, overlayTints) == 0xB38);
+ static_assert(sizeof(PlayerCharacter) == 0xBF0);
++#endif
+diff --git a/Code/client/main.cpp b/Code/client/main.cpp
+index 5aad5a738..9d409b612 100644
+--- a/Code/client/main.cpp
++++ b/Code/client/main.cpp
+@@ -9,7 +9,11 @@
+ #include <base/dialogues/win/TaskDialog.h>
+ 
+ // 1 - Steam, 2 - GOG
++#ifdef TP_SKYRIM_1_6_1170
++inline constexpr std::string_view kSupportedGameVersions[2] = {"1.6.1170.0", "1.6.1179.0"};
++#else
+ inline constexpr std::string_view kSupportedGameVersions[2] = {"1.7.104.0", "1.7.104.0"};
++#endif
+ 
+ std::unique_ptr<TiltedOnlineApp> g_appInstance{nullptr};
+ 
+diff --git a/Code/client/xmake.lua b/Code/client/xmake.lua
+index c069dea8e..ec4be6bc3 100644
+--- a/Code/client/xmake.lua
++++ b/Code/client/xmake.lua
+@@ -6,6 +6,11 @@ target(name)
+     add_includedirs(".","../../Libraries/")
+     set_pcxxheader("TiltedOnlinePCH.h")
+ 
++    -- latest game version by default (see main.cpp in client)
++    if is_config("skyrim_version", "1.6.1170") then
++        add_defines("TP_SKYRIM_1_6_1170", {public = true})
++    end
++
+     -- exclude game specifc stuff
+     add_headerfiles("**.h|Games/Skyrim/**")
+     add_files("**.cpp|Games/Skyrim/**")
+diff --git a/xmake.lua b/xmake.lua
+index 8568b89d9..31ea6831c 100644
+--- a/xmake.lua
++++ b/xmake.lua
+@@ -26,6 +26,18 @@ add_vectorexts("neon")
+ -- build configurations
+ add_rules("mode.debug", "mode.releasedbg", "mode.release")
+ 
++option("skyrim_version")
++    set_default("latest")
++    set_values("latest", "1.6.1170")
++    set_description("Skyrim SE runtime the client is built for")
++    after_check(function (option)
++        local values = option:get("values")
++        if not table.contains(values, option:value()) then
++            raise("unknown skyrim_version \"%s\" (expected %s)", tostring(option:value()), table.concat(values, ", "))
++        end
++    end)
++option_end()
++
+ if has_config("unitybuild") then
+     add_rules("c.unity_build")
+     add_rules("c++.unity_build", {batchsize = 12})

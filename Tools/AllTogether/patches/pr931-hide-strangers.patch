@@ -1,0 +1,340 @@
+From 137db0271b657622a239465c90ba12d1e0e07826 Mon Sep 17 00:00:00 2001
+From: absol89 <absol89@users.noreply.github.com>
+Date: Wed, 21 Oct 2026 01:12:23 +0200
+Subject: [PATCH] fix: "Global stranger names" checked hides non-party names,
+ invites included
+
+The checkbox was inverted: checked now turns players outside your party
+into "Stranger" (default off shows names). It is stored under a new key so
+earlier saved values are not misread.
+
+The party invite toast follows the same rule as the player list, so it no
+longer reveals a name that is hidden globally or with the eye.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../components/settings/settings.component.html  |  8 ++++----
+ .../src/app/services/player-list.service.ts      |  7 ++++++-
+ .../src/app/services/player-ui.service.ts        | 10 ++++++----
+ .../src/app/services/setting.service.ts          | 16 ++++++++++++++--
+ Code/skyrim_ui/src/assets/i18n/cs.json           |  2 +-
+ Code/skyrim_ui/src/assets/i18n/de.json           |  2 +-
+ Code/skyrim_ui/src/assets/i18n/en.json           |  2 +-
+ Code/skyrim_ui/src/assets/i18n/es.json           |  2 +-
+ Code/skyrim_ui/src/assets/i18n/fr.json           |  2 +-
+ Code/skyrim_ui/src/assets/i18n/ja.json           |  2 +-
+ Code/skyrim_ui/src/assets/i18n/ko.json           |  2 +-
+ Code/skyrim_ui/src/assets/i18n/nl.json           |  2 +-
+ Code/skyrim_ui/src/assets/i18n/no.json           |  2 +-
+ Code/skyrim_ui/src/assets/i18n/pl.json           |  2 +-
+ Code/skyrim_ui/src/assets/i18n/ru.json           |  2 +-
+ Code/skyrim_ui/src/assets/i18n/sv.json           |  2 +-
+ Code/skyrim_ui/src/assets/i18n/tr.json           |  2 +-
+ Code/skyrim_ui/src/assets/i18n/uk.json           |  2 +-
+ Code/skyrim_ui/src/assets/i18n/zh-CN.json        |  2 +-
+ 19 files changed, 45 insertions(+), 26 deletions(-)
+
+diff --git a/Code/skyrim_ui/src/app/components/settings/settings.component.html b/Code/skyrim_ui/src/app/components/settings/settings.component.html
+index cb7d9e3cb..02cb95349 100644
+--- a/Code/skyrim_ui/src/app/components/settings/settings.component.html
++++ b/Code/skyrim_ui/src/app/components/settings/settings.component.html
+@@ -76,7 +76,7 @@ <h2>{{ 'COMPONENT.SETTINGS.UI' | transloco }}</h2>
+     <section>
+       <h2>{{ 'COMPONENT.SETTINGS.PLAYER_UI.TITLE' | transloco }}</h2>
+       <div class="setting">
+-        <label for="strangerNames"
++        <label for="hideStrangerNames"
+           >{{ 'COMPONENT.SETTINGS.PLAYER_UI.STRANGER_NAMES' | transloco }}
+           <small class="hint">{{
+             'COMPONENT.SETTINGS.PLAYER_UI.STRANGER_NAMES_HINT' | transloco
+@@ -84,9 +84,9 @@ <h2>{{ 'COMPONENT.SETTINGS.PLAYER_UI.TITLE' | transloco }}</h2>
+         </label>
+         <input
+           type="checkbox"
+-          id="strangerNames"
+-          [ngModel]="settings.strangerNames | async"
+-          (ngModelChange)="settings.strangerNames.next($event)"
++          id="hideStrangerNames"
++          [ngModel]="settings.hideStrangerNames | async"
++          (ngModelChange)="settings.hideStrangerNames.next($event)"
+         />
+       </div>
+       <div class="setting">
+diff --git a/Code/skyrim_ui/src/app/services/player-list.service.ts b/Code/skyrim_ui/src/app/services/player-list.service.ts
+index 2887b6875..08f366a0a 100644
+--- a/Code/skyrim_ui/src/app/services/player-list.service.ts
++++ b/Code/skyrim_ui/src/app/services/player-list.service.ts
+@@ -141,7 +141,12 @@ export class PlayerListService implements OnDestroy {
+             invitingPlayer.hasInvitedLocalPlayer = true;
+             this.playerList.next(playerList);
+             this.popupNotificationService.addPartyInvite(
+-              invitingPlayer.name,
++              // The inviter can't be in our party yet.
++              this.settingService.isNameRevealed(invitingPlayer.name, false)
++                ? invitingPlayer.name
++                : this.translocoService.translate(
++                    'COMPONENT.PARTY_LIST.STRANGER',
++                  ),
+               () => this.acceptPartyInvite(inviterId),
+             );
+           }
+diff --git a/Code/skyrim_ui/src/app/services/player-ui.service.ts b/Code/skyrim_ui/src/app/services/player-ui.service.ts
+index e1c6756f7..a1eb64e3b 100644
+--- a/Code/skyrim_ui/src/app/services/player-ui.service.ts
++++ b/Code/skyrim_ui/src/app/services/player-ui.service.ts
+@@ -52,10 +52,10 @@ export class PlayerUiService implements OnDestroy {
+     this.players$ = combineLatest([
+       this.playerListService.playerList,
+       this.groupService.group,
+-      this.settings.strangerNames,
++      this.settings.hideStrangerNames,
+       this.settingService.nameOverrides,
+     ]).pipe(
+-      map(([playerList, group, strangerNames, overrides]) => {
++      map(([playerList, group]) => {
+         const members = group?.members ?? [];
+         return (playerList?.players ?? []).map(player => {
+           const isMember = members.includes(player.id);
+@@ -64,8 +64,10 @@ export class PlayerUiService implements OnDestroy {
+             isMember,
+             // The eye wins over both defaults, so party members can be
+             // hidden too.
+-            isNameRevealed:
+-              overrides[player.name] ?? (isMember || strangerNames),
++            isNameRevealed: this.settingService.isNameRevealed(
++              player.name,
++              isMember,
++            ),
+           };
+         });
+       }),
+diff --git a/Code/skyrim_ui/src/app/services/setting.service.ts b/Code/skyrim_ui/src/app/services/setting.service.ts
+index 83165217e..9faa8c2bf 100644
+--- a/Code/skyrim_ui/src/app/services/setting.service.ts
++++ b/Code/skyrim_ui/src/app/services/setting.service.ts
+@@ -159,9 +159,10 @@ export class SettingService {
+       this.screenCornerValues,
+       ScreenCorner.TOP_LEFT,
+     ),
+-    strangerNames: new ToggleSetting(
++    // On: players outside your party show as "Stranger", invites included.
++    hideStrangerNames: new ToggleSetting(
+       this.storeService,
+-      'playerUi_strangerNames',
++      'playerUi_hideStrangerNames',
+       false,
+     ),
+     partyInvites: new ToggleSetting(
+@@ -245,6 +246,17 @@ export class SettingService {
+     );
+   }
+ 
++  /**
++   * Whether a player's real name may be shown: the eye in the player list
++   * wins, then party members show, then the global stranger setting.
++   */
++  public isNameRevealed(name: string, isPartyMember: boolean): boolean {
++    return (
++      this.nameOverrides.getValue()[name] ??
++      (isPartyMember || !this.settings.hideStrangerNames.getValue())
++    );
++  }
++
+   public setNameOverride(name: string, revealed: boolean) {
+     const overrides = { ...this.nameOverrides.getValue(), [name]: revealed };
+     this.storeService.set(
+diff --git a/Code/skyrim_ui/src/assets/i18n/cs.json b/Code/skyrim_ui/src/assets/i18n/cs.json
+index 111022773..a600d4a38 100644
+--- a/Code/skyrim_ui/src/assets/i18n/cs.json
++++ b/Code/skyrim_ui/src/assets/i18n/cs.json
+@@ -110,7 +110,7 @@
+       "PLAYER_UI": {
+         "TITLE": "Filtry hráčského rozhraní",
+         "STRANGER_NAMES": "Jména cizích hráčů",
+-        "STRANGER_NAMES_HINT": "Hráči mimo vaši partu odhalí své jméno jen při pozvánce do party nebo k obchodu. Oko v seznamu hráčů toto nastavení přepíše pro konkrétní jméno.",
++        "STRANGER_NAMES_HINT": "Hráči mimo vaši partu se zobrazují jako „Cizinec“, i v pozvánkách. Oko v seznamu hráčů toto nastavení přepíše pro konkrétní jméno.",
+         "PARTY_INVITES": "Pozvánky do party",
+         "PARTY_INVITES_HINT": "Vypnuto: příchozí pozvánky do party jsou tiše odmítnuty.",
+         "TRADE_INVITES": "Pozvánky k obchodu",
+diff --git a/Code/skyrim_ui/src/assets/i18n/de.json b/Code/skyrim_ui/src/assets/i18n/de.json
+index 55e654e24..88616a2ca 100644
+--- a/Code/skyrim_ui/src/assets/i18n/de.json
++++ b/Code/skyrim_ui/src/assets/i18n/de.json
+@@ -114,7 +114,7 @@
+       "PLAYER_UI": {
+         "TITLE": "Spieler-UI-Filter",
+         "STRANGER_NAMES": "Namen von Fremden",
+-        "STRANGER_NAMES_HINT": "Spieler außerhalb deiner Gruppe zeigen ihren Namen nur bei Gruppen- oder Handelseinladungen. Das Auge in der Spielerliste überschreibt dies pro Spielername.",
++        "STRANGER_NAMES_HINT": "Spieler außerhalb deiner Gruppe werden als „Fremder“ angezeigt, auch in Einladungen. Das Auge in der Spielerliste überschreibt dies pro Spielername.",
+         "PARTY_INVITES": "Gruppeneinladungen",
+         "PARTY_INVITES_HINT": "Aus: Eingehende Gruppeneinladungen werden still abgelehnt.",
+         "TRADE_INVITES": "Handelseinladungen",
+diff --git a/Code/skyrim_ui/src/assets/i18n/en.json b/Code/skyrim_ui/src/assets/i18n/en.json
+index e8b7c85c0..0980c00a2 100644
+--- a/Code/skyrim_ui/src/assets/i18n/en.json
++++ b/Code/skyrim_ui/src/assets/i18n/en.json
+@@ -116,7 +116,7 @@
+       "PLAYER_UI": {
+         "TITLE": "Player UI filters",
+         "STRANGER_NAMES": "Global stranger names",
+-        "STRANGER_NAMES_HINT": "Players not in your party only reveal their name during party or trade invites. The eye in the player list overrides this per player name.",
++        "STRANGER_NAMES_HINT": "Players not in your party show as \"Stranger\", invites included. The eye in the player list overrides this per player name.",
+         "PARTY_INVITES": "Party invitations",
+         "PARTY_INVITES_HINT": "Off: incoming party invites are declined silently.",
+         "TRADE_INVITES": "Trade invitations",
+diff --git a/Code/skyrim_ui/src/assets/i18n/es.json b/Code/skyrim_ui/src/assets/i18n/es.json
+index 8791b12c7..b8e44316a 100644
+--- a/Code/skyrim_ui/src/assets/i18n/es.json
++++ b/Code/skyrim_ui/src/assets/i18n/es.json
+@@ -111,7 +111,7 @@
+       "PLAYER_UI": {
+         "TITLE": "Filtros de interfaz de jugadores",
+         "STRANGER_NAMES": "Nombres de desconocidos",
+-        "STRANGER_NAMES_HINT": "Los jugadores fuera de tu grupo solo revelan su nombre en invitaciones de grupo o de comercio. El ojo de la lista de jugadores anula esto para cada nombre.",
++        "STRANGER_NAMES_HINT": "Los jugadores fuera de tu grupo aparecen como «Desconocido», también en las invitaciones. El ojo de la lista de jugadores anula esto para cada nombre.",
+         "PARTY_INVITES": "Invitaciones de grupo",
+         "PARTY_INVITES_HINT": "No: las invitaciones de grupo se rechazan en silencio.",
+         "TRADE_INVITES": "Invitaciones de comercio",
+diff --git a/Code/skyrim_ui/src/assets/i18n/fr.json b/Code/skyrim_ui/src/assets/i18n/fr.json
+index d026c1cdc..b016a808d 100644
+--- a/Code/skyrim_ui/src/assets/i18n/fr.json
++++ b/Code/skyrim_ui/src/assets/i18n/fr.json
+@@ -114,7 +114,7 @@
+       "PLAYER_UI": {
+         "TITLE": "Filtres d'interface des joueurs",
+         "STRANGER_NAMES": "Noms des inconnus",
+-        "STRANGER_NAMES_HINT": "Les joueurs hors de votre groupe ne révèlent leur nom que lors des invitations de groupe ou d'échange. L'œil de la liste des joueurs remplace ce réglage pour chaque nom.",
++        "STRANGER_NAMES_HINT": "Les joueurs hors de votre groupe apparaissent comme « Inconnu », invitations comprises. L'œil de la liste des joueurs remplace ce réglage pour chaque nom.",
+         "PARTY_INVITES": "Invitations de groupe",
+         "PARTY_INVITES_HINT": "Désactivé : les invitations de groupe sont refusées silencieusement.",
+         "TRADE_INVITES": "Invitations d'échange",
+diff --git a/Code/skyrim_ui/src/assets/i18n/ja.json b/Code/skyrim_ui/src/assets/i18n/ja.json
+index 95ad00253..c7c061a22 100644
+--- a/Code/skyrim_ui/src/assets/i18n/ja.json
++++ b/Code/skyrim_ui/src/assets/i18n/ja.json
+@@ -110,7 +110,7 @@
+       "PLAYER_UI": {
+         "TITLE": "プレイヤーUIフィルター",
+         "STRANGER_NAMES": "他人の名前",
+-        "STRANGER_NAMES_HINT": "パーティー外のプレイヤーは、パーティーまたはトレードの招待時にのみ名前が表示されます。プレイヤーリストの目のアイコンで名前ごとに上書きできます。",
++        "STRANGER_NAMES_HINT": "パーティー外のプレイヤーは招待を含め「他人」と表示されます。プレイヤーリストの目のアイコンで名前ごとに上書きできます。",
+         "PARTY_INVITES": "パーティー招待",
+         "PARTY_INVITES_HINT": "オフ：パーティー招待を通知せずに拒否します。",
+         "TRADE_INVITES": "トレード招待",
+diff --git a/Code/skyrim_ui/src/assets/i18n/ko.json b/Code/skyrim_ui/src/assets/i18n/ko.json
+index a1d1cb68b..5f0027781 100644
+--- a/Code/skyrim_ui/src/assets/i18n/ko.json
++++ b/Code/skyrim_ui/src/assets/i18n/ko.json
+@@ -110,7 +110,7 @@
+       "PLAYER_UI": {
+         "TITLE": "플레이어 UI 필터",
+         "STRANGER_NAMES": "낯선 플레이어 이름",
+-        "STRANGER_NAMES_HINT": "파티에 없는 플레이어는 파티 또는 거래 초대 중에만 이름이 표시됩니다. 플레이어 목록의 눈 아이콘으로 이름별로 덮어쓸 수 있습니다.",
++        "STRANGER_NAMES_HINT": "파티에 없는 플레이어는 초대를 포함해 '낯선 사람'으로 표시됩니다. 플레이어 목록의 눈 아이콘으로 이름별로 덮어쓸 수 있습니다.",
+         "PARTY_INVITES": "파티 초대",
+         "PARTY_INVITES_HINT": "끄기: 받은 파티 초대를 조용히 거절합니다.",
+         "TRADE_INVITES": "거래 초대",
+diff --git a/Code/skyrim_ui/src/assets/i18n/nl.json b/Code/skyrim_ui/src/assets/i18n/nl.json
+index 0989b4450..545e29105 100644
+--- a/Code/skyrim_ui/src/assets/i18n/nl.json
++++ b/Code/skyrim_ui/src/assets/i18n/nl.json
+@@ -109,7 +109,7 @@
+       "PLAYER_UI": {
+         "TITLE": "Speler-UI-filters",
+         "STRANGER_NAMES": "Namen van vreemden",
+-        "STRANGER_NAMES_HINT": "Spelers buiten je groep tonen hun naam alleen bij groeps- of handelsuitnodigingen. Het oog in de spelerslijst overschrijft dit per spelersnaam.",
++        "STRANGER_NAMES_HINT": "Spelers buiten je groep worden als 'Vreemde' getoond, ook in uitnodigingen. Het oog in de spelerslijst overschrijft dit per spelersnaam.",
+         "PARTY_INVITES": "Groepsuitnodigingen",
+         "PARTY_INVITES_HINT": "Uit: inkomende groepsuitnodigingen worden stil geweigerd.",
+         "TRADE_INVITES": "Handelsuitnodigingen",
+diff --git a/Code/skyrim_ui/src/assets/i18n/no.json b/Code/skyrim_ui/src/assets/i18n/no.json
+index 0f1057bb6..b3d8b12fa 100644
+--- a/Code/skyrim_ui/src/assets/i18n/no.json
++++ b/Code/skyrim_ui/src/assets/i18n/no.json
+@@ -110,7 +110,7 @@
+       "PLAYER_UI": {
+         "TITLE": "Filtre for spiller-UI",
+         "STRANGER_NAMES": "Navn på fremmede",
+-        "STRANGER_NAMES_HINT": "Spillere utenfor gruppen din viser bare navnet sitt ved gruppe- eller handelsinvitasjoner. Øyet i spillerlisten overstyrer dette per spillernavn.",
++        "STRANGER_NAMES_HINT": "Spillere utenfor gruppen din vises som «Fremmed», også i invitasjoner. Øyet i spillerlisten overstyrer dette per spillernavn.",
+         "PARTY_INVITES": "Gruppeinvitasjoner",
+         "PARTY_INVITES_HINT": "Av: innkommende gruppeinvitasjoner avslås stille.",
+         "TRADE_INVITES": "Handelsinvitasjoner",
+diff --git a/Code/skyrim_ui/src/assets/i18n/pl.json b/Code/skyrim_ui/src/assets/i18n/pl.json
+index 6675d13cf..72b3774e6 100644
+--- a/Code/skyrim_ui/src/assets/i18n/pl.json
++++ b/Code/skyrim_ui/src/assets/i18n/pl.json
+@@ -114,7 +114,7 @@
+       "PLAYER_UI": {
+         "TITLE": "Filtry interfejsu graczy",
+         "STRANGER_NAMES": "Imiona nieznajomych",
+-        "STRANGER_NAMES_HINT": "Gracze spoza twojej drużyny ujawniają imię tylko przy zaproszeniach do drużyny lub handlu. Oko na liście graczy nadpisuje to dla danego imienia.",
++        "STRANGER_NAMES_HINT": "Gracze spoza twojej drużyny są wyświetlani jako „Nieznajomy”, także w zaproszeniach. Oko na liście graczy nadpisuje to dla danego imienia.",
+         "PARTY_INVITES": "Zaproszenia do drużyny",
+         "PARTY_INVITES_HINT": "Wył.: przychodzące zaproszenia do drużyny są po cichu odrzucane.",
+         "TRADE_INVITES": "Zaproszenia do handlu",
+diff --git a/Code/skyrim_ui/src/assets/i18n/ru.json b/Code/skyrim_ui/src/assets/i18n/ru.json
+index 1538171b9..21096db09 100644
+--- a/Code/skyrim_ui/src/assets/i18n/ru.json
++++ b/Code/skyrim_ui/src/assets/i18n/ru.json
+@@ -116,7 +116,7 @@
+       "PLAYER_UI": {
+         "TITLE": "Фильтры интерфейса игроков",
+         "STRANGER_NAMES": "Имена незнакомцев",
+-        "STRANGER_NAMES_HINT": "Игроки вне вашей группы показывают имя только при приглашении в группу или к обмену. Глаз в списке игроков переопределяет это для отдельного имени.",
++        "STRANGER_NAMES_HINT": "Игроки вне вашей группы отображаются как «Незнакомец», в том числе в приглашениях. Глаз в списке игроков переопределяет это для отдельного имени.",
+         "PARTY_INVITES": "Приглашения в группу",
+         "PARTY_INVITES_HINT": "Выкл.: входящие приглашения в группу молча отклоняются.",
+         "TRADE_INVITES": "Приглашения к обмену",
+diff --git a/Code/skyrim_ui/src/assets/i18n/sv.json b/Code/skyrim_ui/src/assets/i18n/sv.json
+index fb262f73b..e78100261 100644
+--- a/Code/skyrim_ui/src/assets/i18n/sv.json
++++ b/Code/skyrim_ui/src/assets/i18n/sv.json
+@@ -116,7 +116,7 @@
+       "PLAYER_UI": {
+         "TITLE": "Filter för spelar-UI",
+         "STRANGER_NAMES": "Namn på främlingar",
+-        "STRANGER_NAMES_HINT": "Spelare utanför din grupp visar bara sitt namn vid grupp- eller handelsinbjudningar. Ögat i spelarlistan åsidosätter detta per spelarnamn.",
++        "STRANGER_NAMES_HINT": "Spelare utanför din grupp visas som ”Främling”, även i inbjudningar. Ögat i spelarlistan åsidosätter detta per spelarnamn.",
+         "PARTY_INVITES": "Gruppinbjudningar",
+         "PARTY_INVITES_HINT": "Av: inkommande gruppinbjudningar avböjs tyst.",
+         "TRADE_INVITES": "Handelsinbjudningar",
+diff --git a/Code/skyrim_ui/src/assets/i18n/tr.json b/Code/skyrim_ui/src/assets/i18n/tr.json
+index 22599404d..9065ee129 100644
+--- a/Code/skyrim_ui/src/assets/i18n/tr.json
++++ b/Code/skyrim_ui/src/assets/i18n/tr.json
+@@ -113,7 +113,7 @@
+       "PLAYER_UI": {
+         "TITLE": "Oyuncu arayüzü filtreleri",
+         "STRANGER_NAMES": "Yabancıların adları",
+-        "STRANGER_NAMES_HINT": "Grubunuzda olmayan oyuncular adlarını yalnızca grup veya takas davetlerinde gösterir. Oyuncu listesindeki göz simgesi bunu oyuncu adı bazında geçersiz kılar.",
++        "STRANGER_NAMES_HINT": "Grubunuzda olmayan oyuncular davetler dahil \"Yabancı\" olarak görünür. Oyuncu listesindeki göz simgesi bunu oyuncu adı bazında geçersiz kılar.",
+         "PARTY_INVITES": "Grup davetleri",
+         "PARTY_INVITES_HINT": "Kapalı: gelen grup davetleri sessizce reddedilir.",
+         "TRADE_INVITES": "Takas davetleri",
+diff --git a/Code/skyrim_ui/src/assets/i18n/uk.json b/Code/skyrim_ui/src/assets/i18n/uk.json
+index 7c33fd991..b9bc41c8d 100644
+--- a/Code/skyrim_ui/src/assets/i18n/uk.json
++++ b/Code/skyrim_ui/src/assets/i18n/uk.json
+@@ -116,7 +116,7 @@
+       "PLAYER_UI": {
+         "TITLE": "Фільтри інтерфейсу гравців",
+         "STRANGER_NAMES": "Імена незнайомців",
+-        "STRANGER_NAMES_HINT": "Гравці поза вашою групою показують ім'я лише під час запрошення до групи чи обміну. Око у списку гравців перевизначає це для окремого імені.",
++        "STRANGER_NAMES_HINT": "Гравці поза вашою групою показуються як «Незнайомець», зокрема в запрошеннях. Око у списку гравців перевизначає це для окремого імені.",
+         "PARTY_INVITES": "Запрошення до групи",
+         "PARTY_INVITES_HINT": "Вимк.: вхідні запрошення до групи тихо відхиляються.",
+         "TRADE_INVITES": "Запрошення до обміну",
+diff --git a/Code/skyrim_ui/src/assets/i18n/zh-CN.json b/Code/skyrim_ui/src/assets/i18n/zh-CN.json
+index 2bbe23140..3c6e7dc0c 100644
+--- a/Code/skyrim_ui/src/assets/i18n/zh-CN.json
++++ b/Code/skyrim_ui/src/assets/i18n/zh-CN.json
+@@ -110,7 +110,7 @@
+       "PLAYER_UI": {
+         "TITLE": "玩家界面过滤",
+         "STRANGER_NAMES": "陌生人名字",
+-        "STRANGER_NAMES_HINT": "不在你队伍中的玩家只会在组队或交易邀请时显示名字。玩家列表中的眼睛图标可按玩家名覆盖此设置。",
++        "STRANGER_NAMES_HINT": "不在你队伍中的玩家（包括邀请中）显示为“陌生人”。玩家列表中的眼睛图标可按玩家名覆盖此设置。",
+         "PARTY_INVITES": "组队邀请",
+         "PARTY_INVITES_HINT": "关闭：静默拒绝收到的组队邀请。",
+         "TRADE_INVITES": "交易邀请",

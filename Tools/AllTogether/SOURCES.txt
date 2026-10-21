@@ -1,0 +1,22 @@
+AllTogether SKSE bundle build inputs
+
+Base Skyrim Together Reborn source:
+  Repository: https://github.com/absol89/TiltedEvolutionScriptFixes
+  Release target: v1.8.7
+  Commit: cee0754eec54b52c6198f7ba59b93e0f413e5b75
+
+Pinned source patches:
+  e1de917ce206d8df35982584e11272a6d569c1bc: Skyrim 1.6.1170 build option and runtime layouts
+  137db0271b657622a239465c90ba12d1e0e07826: global stranger-name privacy semantics and invite filtering
+  e4cbeee3d8a081c5f0063ccf2bd89e1c7fc76ce1: unknown name tags use Stranger#<id>
+
+Requested PR930 and the relevant v1.8.6/v1.8.6b feature changes are already present in the v1.8.7 base.
+PR931's core nametag and UI work is already present there; only its two follow-up fixes listed above are applied.
+
+Add-ons (release branches):
+  Ragdoll/Physics Together 1.0.0: release/ragdoll-together at 41df81ff7cda3dcadb84c1ab4e6d81790b400eff
+  LipSync Together 0.8.0: release/lipsync-together at c338ca718476737fdf5c054eba12ceac754ab2c8
+  RaceMenu Together 1.0.0: release/racemenu-together at 16bf293b519af64c78fa47157c9876ce8340265c
+  SkyParkour Together 1.0.1: release/skyparkour-together at 5f98d383f0e412aeb898ad877b951a5c3ef697d5
+
+The upstream v1.8.6b STCampfireSync add-on is not included; it is a separate third-party mod.
