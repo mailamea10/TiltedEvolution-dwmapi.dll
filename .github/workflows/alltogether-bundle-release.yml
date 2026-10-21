@@ -2,12 +2,19 @@ name: AllTogether SKSE bundle release
 
 on:
   workflow_dispatch:
+    inputs:
+      launcher-run-id:
+        description: Reuse artifacts from a successful launcher build run; leave blank to rebuild
+        required: false
+        type: string
+        default: ''
   push:
     branches:
       - 'release/alltogether-skse-bundle'
 
 permissions:
   contents: write
+  actions: read
 
 concurrency:
   group: alltogether-skse-bundle
@@ -15,6 +22,7 @@ concurrency:
 
 jobs:
   launcher:
+    if: ${{ inputs.launcher-run-id == '' }}
     name: STR 1.8.7 / Skyrim ${{ matrix.game-version }}
     runs-on: windows-2022
     strategy:
@@ -143,22 +151,25 @@ jobs:
 
   release:
     needs: launcher
+    if: ${{ always() && (needs.launcher.result == 'success' || inputs.launcher-run-id != '') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v7
         with:
           path: bundle-output
+          run-id: ${{ inputs.launcher-run-id || github.run_id }}
+          github-token: ${{ github.token }}
       - name: Download latest released add-on packages
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mkdir -p bundle-output/addons
-          gh release download ragdoll-together-v1.0.0 -R mailamea10/TiltedEvolution-dwmapi.dll -D bundle-output/addons/ragdoll --pattern '*.zip'
-          gh release download lipsync-together-v0.2.0 -R mailamea10/TiltedEvolution-dwmapi.dll -D bundle-output/addons/lipsync --pattern '*.zip'
-          gh release download racemenu-together-v1.0.0 -R mailamea10/TiltedEvolution-dwmapi.dll -D bundle-output/addons/racemenu --pattern '*.zip'
-          gh release download skyparkour-together-v1.0.0 -R mailamea10/TiltedEvolution-dwmapi.dll -D bundle-output/addons/skyparkour --pattern '*.zip'
+          mkdir -p bundle-output/addons/ragdoll bundle-output/addons/lipsync bundle-output/addons/racemenu bundle-output/addons/skyparkour
+          gh release download ragdoll-together-v1.0.0 -R mailamea10/TiltedEvolution-dwmapi.dll -D bundle-output/addons/ragdoll --pattern 'Ragdoll_Together_Physics_Sync-1.0.0-*.zip'
+          gh release download lipsync-together-v0.2.0 -R mailamea10/TiltedEvolution-dwmapi.dll -D bundle-output/addons/lipsync --pattern 'LipSync_Together_Voice_Lip_Sync-0.8.0-*.zip'
+          gh release download racemenu-together-v1.0.0 -R mailamea10/TiltedEvolution-dwmapi.dll -D bundle-output/addons/racemenu --pattern 'RaceMenu_Together_Appearance_Sync-1.0.0-*.zip'
+          gh release download skyparkour-together-v1.0.0 -R mailamea10/TiltedEvolution-dwmapi.dll -D bundle-output/addons/skyparkour --pattern 'SkyParkour_Together_Parkour_Animations_Sync-1.0.1-*.zip'
           test "$(find bundle-output/addons -type f -name '*.zip' | wc -l)" -eq 4
       - name: Assemble and publish bundle
         env:
