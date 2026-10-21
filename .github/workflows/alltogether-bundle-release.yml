@@ -181,6 +181,12 @@ jobs:
           find bundle-output/launcher-* -name addons.resolved.txt -print -quit | xargs -r cp -t bundle-output/
           (cd bundle-output && zip -qr ../AllTogether-SKSE-Bundle-1.zip .)
           tag=alltogether-skse-bundle-1
-          gh release create "$tag" AllTogether-SKSE-Bundle-1.zip \
-            --title 'AllTogether SKSE (Skyrim Together Add-ons Bundle 1)' \
-            --notes-file Tools/AllTogether/RELEASE_NOTES.md
+          title='AllTogether SKSE (Skyrim Together Add-ons Bundle 1)'
+          if gh release view "$tag" > /dev/null 2>&1; then
+            gh release upload "$tag" AllTogether-SKSE-Bundle-1.zip --clobber
+            gh release edit "$tag" --title "$title" --notes-file Tools/AllTogether/RELEASE_NOTES.md
+          else
+            gh release create "$tag" AllTogether-SKSE-Bundle-1.zip \
+              --title "$title" \
+              --notes-file Tools/AllTogether/RELEASE_NOTES.md
+          fi
