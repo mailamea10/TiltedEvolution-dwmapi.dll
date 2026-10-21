@@ -7,3 +7,7 @@ The launchers include Ragdoll/Physics Together, LipSync Together, RaceMenu Toget
 New STR 1.8.7 launchers are provided for Skyrim 1.7.104 and 1.6.1170/1.6.1179. The add-on archives retain their packages for STR 1.8.3, 1.8.5, and 1.8.6, including legacy Skyrim 1.5.97 support where supplied by the add-on package.
 
 The source and compatibility details are in `SOURCES.txt` and `INSTALLATION.txt`.
+
+The STR 1.8.7 launcher source also includes a RaceMenu Together reconnect fix:
+when a player leaves and later reconnects with a reused player ID, the other
+clients detect the return and request the existing appearance resend.

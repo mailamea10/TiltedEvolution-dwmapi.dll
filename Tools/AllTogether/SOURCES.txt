@@ -28,4 +28,7 @@ Add-ons (release branches):
   RaceMenu Together 1.0.0: release/racemenu-together at 16bf293b519af64c78fa47157c9876ce8340265c
   SkyParkour Together 1.0.1: release/skyparkour-together at 5f98d383f0e412aeb898ad877b951a5c3ef697d5
 
+Bundle source fix: RaceMenu appearance resend now treats a player ID as new again after that
+player disappears and reconnects. This covers servers that reuse a returning player's ID.
+
 The upstream v1.8.6b STCampfireSync add-on is not included; it is a separate third-party mod.

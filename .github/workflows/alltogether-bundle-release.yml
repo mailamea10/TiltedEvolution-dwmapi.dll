@@ -85,6 +85,9 @@ jobs:
             python "addon-$i/$script" str --protocol 1.8.5
           done < bundle/Tools/AllTogether/addons.lock
 
+      - name: Apply bundle RaceMenu reconnect fix
+        run: python bundle/Tools/AllTogether/apply_addon_fixes.py str
+
       - name: Restore xmake packages
         id: pkgcache
         uses: actions/cache/restore@v6

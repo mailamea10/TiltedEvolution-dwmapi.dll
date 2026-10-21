@@ -83,6 +83,24 @@ correctly; reinstall this updated FOMOD and select the Skyrim version matching
 your game. If the launcher closes immediately, copy it into the existing STR
 folder as described above, then launch it from that folder.
 
+Troubleshooting appearance and animation sync
+----------------------------------------------
+If a returning player's RaceMenu appearance is missing, disconnect and rejoin
+after installing a bundle build that includes the reconnect resend fix. The
+player list must remove the departed player before the reconnect is detected.
+When an appearance arrives but some details differ, check that everyone has the
+same RaceMenu, race/body, overlay, and preset-related mods enabled. RaceMenu
+overlays and custom-race morphs depend on those local assets.
+
+For animation mods, each player must use the same STR version, mod list, and
+generated behavior output. If a character moves while stuck in an idle pose,
+close the game and STR server, regenerate the behavior output with the generator
+the mod list is configured for (Nemesis or Pandora), ensure that output is
+enabled in every MO2 profile, and restart the session. The presence of FNIS.esp
+alone does not identify which behavior generator produced the active files.
+STR's modded-animation support is limited; SkyParkour Together syncs its
+supported SkyParkour events, not every animation added by other behavior mods.
+
 Uninstall
 ---------
 For MO2, restore the backed-up files in the Skyrim Together Reborn mod, then
