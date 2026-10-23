@@ -78,10 +78,15 @@ void AnimationVariables::GenerateDiff(const AnimationVariables& aPrevious, Tilte
     auto changedVector = Booleans;
     changedVector.reserve(sizeChangedVector);
 
+    // When the sizes differ the receiver starts from zeros (see ApplyDiff), so only nonzero values have to be sent.
+    // Slots of variables a behavior doesn't have stay zero and cost a bit each.
+    const bool cSameIntegers = aPrevious.Integers.size() == Integers.size();
+    const bool cSameFloats = aPrevious.Floats.size() == Floats.size();
+
     for (size_t i = 0; i < Integers.size(); i++)
-        changedVector.push_back(aPrevious.Integers.size() != Integers.size() || aPrevious.Integers[i] != Integers[i]);
+        changedVector.push_back(Integers[i] != (cSameIntegers ? aPrevious.Integers[i] : 0));
     for (size_t i = 0; i < Floats.size(); i++)
-        changedVector.push_back(aPrevious.Floats.size() != Floats.size() || aPrevious.Floats[i] != Floats[i]);
+        changedVector.push_back(Floats[i] != (cSameFloats ? aPrevious.Floats[i] : 0.f));
 
     // Now serialize: VarInts Booleans.size(), Integers.size(), Floats.size(),
     // then the change table bits, then changed Integers, then changed Floats.

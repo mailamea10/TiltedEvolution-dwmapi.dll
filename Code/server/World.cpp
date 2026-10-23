@@ -6,7 +6,6 @@
 #include <Services/QuestService.h>
 #include <Services/ServerListService.h>
 #include <Services/ActorValueService.h>
-#include <Services/AdminService.h>
 #include <Services/InventoryService.h>
 #include <Services/MagicService.h>
 #include <Services/OverlayService.h>
@@ -18,14 +17,12 @@
 #include <Services/ScriptService.h>
 #include <Services/MapService.h>
 #include <Services/DroppedItemService.h>
+#include <Services/ModMessageService.h>
 
 #include <es_loader/ESLoader.h>
 
 World::World()
 {
-    m_spAdminService = std::make_shared<AdminService>(*this, m_dispatcher);
-    spdlog::default_logger()->sinks().push_back(std::static_pointer_cast<spdlog::sinks::sink>(m_spAdminService));
-
     ctx().emplace<CharacterService>(*this, m_dispatcher);
     ctx().emplace<PlayerService>(*this, m_dispatcher);
     ctx().emplace<CalendarService>(*this, m_dispatcher);
@@ -45,6 +42,7 @@ World::World()
     ctx().emplace<WeatherService>(*this, m_dispatcher);
     ctx().emplace<MapService>(*this, m_dispatcher);
     ctx().emplace<DroppedItemService>(*this, m_dispatcher);
+    ctx().emplace<ModMessageService>(*this, m_dispatcher);
 
     ESLoader::ESLoader loader;
     // emplace loaded mods into modscomponent.

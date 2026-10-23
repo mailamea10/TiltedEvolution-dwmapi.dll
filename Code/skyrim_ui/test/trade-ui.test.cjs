@@ -19,7 +19,7 @@ vm.runInNewContext(ts.transpileModule(categorySource, {
 vm.runInNewContext(output, {
   exports: exported,
   require(name) {
-    if (name === '@angular/core') return { Injectable: () => value => value };
+    if (name === '@angular/core') return { Injectable: () => value => value, Inject: () => () => {}, Optional: () => () => {} };
     if (name === 'rxjs') return require(name);
     if (name.endsWith('view.enum')) return { View: { TRADE: 'trade' } };
     if (name.endsWith('trade-category')) return categoryExports;
@@ -47,8 +47,13 @@ function setup() {
     view: 'players', view$: new BehaviorSubject('players'), getView() { return this.view; },
     openView(view) { this.view = view; this.view$.next(view); },
   };
-  const service = new exported.TradeUiService(client, players, popups, { translate: key => key }, ui);
-  return { client, calls, service, notifications, ui };
+  const policy = {
+    allowInvites: true, hiddenNames: new Set(),
+    acceptsTradeInvite() { return this.allowInvites; },
+    displayName(id, name) { return this.hiddenNames.has(name) ? 'Stranger' : name; },
+  };
+  const service = new exported.TradeUiService(client, players, popups, { translate: key => key }, ui, policy);
+  return { client, calls, service, notifications, ui, policy };
 }
 
 function state() {
@@ -132,6 +137,36 @@ test('disconnect clears outgoing invitations so reconnection can trade', () => {
   fixture.client.connectionStateChange.next(true);
   fixture.service.sendInvite(2);
   assert.equal(fixture.calls.filter(call => call[0] === 'sendTradeInvite').length, 2);
+  fixture.service.ngOnDestroy();
+});
+
+test('invites refused by the invite policy are declined without any popup', () => {
+  const fixture = setup();
+  fixture.policy.allowInvites = false;
+  fixture.client.tradeInviteChange.next({ inviterId: 2, expiryTick: 1000 });
+  assert.equal(fixture.notifications.length, 0);
+  assert.deepEqual(fixture.calls, [['respondTradeInvite', 2, false]]);
+  // The server echoes the decline back; that must not show the inviter's name either.
+  fixture.client.tradeCancelledChange.next({ partnerId: 2, reason: 0, wasInitiator: false });
+  assert.equal(fixture.notifications.length, 0);
+  fixture.service.ngOnDestroy();
+});
+
+test('trade popups use the name chosen by the invite policy', () => {
+  const fixture = setup();
+  fixture.policy.hiddenNames.add('Partner');
+  fixture.client.tradeInviteChange.next({ inviterId: 2, expiryTick: 1000 });
+  assert.equal(fixture.notifications.at(-1)[1], 'Stranger');
+  fixture.service.ngOnDestroy();
+});
+
+test('without an invite policy every invite shows the real name', () => {
+  const fixture = setup();
+  const service = new exported.TradeUiService(fixture.client, { playerList: new (require('rxjs').BehaviorSubject)({ players: [{ id: 3, name: 'Other' }] }) },
+    { addTradeInvite: (...args) => fixture.notifications.push(['addTradeInvite', ...args]) }, { translate: key => key }, fixture.ui);
+  fixture.client.tradeInviteChange.next({ inviterId: 3, expiryTick: 1000 });
+  assert.equal(fixture.notifications.at(-1)[1], 'Other');
+  service.ngOnDestroy();
   fixture.service.ngOnDestroy();
 });
 

@@ -45,6 +45,8 @@ import { PlayerListService } from './services/player-list.service';
 import { SettingService } from './services/setting.service';
 import { SoundService } from './services/sound.service';
 import { StoreService } from './services/store.service';
+import { PlayerUiService } from './services/player-ui.service';
+import { TRADE_INVITE_POLICY } from './services/trade-invite-policy';
 import { TranslocoRootModule } from './transloco-root.module';
 
 @NgModule({
@@ -101,6 +103,8 @@ import { TranslocoRootModule } from './transloco-root.module';
     PlayerListService,
     StoreService,
     SettingService,
+    // Player privacy settings decide trade invites and trade names when trading is present.
+    { provide: TRADE_INVITE_POLICY, useExisting: PlayerUiService },
 
     ...environment.providers,
   ],

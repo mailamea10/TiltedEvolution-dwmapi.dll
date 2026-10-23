@@ -63,8 +63,12 @@
       "LEAVE_PARTY": "파티에서 탈퇴"
     },
     "PARTY_LIST": {
+      "STRANGER": "",
+      "SHOW_NAME": "",
+      "HIDE_NAME": "",
       "NO_OTHER_PLAYERS": "여기엔 우리 닭들 외에는 아무도 없어",
       "TABLE_HEADERS": {
+        "KNOWN": "",
         "LEVEL": "레벨",
         "NAME": "이름",
         "LOCATION": "위치"
@@ -103,6 +107,44 @@
       "JOIN": "참가"
     },
     "SETTINGS": {
+      "PLAYER_UI": {
+        "TITLE": "",
+        "KNOWN_NAMES": "",
+        "KNOWN_NAMES_HINT": "",
+        "KNOWN_NAMES_OPTIONS": {
+          "ALL": "",
+          "PARTY": "",
+          "NONE": ""
+        },
+        "KNOWN_CHAT_NAMES": "",
+        "KNOWN_CHAT_NAMES_HINT": "",
+        "PARTY_INVITES": "",
+        "PARTY_INVITES_HINT": "",
+        "TRADE_INVITES": "",
+        "TRADE_INVITES_HINT": "",
+        "MINI_CHAT": "",
+        "MINI_CHAT_HINT": "",
+        "FLOATING_CHAT": "",
+        "FLOATING_CHAT_HINT": "",
+        "NAME_TAGS": "",
+        "NAME_TAGS_HINT": "",
+        "NAME_TAG_BACKPLATE": "",
+        "NAME_TAG_BACKPLATE_HINT": "",
+        "NAME_TAG_SIZE": "",
+        "DISTANCES": "",
+        "NAME_FADE_START": "",
+        "NAME_FADE_START_HINT": "",
+        "NAME_INVISIBLE": "",
+        "NAME_INVISIBLE_HINT": "",
+        "PARTY_FADE_START": "",
+        "PARTY_INVISIBLE": "",
+        "UNITS": "",
+        "FILTERS": {
+          "ON": "",
+          "PARTY": "",
+          "OFF": ""
+        }
+      },
       "VERSION": {
         "HEADER": "버전",
         "INFO": "현재 설치된 버전:",

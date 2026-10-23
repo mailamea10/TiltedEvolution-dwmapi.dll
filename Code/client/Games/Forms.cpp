@@ -48,6 +48,12 @@ void TESNPC::Deserialize(const String& acBuffer, uint32_t aChangeFlags) noexcept
     Load(&loadBuffer);
 
     loadBuffer.buffer = nullptr;
+
+    // The spell list loader (TESSpellList::LoadGame) stores whatever the form lookup returns, so spells or
+    // shouts from a mod this client doesn't have (resolved to 0 by our ReadFormId hook) end up as null
+    // entries. Combat AI adds the base NPC's shouts to its inventory without a null check and crashes.
+    if (const uint32_t cRemoved = spellList.RemoveNullEntries())
+        spdlog::warn("NPC {:X}: dropped {} spell/shout entries not found on this client (missing mod?)", formID, cRemoved);
 }
 
 void TESNPC::Initialize() noexcept

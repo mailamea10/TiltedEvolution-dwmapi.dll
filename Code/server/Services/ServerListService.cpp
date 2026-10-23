@@ -92,6 +92,9 @@ void ServerListService::PostAnnouncement(String acName, String acDesc, String ac
     };
 
     httplib::Client client(kMasterServerEndpoint);
+    // The list records the address the announce came from, so stick to IPv4 or dual-stack hosts get listed
+    // under an IPv6 address most players can't reach.
+    client.set_address_family(AF_INET);
     client.enable_server_certificate_verification(false);
     client.set_read_timeout(std::chrono::milliseconds(30000));
     const auto response = client.Post("/announce", params);

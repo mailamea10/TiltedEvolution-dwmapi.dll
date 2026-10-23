@@ -22,8 +22,8 @@ struct InventoryChangeEvent
     }
 
     uint32_t FormId{};
-    uint32_t ServerId{};
-    uint32_t OwnershipEpoch{};
     Inventory::Entry Item{};
     bool UpdateClients = true;
+    // The item moved to or from the local player, e.g. looting or pickpocketing an actor owned by someone else
+    bool IsPlayerTransfer = false;
 };

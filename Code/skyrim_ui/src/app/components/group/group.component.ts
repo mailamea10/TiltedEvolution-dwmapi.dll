@@ -9,13 +9,14 @@ import {
   timer,
 } from 'rxjs';
 import { map } from 'rxjs/operators';
-import { PartyAnchor, SettingService } from 'src/app/services/setting.service';
+import { ScreenCorner, SettingService } from 'src/app/services/setting.service';
 import { fadeInOutActiveAnimation } from '../../animations/fade-in-out-active.animation';
 import { Group } from '../../models/group';
 import { Player } from '../../models/player';
 import { ClientService } from '../../services/client.service';
 import { DestroyService } from '../../services/destroy.service';
 import { GroupService } from '../../services/group.service';
+import { PlayerUiService } from '../../services/player-ui.service';
 
 interface GroupPosition {
   top?: string;
@@ -36,6 +37,7 @@ export class GroupComponent implements OnInit, OnDestroy {
 
   groupMembers$: Observable<(Player & { isOwner: boolean })[]>;
   group$: Observable<Group>;
+  hiddenPlayerIds$ = this.playerUiService.hiddenPlayerIds$;
 
   public isAutoHide = new BehaviorSubject(true);
   public isShown = new BehaviorSubject(true);
@@ -51,6 +53,7 @@ export class GroupComponent implements OnInit, OnDestroy {
     private readonly groupService: GroupService,
     private readonly clientService: ClientService,
     private readonly settingService: SettingService,
+    private readonly playerUiService: PlayerUiService,
   ) {
     this.isShown.next(this.settings.isPartyShown.getValue());
     this.isAutoHide.next(this.settings.autoHideParty.getValue());
@@ -159,19 +162,19 @@ export class GroupComponent implements OnInit, OnDestroy {
         const newPosition: GroupPosition = {};
 
         switch (anchor) {
-          case PartyAnchor.TOP_LEFT:
+          case ScreenCorner.TOP_LEFT:
             newPosition.top = `${y}vh`;
             newPosition.left = `${x}vw`;
             break;
-          case PartyAnchor.TOP_RIGHT:
+          case ScreenCorner.TOP_RIGHT:
             newPosition.top = `${y}vh`;
             newPosition.right = `${-100 + x}vw`;
             break;
-          case PartyAnchor.BOTTOM_RIGHT:
+          case ScreenCorner.BOTTOM_RIGHT:
             newPosition.bottom = `${-100 + y}vh`;
             newPosition.right = `${-100 + x}vw`;
             break;
-          case PartyAnchor.BOTTOM_LEFT:
+          case ScreenCorner.BOTTOM_LEFT:
             newPosition.bottom = `${-100 + y}vh`;
             newPosition.left = `${x}vw`;
             break;

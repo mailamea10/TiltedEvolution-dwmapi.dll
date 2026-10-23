@@ -1,8 +1,7 @@
-#include <Components.h>
+﻿#include <Components.h>
 #include <GameServer.h>
 #include <Packet.hpp>
 
-#include <Events/AdminPacketEvent.h>
 #include <Events/CharacterRemoveEvent.h>
 #include <Events/OwnershipTransferEvent.h>
 #include <Events/PacketEvent.h>
@@ -12,8 +11,6 @@
 #include <Events/UpdateEvent.h>
 #include <steam/isteamnetworkingutils.h>
 
-#include <AdminMessages/AdminSessionOpen.h>
-#include <AdminMessages/ClientAdminMessageFactory.h>
 #include <Messages/AuthenticationResponse.h>
 #include <Messages/ClientMessageFactory.h>
 #include <Messages/NotifyPlayerJoined.h>
@@ -291,21 +288,6 @@ void GameServer::BindMessageHandlers()
         const auto pRealMessage = CastUnique<AuthenticationRequest>(std::move(apMessage));
         HandleAuthenticationRequest(aConnectionId, pRealMessage);
     };
-
-    auto adminHandlerGenerator = [this](auto& x)
-    {
-        using T = typename std::remove_reference_t<decltype(x)>::Type;
-
-        m_adminMessageHandlers[T::Opcode] = [this](UniquePtr<ClientAdminMessage>& apMessage, ConnectionId_t aConnectionId)
-        {
-            const auto pRealMessage = CastUnique<T>(std::move(apMessage));
-            m_pWorld->GetDispatcher().trigger(AdminPacketEvent<T>(pRealMessage.get(), aConnectionId));
-        };
-
-        return false;
-    };
-
-    ClientAdminMessageFactory::Visit(adminHandlerGenerator);
 }
 
 void GameServer::BindServerCommands()
@@ -581,21 +563,6 @@ void GameServer::OnConsume(const void* apData, const uint32_t aSize, const Conne
     ViewBuffer buf((uint8_t*)apData, aSize);
     Buffer::Reader reader(&buf);
 
-    // TODO: ClientAdminMessageFactory
-    /*if (m_adminSessions.contains(aConnectionId)) [[unlikely]]
-    {
-        const ClientAdminMessageFactory factory;
-        auto pMessage = factory.Extract(reader);
-        if (!pMessage)
-        {
-            spdlog::error("Couldn't parse packet from {:x}", aConnectionId);
-            return;
-        }
-
-        m_adminMessageHandlers[pMessage->GetOpcode()](pMessage, aConnectionId);
-    }
-    else
-    {*/
     const ClientMessageFactory factory;
     auto pMessage = factory.Extract(reader);
     if (!pMessage)
@@ -605,7 +572,6 @@ void GameServer::OnConsume(const void* apData, const uint32_t aSize, const Conne
     }
 
     m_messageHandlers[pMessage->GetOpcode()](pMessage, aConnectionId);
-    //}
 }
 
 void GameServer::OnConnection(const ConnectionId_t aHandle)
@@ -683,22 +649,6 @@ void GameServer::Send(const ConnectionId_t aConnectionId, const ServerMessage& a
     s_allocator.Reset();
 }
 
-void GameServer::Send(ConnectionId_t aConnectionId, const ServerAdminMessage& acServerMessage) const
-{
-    static thread_local TiltedPhoques::ScratchAllocator s_allocator{1 << 18};
-
-    Buffer buffer(1 << 20);
-    Buffer::Writer writer(&buffer);
-    writer.WriteBits(0, 8); // Skip the first byte as it is used by packet
-
-    acServerMessage.Serialize(writer);
-
-    TiltedPhoques::PacketView packet(reinterpret_cast<char*>(buffer.GetWriteData()), static_cast<uint32_t>(writer.Size()));
-    Server::Send(aConnectionId, &packet);
-
-    s_allocator.Reset();
-}
-
 void GameServer::SendToLoaded(const ServerMessage& acServerMessage) const
 {
     for (Player* pPlayer : m_pWorld->GetPlayerManager())
@@ -748,23 +698,6 @@ bool GameServer::SendToPlayersInRange(const ServerMessage& acServerMessage, cons
     }
 
     return true;
-}
-
-void GameServer::SendToLeader(const ServerMessage& acServerMessage, const PartyComponent& acPartyComponent, const Player* apLeader) const
-{
-    if (!acPartyComponent.JoinedPartyId.has_value())
-    {
-        spdlog::warn("Party does not exist, canceling broadcast.");
-        return;
-    }
-
-    if (const_cast<Player*>(apLeader)->GetParty().JoinedPartyId != acPartyComponent.JoinedPartyId)
-    {
-        spdlog::warn("Specified party leader belongs to different party? Canceling send");
-        return;
-    }
-
-    apLeader->Send(acServerMessage);
 }
 
 void GameServer::SendToParty(const ServerMessage& acServerMessage, const PartyComponent& acPartyComponent, const Player* apExcludeSender) const
@@ -1032,14 +965,6 @@ void GameServer::HandleAuthenticationRequest(const ConnectionId_t aConnectionId,
 
         m_pWorld->GetDispatcher().trigger(PlayerJoinEvent(pPlayer, acRequest->WorldSpaceId, acRequest->CellId, acRequest->PlayerTime));
     }
-    /*else if (acRequest->Token == sAdminPassword.value() && !sAdminPassword.empty())
-    {
-        AdminSessionOpen response;
-        Send(aConnectionId, response);
-
-        m_adminSessions.insert(aConnectionId);
-        spdlog::warn("New admin session for {:x} '{}'", aConnectionId, remoteAddress);
-    } */
     else
     {
         spdlog::info("New player {:x} '{}' has a bad password, kicking.", aConnectionId, remoteAddress);

@@ -15,6 +15,7 @@
 
 #include <Messages/ClientMessageFactory.h>
 #include <Messages/ServerMessageFactory.h>
+#include <Messages/ModMessage.h>
 #include <Structs/Vector2_NetQuantize.h>
 
 #include <TiltedCore/Math.hpp>
@@ -430,6 +431,25 @@ TEST_CASE("Differential structures", "[encoding.differential]")
             REQUIRE(vars.Floats == recvVars.Floats);
             REQUIRE(vars.Integers == recvVars.Integers);
         }
+
+        // A size change restarts from zeros on both sides, so zeros are left out and the old values must not survive
+        vars.Floats.push_back(0.f);
+        vars.Floats[1] = 0.f;
+        vars.Integers.push_back(0);
+        vars.Integers[1] = 0;
+
+        {
+            Buffer::Writer writer(&buff);
+
+            vars.GenerateDiff(recvVars, writer);
+
+            Buffer::Reader reader(&buff);
+            recvVars.ApplyDiff(reader);
+
+            REQUIRE(vars.Booleans == recvVars.Booleans);
+            REQUIRE(vars.Floats == recvVars.Floats);
+            REQUIRE(vars.Integers == recvVars.Integers);
+        }
     }
 }
 
@@ -646,6 +666,156 @@ TEST_CASE("Packets", "[encoding.packets]")
         REQUIRE(pMessage->GetOpcode() == sendMessage.GetOpcode());
         REQUIRE(*CastUnique<NotifyActionEvents>(std::move(pMessage)) == sendMessage);
     }
+
+    GIVEN("RequestInventorySnapshot")
+    {
+        Inventory::Entry armor;
+        armor.BaseId.BaseId = 0x12E46;
+        armor.Count = 1;
+        armor.ExtraWorn = true;
+
+        Inventory::Entry gold;
+        gold.BaseId.BaseId = 0xF;
+        gold.Count = 250;
+
+        RequestInventorySnapshot sendMessage;
+        sendMessage.ServerId = 0x10042;
+        sendMessage.OwnershipEpoch = 7;
+        sendMessage.CurrentInventory.Entries = {armor, gold};
+        sendMessage.CurrentInventory.CurrentMagicEquipment.RightHandSpell.BaseId = 0x12FCD;
+
+        Buffer buff(1000);
+        Buffer::Writer writer(&buff);
+        sendMessage.Serialize(writer);
+
+        Buffer::Reader reader(&buff);
+
+        const ClientMessageFactory factory;
+        auto pMessage = factory.Extract(reader);
+
+        REQUIRE(pMessage);
+        REQUIRE(pMessage->GetOpcode() == sendMessage.GetOpcode());
+        REQUIRE(*CastUnique<RequestInventorySnapshot>(std::move(pMessage)) == sendMessage);
+    }
+
+    GIVEN("NotifyInventorySnapshot")
+    {
+        Inventory::Entry armor;
+        armor.BaseId.BaseId = 0x12E46;
+        armor.Count = 1;
+        armor.ExtraWornLeft = true;
+
+        NotifyInventorySnapshot sendMessage;
+        sendMessage.ServerId = 0x10042;
+        sendMessage.OwnershipEpoch = 7;
+        sendMessage.CurrentInventory.Entries = {armor};
+        sendMessage.CurrentInventory.CurrentMagicEquipment.Shout.BaseId = 0x13E07;
+
+        Buffer buff(1000);
+        Buffer::Writer writer(&buff);
+        sendMessage.Serialize(writer);
+
+        Buffer::Reader reader(&buff);
+
+        const ServerMessageFactory factory;
+        auto pMessage = factory.Extract(reader);
+
+        REQUIRE(pMessage);
+        REQUIRE(pMessage->GetOpcode() == sendMessage.GetOpcode());
+        REQUIRE(*CastUnique<NotifyInventorySnapshot>(std::move(pMessage)) == sendMessage);
+    }
+}
+
+TEST_CASE("Mod messages", "[encoding.mod_message]")
+{
+    String maxPayload(SkyrimTogetherAPI::kMaxMessageSize, 'p');
+    maxPayload[10] = '\0'; // payloads are opaque bytes, not text
+
+    // Empty payload, 256-byte payload, 64-byte channel name
+    const auto [channel, payload] = GENERATE_COPY(std::make_pair(String("a"), String()), std::make_pair(String("campfire"), maxPayload), std::make_pair(String(SkyrimTogetherAPI::kMaxChannelNameSize, 'c'), String("hi")));
+
+    SECTION("SendModMessageRequest")
+    {
+        SendModMessageRequest sendMessage;
+        sendMessage.Channel = channel;
+        sendMessage.TargetPlayerId = 7;
+        sendMessage.Data = payload;
+
+        Buffer buff(1000);
+        Buffer::Writer writer(&buff);
+        sendMessage.Serialize(writer);
+
+        Buffer::Reader reader(&buff);
+        auto pMessage = ClientMessageFactory{}.Extract(reader);
+
+        REQUIRE(pMessage);
+        REQUIRE(*CastUnique<SendModMessageRequest>(std::move(pMessage)) == sendMessage);
+    }
+
+    SECTION("NotifyModMessage")
+    {
+        NotifyModMessage sendMessage;
+        sendMessage.Channel = channel;
+        sendMessage.SenderPlayerId = 3;
+        sendMessage.Data = payload;
+
+        Buffer buff(1000);
+        Buffer::Writer writer(&buff);
+        sendMessage.Serialize(writer);
+
+        Buffer::Reader reader(&buff);
+        auto pMessage = ServerMessageFactory{}.Extract(reader);
+
+        REQUIRE(pMessage);
+        REQUIRE(*CastUnique<NotifyModMessage>(std::move(pMessage)) == sendMessage);
+    }
+}
+
+TEST_CASE("Mod message with a bogus length", "[encoding.mod_message]")
+{
+    // A length prefix far larger than the packet must not be allocated, the message just comes out empty
+    Buffer buff(1000);
+    Buffer::Writer writer(&buff);
+    Serialization::WriteVarInt(writer, 0xFFFFFFFFFFull);
+
+    Buffer::Reader reader(&buff);
+    SendModMessageRequest request;
+    request.DeserializeRaw(reader);
+
+    REQUIRE(request.Channel.empty());
+    REQUIRE(request.Data.empty());
+}
+
+TEST_CASE("Mod message channel names", "[encoding.mod_message]")
+{
+    REQUIRE(ModMessage::IsValidChannelName("Campfire_Sync-1.0"));
+    REQUIRE(ModMessage::IsValidChannelName(String(SkyrimTogetherAPI::kMaxChannelNameSize, 'a')));
+    REQUIRE_FALSE(ModMessage::IsValidChannelName(""));
+    REQUIRE_FALSE(ModMessage::IsValidChannelName(String(SkyrimTogetherAPI::kMaxChannelNameSize + 1, 'a')));
+    REQUIRE_FALSE(ModMessage::IsValidChannelName("has space"));
+    REQUIRE_FALSE(ModMessage::IsValidChannelName(String("nul\0", 4)));
+}
+
+TEST_CASE("Chat broadcast", "[encoding.chat]")
+{
+    NotifyChatMessageBroadcast sendMessage;
+    sendMessage.MessageType = kPartyChat;
+    sendMessage.PlayerId = 0x1234567;
+    sendMessage.PlayerName = "absol";
+    sendMessage.ChatMessage = "Follow me";
+
+    Buffer buff(1000);
+    Buffer::Writer writer(&buff);
+    sendMessage.Serialize(writer);
+
+    Buffer::Reader reader(&buff);
+
+    const ServerMessageFactory factory;
+    auto pMessage = factory.Extract(reader);
+
+    REQUIRE(pMessage);
+    REQUIRE(pMessage->GetOpcode() == sendMessage.GetOpcode());
+    REQUIRE(*CastUnique<NotifyChatMessageBroadcast>(std::move(pMessage)) == sendMessage);
 }
 
 TEST_CASE("StringCache", "[encoding.string_cache]")

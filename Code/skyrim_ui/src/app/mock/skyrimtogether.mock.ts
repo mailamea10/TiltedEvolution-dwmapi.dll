@@ -359,6 +359,10 @@ export class SkyrimtogetherMock extends EventEmitter implements SkyrimTogether {
     );
   }
 
+  setNameTagSettings(settings: NameTagSettings): void {
+    console.log('setNameTagSettings', settings);
+  }
+
   openPlayGuide(): void {
     window.open(
       'https://wiki.tiltedphoques.com/tilted-online/general-information/playguide',

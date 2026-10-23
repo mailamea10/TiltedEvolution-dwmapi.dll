@@ -3,6 +3,7 @@
 void NotifyChatMessageBroadcast::SerializeRaw(TiltedPhoques::Buffer::Writer& aWriter) const noexcept
 {
     Serialization::WriteVarInt(aWriter, static_cast<uint64_t>(MessageType));
+    Serialization::WriteVarInt(aWriter, PlayerId);
     Serialization::WriteString(aWriter, PlayerName);
     Serialization::WriteString(aWriter, ChatMessage);
 }
@@ -12,6 +13,7 @@ void NotifyChatMessageBroadcast::DeserializeRaw(TiltedPhoques::Buffer::Reader& a
     ServerMessage::DeserializeRaw(aReader);
 
     MessageType = static_cast<ChatMessageType>(Serialization::ReadVarInt(aReader));
+    PlayerId = Serialization::ReadVarInt(aReader) & 0xFFFFFFFF;
     PlayerName = Serialization::ReadString(aReader);
     ChatMessage = Serialization::ReadString(aReader);
 }

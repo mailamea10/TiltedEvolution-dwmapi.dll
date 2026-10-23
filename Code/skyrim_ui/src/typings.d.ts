@@ -547,4 +547,31 @@ interface SkyrimTogether {
   setTradeReady(ready: boolean): void;
   updateTradeOffer(entries: SkyrimTogetherTypes.TradeOfferEntry[]): void;
   openPlayGuide(): void;
+
+  /**
+   * Configure the in-world player name tags.
+   */
+  setNameTagSettings(settings: NameTagSettings): void;
+}
+
+/**
+ * Name tag settings. Filters are 0 = on, 1 = party only, 2 = off.
+ */
+interface NameTagSettings {
+  nameTags: number;
+  backdrop: number;
+  /** Floating subtitle chat filter. */
+  floatingChat: number;
+  /** Font size in pixels. */
+  fontSize: number;
+  nameFadeStart: number;
+  nameInvisible: number;
+  partyFadeStart: number;
+  partyInvisible: number;
+  /** Shown instead of the name of players whose name is hidden. */
+  strangerLabel: string;
+  /** Players whose real name may be shown. */
+  revealedPlayerIds: number[];
+  /** Players whose name may be shown in front of their floating chat. */
+  revealedChatPlayerIds: number[];
 }
