@@ -66,7 +66,9 @@ def checkout(tree: pathlib.Path, target: dict) -> None:
     run(["git", "clean", "-fdq", "Code"], tree)
     # Annotated, because git describe (which the build stamps into the binaries) prefers annotated tags over any
     # lightweight one that happens to sit on the same commit.
-    run(["git", "tag", "-f", "-a", "-m", "Together Launcher build version", target["version"], "HEAD"], tree)
+    # An annotated tag needs a tagger; CI runners have no git identity, so it gets a fixed one.
+    run(["git", "-c", "user.name=Together Launcher", "-c", "user.email=together-launcher@users.noreply.github.com",
+         "tag", "-f", "-a", "-m", "Together Launcher build version", target["version"], "HEAD"], tree)
     described = run(["git", "describe", "--tags"], tree, capture=True).strip()
     if described != target["version"]:
         others = run(["git", "tag", "--points-at", "HEAD"], tree, capture=True).split()
