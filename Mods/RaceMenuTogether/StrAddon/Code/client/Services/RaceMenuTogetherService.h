@@ -5,7 +5,6 @@
 struct World;
 struct TransportService;
 struct UpdateEvent;
-struct NotifyScriptAnimation;
 struct Actor;
 
 /**
@@ -16,9 +15,10 @@ struct Actor;
  * one loaded from the preset tab).
  *
  * The owner's appearance is taken with RaceMenu's own preset export when RaceMenu closes (and once after
- * joining), compressed, and sent in pieces through the script animation relay that every Skyrim Together
- * server already has, so no server change is needed. Every player sends their appearance again when a new
- * player shows up, since the server does not keep it. On the other clients the pieces are put back together
+ * joining), compressed, and sent in pieces as Plugin API V2 messages about the player's character, which the
+ * server relays to the players in range and never stores; on a server without V2 appearances are not shared.
+ * Every player sends their appearance again when another player comes into range, since the server does not
+ * keep it. On the other clients the pieces are put back together
  * and the appearance is put on that player's copy with RaceMenu's own preset loader. Three things RaceMenu's
  * loader does not hold on a copy are looked after here: each copy gets its own hair color form, overlays are
  * set up before the preset's overlay overrides arrive, and body morphs are re-asserted when BodyGen or OBody -
@@ -27,13 +27,16 @@ struct Actor;
 struct RaceMenuTogetherService
 {
     RaceMenuTogetherService(World& aWorld, TransportService& aTransport, entt::dispatcher& aDispatcher) noexcept;
-    ~RaceMenuTogetherService() noexcept = default;
+    ~RaceMenuTogetherService() noexcept;
 
     TP_NOCOPYMOVE(RaceMenuTogetherService);
 
 protected:
     void OnUpdate(const UpdateEvent& acEvent) noexcept;
-    void OnNotifyScriptAnimation(const NotifyScriptAnimation& acMessage) noexcept;
+
+public:
+    // A piece of the appearance of player aSenderId. Runs during the World update.
+    void OnNearMessage(uint32_t aSenderId, uint32_t aServerId, const char* apBytes, size_t aLength) noexcept;
 
 private:
     struct RemotePreset
@@ -84,6 +87,7 @@ private:
     bool RaceMenuAvailable() noexcept;
     void SendLocalPreset(const char* acpReason) noexcept;
     void SendBlob(const String& acBlob, uint32_t aRevision) noexcept;
+    void SendQueued(double aDelta) noexcept;
     void WatchForNewPlayers(double aDelta) noexcept;
     void OnBlob(uint32_t aPlayerId, uint32_t aRevision, const String& acBlob) noexcept;
     void ApplyPending(double aDelta) noexcept;
@@ -120,6 +124,12 @@ private:
     double m_applyTimer{0.0};
     bool m_reportedMissing{false};
 
+    // Pieces waiting to go out, paced under the server's rate limit.
+    Vector<String> m_outgoing;
+    double m_sendBudget{};
+    // Whether this connection's server relays appearances has been logged, and how long it has been connected.
+    bool m_relayChecked{};
+    double m_connectedFor{};
+
     entt::scoped_connection m_updateConnection;
-    entt::scoped_connection m_notifyConnection;
 };

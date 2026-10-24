@@ -7,10 +7,8 @@
 
 #include <Events/UpdateEvent.h>
 
-#include <Messages/NotifyScriptAnimation.h>
-#include <Messages/ScriptAnimationRequest.h>
-
 #include <Services/PapyrusService.h>
+#include <Services/PluginService.h>
 #include <Services/TransportService.h>
 #include <Systems/FaceGenSystem.h>
 
@@ -24,7 +22,9 @@
 #include <Misc/BSFixedString.h>
 #include <Misc/TintMask.h>
 
-#include <compressapi.h>
+#include <cryptopp/filters.h>
+#include <cryptopp/zdeflate.h>
+#include <cryptopp/zinflate.h>
 #include <psapi.h>
 
 #include <algorithm>
@@ -37,7 +37,6 @@
 #include <type_traits>
 
 // Windows' own compression (Windows 8 and later), so the add-on needs no extra library.
-#pragma comment(lib, "cabinet.lib")
 
 // Lets the plugin see that this Skyrim Together build carries the add-on.
 extern "C" __declspec(dllexport) uint32_t STRRaceMenu_HostApiVersion()
@@ -47,21 +46,23 @@ extern "C" __declspec(dllexport) uint32_t STRRaceMenu_HostApiVersion()
 
 namespace
 {
-// "STRRM1|<sender's player id, hex>|<revision>|<piece>|<pieces>|<piece bytes>", relayed as a script animation for
-// an object id that the stock client drops without playing anything. 1.8.5 resolves that id as a server id, so
-// one that cannot exist is used; 1.8.3 skips id 0 outright (apply_addon.py --protocol 1.8.3 defines it).
-#ifndef STR_RACEMENU_NO_OBJECT
-#define STR_RACEMENU_NO_OBJECT 0xFFFFFFFFu
-#endif
-constexpr const char* kWirePrefix = "STRRM1|";
-constexpr uint32_t kNoObject = STR_RACEMENU_NO_OBJECT;
+// An appearance goes out as Plugin API V2 messages about the player's character, "<revision>|<piece>|<pieces>|"
+// then the piece's bytes, relayed to the players who have that character in range and never stored. Servers
+// without V2 do not get appearances at all (never the script animation relay, whose string cache would keep
+// every edit for the rest of the session).
+constexpr const char* kChannelName = "mailamea.RaceMenuTogether";
 
-// Script animation strings carry a 16-bit length, so an appearance goes out in pieces below that.
-constexpr size_t kPieceBytes = 60000;
-constexpr uint32_t kMaxPieces = 8;
+// Pieces fit one V2 message with room for the header, and leave at a pace under the server's rate limit.
+constexpr size_t kPieceBytes = 1100;
+constexpr uint32_t kMaxPieces = 200;
+constexpr double kPiecesPerSecond = 40.0;
+constexpr double kPieceBurst = 20.0;
+// How long to wait for the server's answer on relaying appearances before saying it does not.
+constexpr double kRelayAnswerWait = 10.0;
 
-// The appearance as sent: "RMT1", the preset's size, the face tints, then the compressed preset.
-constexpr char kBlobMagic[4] = {'R', 'M', 'T', '1'};
+// The appearance as sent: "RMT2", the preset's size, the face tints, then the preset as raw deflate. (RMT1 used
+// the Windows compression API, which Wine and Proton do not provide.)
+constexpr char kBlobMagic[4] = {'R', 'M', 'T', '2'};
 
 // RaceMenu reads and writes presets here, relative to the game folder (Mod Organizer redirects new files
 // into its overwrite folder). The files only exist for the duration of one save or one load.
@@ -179,23 +180,23 @@ struct ByteReader
 
 // --- compression ---------------------------------------------------------------------------------------------
 
+// Raw deflate through Crypto++, which Skyrim Together already links: no system compression API, so it works the
+// same under Wine and Proton.
 bool CompressPreset(const std::string& acInput, String& aOut)
 {
-    COMPRESSOR_HANDLE handle = nullptr;
-    if (!CreateCompressor(COMPRESS_ALGORITHM_MSZIP, nullptr, &handle))
-        return false;
-
-    SIZE_T size = 0;
-    ::Compress(handle, acInput.data(), acInput.size(), nullptr, 0, &size);
-    bool ok = size != 0;
-    if (ok)
+    try
     {
-        aOut.resize(size);
-        ok = ::Compress(handle, acInput.data(), acInput.size(), aOut.data(), aOut.size(), &size) != FALSE;
-        aOut.resize(ok ? size : 0);
+        std::string out;
+        CryptoPP::StringSource source(reinterpret_cast<const CryptoPP::byte*>(acInput.data()), acInput.size(), true,
+                                      new CryptoPP::Deflator(new CryptoPP::StringSink(out), CryptoPP::Deflator::MAX_DEFLATE_LEVEL));
+        aOut.assign(out.data(), out.size());
+        return !aOut.empty();
     }
-    CloseCompressor(handle);
-    return ok;
+    catch (const CryptoPP::Exception&)
+    {
+        aOut.clear();
+        return false;
+    }
 }
 
 bool DecompressPreset(const char* acpInput, size_t aInputSize, uint32_t aSize, String& aOut)
@@ -204,16 +205,23 @@ bool DecompressPreset(const char* acpInput, size_t aInputSize, uint32_t aSize, S
     if (aSize == 0 || aSize > 16 * 1024 * 1024)
         return false;
 
-    DECOMPRESSOR_HANDLE handle = nullptr;
-    if (!CreateDecompressor(COMPRESS_ALGORITHM_MSZIP, nullptr, &handle))
+    try
+    {
+        // The sink holds one byte more than the announced size, so a stream that inflates to more is caught, and
+        // whatever a malformed one inflates to beyond that is dropped.
+        aOut.resize(static_cast<size_t>(aSize) + 1);
+        CryptoPP::ArraySink* pSink = new CryptoPP::ArraySink(reinterpret_cast<CryptoPP::byte*>(aOut.data()), aOut.size());
+        CryptoPP::StringSource source(reinterpret_cast<const CryptoPP::byte*>(acpInput), aInputSize, false, new CryptoPP::Inflator(pSink));
+        source.PumpAll();
+        const bool cOk = pSink->TotalPutLength() == aSize;
+        aOut.resize(cOk ? aSize : 0);
+        return cOk;
+    }
+    catch (const CryptoPP::Exception&)
+    {
+        aOut.clear();
         return false;
-
-    aOut.resize(aSize);
-    SIZE_T size = 0;
-    const bool cOk = ::Decompress(handle, acpInput, aInputSize, aOut.data(), aOut.size(), &size) != FALSE;
-    CloseDecompressor(handle);
-    aOut.resize(cOk ? size : 0);
-    return cOk && size == aSize;
+    }
 }
 
 // --- RaceMenu's preset files ---------------------------------------------------------------------------------
@@ -416,12 +424,39 @@ bool StartsWith(const String& acText, const char* acpPrefix) noexcept
 }
 } // namespace
 
+namespace
+{
+// The Plugin API calls back into whichever service is alive; channels last for the whole process.
+RaceMenuTogetherService* s_pService = nullptr;
+SkyrimTogetherAPI::ChannelHandle s_channel = 0;
+
+void OnNearMessageThunk(uint32_t aSenderId, uint32_t aServerId, const char* apBytes, size_t aLength)
+{
+    if (s_pService && apBytes)
+        s_pService->OnNearMessage(aSenderId, aServerId, apBytes, aLength);
+}
+} // namespace
+
 RaceMenuTogetherService::RaceMenuTogetherService(World& aWorld, TransportService& aTransport, entt::dispatcher& aDispatcher) noexcept
     : m_world(aWorld)
     , m_transport(aTransport)
 {
     m_updateConnection = aDispatcher.sink<UpdateEvent>().connect<&RaceMenuTogetherService::OnUpdate>(this);
-    m_notifyConnection = aDispatcher.sink<NotifyScriptAnimation>().connect<&RaceMenuTogetherService::OnNotifyScriptAnimation>(this);
+
+    s_pService = this;
+    if (s_channel == 0)
+    {
+        auto& api = PluginService::Get();
+        s_channel = api.RegisterChannel(kChannelName, nullptr, nullptr);
+        if (s_channel == 0 || !api.SetNearMessageCallback(s_channel, &OnNearMessageThunk))
+            spdlog::error("RaceMenu Together: could not register the '{}' channel; appearances are not shared", kChannelName);
+    }
+}
+
+RaceMenuTogetherService::~RaceMenuTogetherService() noexcept
+{
+    if (s_pService == this)
+        s_pService = nullptr;
 }
 
 void RaceMenuTogetherService::ScanForPlugin() noexcept
@@ -496,6 +531,10 @@ void RaceMenuTogetherService::Reset() noexcept
     m_resendTimer = -1.0;
     m_lastBlob.clear();
     m_sendAfterJoin = false;
+    m_outgoing.clear();
+    m_sendBudget = kPieceBurst;
+    m_relayChecked = false;
+    m_connectedFor = 0.0;
 }
 
 void RaceMenuTogetherService::OnUpdate(const UpdateEvent& acEvent) noexcept
@@ -524,8 +563,28 @@ void RaceMenuTogetherService::OnUpdate(const UpdateEvent& acEvent) noexcept
             m_joinDelay = 0.0;
         }
     }
-    if (!cOnline)
+    if (!cOnline || s_channel == 0)
         return;
+
+    // The server answers whether it relays messages about actors shortly after joining; say once what it means.
+    if (!PluginService::Get().IsNearSupported())
+    {
+        m_connectedFor += acEvent.Delta;
+        if (!m_relayChecked && m_connectedFor >= kRelayAnswerWait)
+        {
+            m_relayChecked = true;
+            spdlog::warn("RaceMenu Together: this server does not relay appearances (it needs an AllTogether server or a Skyrim "
+                         "Together server with Plugin API V2); appearances are not shared in this session");
+        }
+        return;
+    }
+    if (!m_relayChecked)
+    {
+        m_relayChecked = true;
+        spdlog::info("RaceMenu Together: the server relays appearances to the players in range");
+    }
+
+    SendQueued(acEvent.Delta);
 
     // The owner's side: RaceMenu closing is when sculpting, an imported head or a loaded preset is final.
     static BSFixedString s_raceMenuName("RaceSex Menu");
@@ -557,16 +616,22 @@ void RaceMenuTogetherService::OnUpdate(const UpdateEvent& acEvent) noexcept
 
 void RaceMenuTogetherService::WatchForNewPlayers(double aDelta) noexcept
 {
+    // A player's character is here while it is in range, which is also when the server relays our appearance to
+    // them. Keep only the ones present now, so one that comes back into range (or reconnects with the same ID)
+    // counts as new again.
     bool newPlayer = false;
+    Set<uint32_t> currentPlayers;
     auto view = m_world.view<PlayerComponent>();
     for (auto entity : view)
     {
         const uint32_t cPlayerId = view.get<PlayerComponent>(entity).Id;
         if (cPlayerId == m_transport.GetLocalPlayerId())
             continue;
-        if (m_knownPlayers.insert(cPlayerId).second)
+        currentPlayers.insert(cPlayerId);
+        if (!m_knownPlayers.contains(cPlayerId))
             newPlayer = true;
     }
+    m_knownPlayers = std::move(currentPlayers);
 
     // The server does not keep appearances, so whoever was here already sends theirs again.
     if (newPlayer && m_resendTimer < 0.0)
@@ -643,43 +708,66 @@ void RaceMenuTogetherService::SendBlob(const String& acBlob, uint32_t aRevision)
     if (cPieces == 0 || cPieces > kMaxPieces)
         return;
 
+    // A newer send replaces whatever of an older one has not gone out yet.
+    m_outgoing.clear();
     for (uint32_t i = 0; i < cPieces; ++i)
     {
-        String wire = fmt::format("{}{:X}|{}|{}|{}|", kWirePrefix, m_transport.GetLocalPlayerId(), aRevision, i, cPieces).c_str();
+        String wire = fmt::format("{}|{}|{}|", aRevision, i, cPieces).c_str();
         const size_t cOffset = static_cast<size_t>(i) * kPieceBytes;
         wire.append(acBlob, cOffset, std::min(kPieceBytes, acBlob.size() - cOffset));
-
-        ScriptAnimationRequest request{};
-        request.FormID = kNoObject;
-        request.EventName = wire;
-        m_transport.Send(request);
+        m_outgoing.push_back(std::move(wire));
     }
 }
 
-void RaceMenuTogetherService::OnNotifyScriptAnimation(const NotifyScriptAnimation& acMessage) noexcept
+void RaceMenuTogetherService::SendQueued(double aDelta) noexcept
 {
-    const String& cWire = acMessage.EventName;
-    if (!m_pluginFound || !StartsWith(cWire, kWirePrefix))
+    m_sendBudget = std::min(kPieceBurst, m_sendBudget + aDelta * kPiecesPerSecond);
+    if (m_outgoing.empty())
         return;
 
-    // "<player id>|<revision>|<piece>|<pieces>|" then the piece's bytes.
-    uint32_t fields[4]{};
-    size_t position = strlen(kWirePrefix);
-    for (int f = 0; f < 4; ++f)
+    const auto cServerId = PluginService::Get().GetServerId(0x14);
+    if (cServerId == 0)
+        return;
+
+    size_t sent = 0;
+    while (sent < m_outgoing.size() && m_sendBudget >= 1.0)
+    {
+        const String& cWire = m_outgoing[sent];
+        const auto cResult = PluginService::Get().SendNear(s_channel, cServerId, SkyrimTogetherAPI::Delivery::Reliable, cWire.data(), cWire.size());
+        if (cResult != SkyrimTogetherAPI::SendResult::Ok)
+        {
+            spdlog::debug("RaceMenu Together: appearance piece not sent ({}), trying again", static_cast<int>(cResult));
+            break;
+        }
+        m_sendBudget -= 1.0;
+        ++sent;
+    }
+    m_outgoing.erase(m_outgoing.begin(), m_outgoing.begin() + sent);
+}
+
+void RaceMenuTogetherService::OnNearMessage(uint32_t aSenderId, uint32_t, const char* apBytes, size_t aLength) noexcept
+{
+    if (!m_pluginFound)
+        return;
+
+    // "<revision>|<piece>|<pieces>|" then the piece's bytes. The sender is the server's word, not the payload's.
+    const String cWire(apBytes, aLength);
+    uint32_t fields[3]{};
+    size_t position = 0;
+    for (int f = 0; f < 3; ++f)
     {
         const size_t cBar = cWire.find('|', position);
         if (cBar == String::npos || cBar == position || cBar - position > 10)
             return;
-        fields[f] = static_cast<uint32_t>(strtoul(cWire.substr(position, cBar - position).c_str(), nullptr, f == 0 ? 16 : 10));
+        fields[f] = static_cast<uint32_t>(strtoul(cWire.substr(position, cBar - position).c_str(), nullptr, 10));
         position = cBar + 1;
     }
 
-    const uint32_t cPlayerId = fields[0];
-    const uint32_t cRevision = fields[1];
-    const uint32_t cPiece = fields[2];
-    const uint32_t cPieces = fields[3];
+    const uint32_t cPlayerId = aSenderId;
+    const uint32_t cRevision = fields[0];
+    const uint32_t cPiece = fields[1];
+    const uint32_t cPieces = fields[2];
 
-    // 1.8.3 servers send our own pieces back to us.
     if (cPlayerId == m_transport.GetLocalPlayerId() || cPieces == 0 || cPieces > kMaxPieces || cPiece >= cPieces)
         return;
 
