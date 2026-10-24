@@ -1,0 +1,18 @@
+# The launchers the Together Launcher builds, one per Skyrim Together release and Skyrim runtime:
+#   <id> <source repository> <commit> <version> <protocol> <runtime> <folder>
+# version:  exactly what that release's own builds report; servers refuse any other.
+# protocol: how the release relays add-on messages (apply_host.py / apply_addon.py --protocol).
+# runtime:  1.7.104, 1.6.1170 (also runs 1.6.1179) or 1.5.97 (the legacy launcher, with EarlyLoad.dll, TPProcess.exe
+#           and the AE-to-SE id map).
+# folder:   where the launcher goes in the release archives and the bundle's FOMOD (underscores become spaces).
+# The server for each release is built from its first target.
+183-1.7.104  https://github.com/mailamea10/TiltedEvolution-dwmapi.dll.git  4917189f6ac382e874f9ee735c4fef6a350e449e  v1.8.3              1.8.3  1.7.104   10_STR_1.8.3_-_1.7.104
+183-1.6.1170 https://github.com/mailamea10/TiltedEvolution-dwmapi.dll.git  db8af2cf2758ccb6412b71ac1dcadc8c3a5ad0aa  v1.8.3              1.8.3  1.6.1170  11_STR_1.8.3_-_1.6.1170
+184-1.7.104  https://github.com/absol89/TiltedEvolutionScriptFixes.git     951c3641eb5430e6d7623d69f633af677c055faf v1.8.4              1.8.4  1.7.104   20_STR_1.8.4_-_1.7.104
+184-1.6.1170 https://github.com/absol89/TiltedEvolutionScriptFixes.git     e8b452d22bf60ddaca49e6e845a0a5fa87401a81  v1.8.4              1.8.4  1.6.1170  21_STR_1.8.4_-_1.6.1170
+185-1.7.104  https://github.com/mailamea10/TiltedEvolution-dwmapi.dll.git  0f1876e692310959b5c67ae148357e9d4c7ed9ff  v1.8.5              1.8.5  1.7.104   30_STR_1.8.5_-_1.7.104
+185-1.6.1170 https://github.com/mailamea10/TiltedEvolution-dwmapi.dll.git  043dad02c086c158a4b1e24d136e2c97c8a6d15f  v1.8.5              1.8.5  1.6.1170  31_STR_1.8.5_-_1.6.1170
+185-1.5.97   https://github.com/mailamea10/TiltedEvolution-dwmapi.dll.git  e6a097e1915a58d53343b167c24367f92303bcc0  v1.8.5              1.8.5  1.5.97    32_STR_1.8.5_-_1.5.97
+187-1.7.104  https://github.com/absol89/TiltedEvolutionScriptFixes.git     4b2cd432bbfbd5e8aff4328527642c66112d4cb2  v1.8.7-4-g4b2cd432  1.8.7  1.7.104   40_STR_1.8.7-4_-_1.7.104
+187-1.6.1170 https://github.com/absol89/TiltedEvolutionScriptFixes.git     4b2cd432bbfbd5e8aff4328527642c66112d4cb2  v1.8.7-4-g4b2cd432  1.8.7  1.6.1170  41_STR_1.8.7-4_-_1.6.1170
+187-1.5.97   https://github.com/mailamea10/TiltedEvolution-dwmapi.dll.git  ffece63f8dbf184fdbf081fa7c7a9e42c15f7d73  v1.8.7-4-g4b2cd432  1.8.7  1.5.97    42_STR_1.8.7-4_-_1.5.97
