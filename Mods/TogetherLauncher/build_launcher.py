@@ -64,8 +64,10 @@ def checkout(tree: pathlib.Path, target: dict) -> None:
         run(["git", "fetch", "--no-tags", target["source"], target["commit"]], tree)
     run(["git", "checkout", "--force", "--detach", target["commit"]], tree)
     run(["git", "clean", "-fdq", "Code"], tree)
-    run(["git", "tag", "-f", target["version"], "HEAD"], tree)
-    described = run(["git", "describe", "--tags", "--abbrev=0"], tree, capture=True).strip()
+    # Annotated, because git describe (which the build stamps into the binaries) prefers annotated tags over any
+    # lightweight one that happens to sit on the same commit.
+    run(["git", "tag", "-f", "-a", "-m", "Together Launcher build version", target["version"], "HEAD"], tree)
+    described = run(["git", "describe", "--tags"], tree, capture=True).strip()
     if described != target["version"]:
         others = run(["git", "tag", "--points-at", "HEAD"], tree, capture=True).split()
         fail(f"the tree describes itself as {described}, not {target['version']}: other tags on this commit "
