@@ -49,7 +49,7 @@ World::World()
     ctx().emplace<InputService>(ctx().at<OverlayService>());
     ctx().emplace<CharacterService>(*this, m_dispatcher, m_transport);
     ctx().emplace<DebugService>(m_dispatcher, *this, m_transport, ctx().at<ImguiService>());
-    ctx().emplace<PapyrusService>(m_dispatcher);
+    ctx().emplace<PapyrusService>();
     ctx().emplace<DiscordService>(m_dispatcher);
     ctx().emplace<ObjectService>(*this, m_dispatcher, m_transport);
     ctx().emplace<CalendarService>(*this, m_dispatcher, m_transport);
@@ -85,6 +85,16 @@ void World::Update() noexcept
 {
     const auto cNow = std::chrono::high_resolution_clock::now();
     const auto cDelta = cNow - m_lastFrameTime;
+
+    // A window timer now drives this in addition to the game's own vm tick (which
+    // never fires on 1.5.97), so run at most one update per ~8ms and let the two
+    // sources interleave rather than doubling the rate. A skipped call leaves
+    // m_lastFrameTime untouched, so the next accepted one measures its delta from
+    // the last real update.
+    if (m_hasTicked && cDelta < std::chrono::milliseconds(8))
+        return;
+
+    m_hasTicked = true;
     m_lastFrameTime = cNow;
 
     const auto cDeltaSeconds = std::chrono::duration_cast<std::chrono::duration<double>>(cDelta).count();

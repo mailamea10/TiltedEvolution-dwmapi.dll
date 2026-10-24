@@ -79,7 +79,7 @@ int StartUp(int argc, char** argv)
     // TODO(Force): Make some InitSharedResources func.
     g_SharedWindowIcon = LoadIconW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(102));
 
-#if (!IS_MASTER)
+#if (!IS_MASTER) && !defined(STR_PUBLIC_RELEASE)
     TiltedPhoques::Debug::CreateConsole();
 #endif
 

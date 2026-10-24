@@ -62,3 +62,25 @@ target("SkyrimImmersiveLauncher")
     add_deps("SkyrimTogetherClient")
     add_ldflags("/WHOLEARCHIVE:SkyrimTogetherClient", { force = true })
     build_launcher()
+
+-- Skyrim SE 1.5.x (pre-AE) build of the same launcher. It links the legacy
+-- client (SKYRIM_TARGET_LEGACY) and keeps the release file name, so it goes to
+-- its own folder instead of overwriting the 1.6 SkyrimTogether.exe. The 1.5.97
+-- executable is SteamStub-wrapped; ExeLoader::DecryptCeg already handles that.
+target("SkyrimImmersiveLauncherLegacy")
+    set_basename("SkyrimTogether")
+    set_targetdir("$(buildir)/$(plat)/$(arch)/$(mode)/legacy")
+    add_defines("TARGET_PREFIX=\"st\"", "SKYRIM_TARGET_LEGACY=1")
+    add_deps("SkyrimTogetherClientLegacy")
+    add_ldflags("/WHOLEARCHIVE:SkyrimTogetherClientLegacy", { force = true })
+    build_launcher()
+
+-- The same 1.5.x launcher without its console window, for players who do not
+-- want one. Both variants ship in a release.
+target("SkyrimImmersiveLauncherLegacyNoConsole")
+    set_basename("SkyrimTogether")
+    set_targetdir("$(buildir)/$(plat)/$(arch)/$(mode)/legacy-noconsole")
+    add_defines("TARGET_PREFIX=\"st\"", "SKYRIM_TARGET_LEGACY=1", "STR_PUBLIC_RELEASE=1")
+    add_deps("SkyrimTogetherClientLegacy")
+    add_ldflags("/WHOLEARCHIVE:SkyrimTogetherClientLegacy", { force = true })
+    build_launcher()

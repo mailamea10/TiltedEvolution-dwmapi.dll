@@ -1,0 +1,176 @@
+name: Legacy 1.5.97 build
+
+# Compiles the 1.5.x runtime (SKYRIM_TARGET_LEGACY) and the SKSE bootstrap plugin.
+# This is a compile check plus the two DLLs as a downloadable artifact; the release
+# package is assembled in a later step once this builds.
+
+on:
+  workflow_dispatch:
+    inputs:
+      server_version:
+        description: 'Version string the server compares against (the STR server release this build must talk to)'
+        required: false
+        default: 'v1.8.5'
+  push:
+    branches:
+      - 'feature/legacy-**'
+
+jobs:
+  build-legacy:
+    runs-on: windows-2022
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # full history is needed to create the version string (BuildInfo.h)
+          fetch-depth: 0
+
+      # The client reports xmake's GIT_TAG as its version and the server refuses
+      # any client whose string differs from its own ("expects version v1.8.5 but
+      # you are on version none"). This fork carries no release tags, so tag the
+      # build with the server version it is meant to talk to.
+      - name: Pin protocol version
+        env:
+          SERVER_VERSION: ${{ github.event.inputs.server_version || 'v1.8.5' }}
+        run: |
+          git tag -f "$SERVER_VERSION" HEAD
+          echo "client will report version: $(git describe --tags --abbrev=0)"
+
+      - name: Checkout submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --force --recursive --depth=1
+
+      # restore + save are split so the dependency cache is also saved when a later
+      # step fails (the plain cache action only saves after a fully green job)
+      - name: Restore xmake packages
+        id: pkgcache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/AppData/Local/.xmake/packages
+          key: ${{ runner.os }}-xmake-pkgs-${{ hashFiles('**/xmake.lua') }}
+          restore-keys: |
+            ${{ runner.os }}-xmake-pkgs-
+
+      - name: Setup xmake
+        uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: 3.1.0
+          actions-cache-folder: '.xmake-cache'
+          actions-cache-key: windows-2022
+
+      - name: Configure xmake and install dependencies
+        run: xmake config --plat=windows --arch=x64 --mode=releasedbg --yes -vD
+
+      - name: Save xmake packages
+        if: always() && steps.pkgcache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/AppData/Local/.xmake/packages
+          key: ${{ runner.os }}-xmake-pkgs-${{ hashFiles('**/xmake.lua') }}
+
+      - name: Build legacy runtime DLL
+        run: |
+          set +e
+          xmake build -y -vD SkyrimTogetherClientDllLegacy 2>&1 | tee build-legacy.log
+          status=${PIPESTATUS[0]}
+          # surface compiler/linker errors as annotations so they can be read
+          # without downloading the full job log
+          grep -E "error C[0-9]+|error LNK[0-9]+|fatal error|: error:" build-legacy.log | sort -u | head -40 | while IFS= read -r line; do echo "::error::${line:0:900}"; done
+          exit $status
+
+      - name: Show reported version
+        if: always()
+        run: |
+          echo "::notice::$(grep -h BUILD_COMMIT build/BuildInfo.h 2>/dev/null | head -1)"
+          echo "::notice::$(find build -name BuildInfo.h -exec grep -H BUILD_COMMIT {} \; | head -3 | tr '\n' ' ')"
+
+      - name: Build SKSE bootstrap plugin
+        run: |
+          xmake build -y -vD SkyrimTogetherSKSE
+          xmake build -y -vD TPProcess
+
+      # The immersive launcher (SkyrimTogether.exe), built against the 1.5.x client.
+      # It lands in releasedbg/legacy so it does not clash with the 1.6 launcher.
+      - name: Build legacy immersive launcher
+        run: |
+          set +e
+          xmake build -y -vD SkyrimImmersiveLauncherLegacy 2>&1 | tee build-launcher.log
+          status=${PIPESTATUS[0]}
+          if [ $status -eq 0 ]; then
+            xmake build -y -vD SkyrimImmersiveLauncherLegacyNoConsole 2>&1 | tee -a build-launcher.log
+            status=${PIPESTATUS[0]}
+          fi
+          grep -E "error C[0-9]+|error LNK[0-9]+|fatal error|: error:" build-launcher.log | sort -u | head -40 | while IFS= read -r line; do echo "::error::${line:0:900}"; done
+          exit $status
+
+      - name: List build outputs
+        if: always()
+        run: find build -maxdepth 6 \( -name 'SkyrimTogetherRuntime*' -o -name 'SkyrimTogetherSKSE*' -o -name 'SkyrimTogether.exe' -o -name 'EarlyLoad.dll' \) | sort
+
+      - name: Upload legacy binaries
+        uses: actions/upload-artifact@v7
+        with:
+          name: SkyrimTogether-legacy-1.5.97-binaries
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            build/windows/x64/releasedbg/SkyrimTogetherRuntime_1_5.dll
+            build/windows/x64/releasedbg/SkyrimTogetherRuntime_1_5.pdb
+            build/windows/x64/releasedbg/SkyrimTogetherSKSE.dll
+            build/windows/x64/releasedbg/SkyrimTogetherSKSE.pdb
+            build/windows/x64/releasedbg/TPProcess.exe
+            build/windows/x64/releasedbg/EarlyLoad.dll
+            build/windows/x64/releasedbg/legacy/SkyrimTogether.exe
+            build/windows/x64/releasedbg/legacy/SkyrimTogether.pdb
+            build/windows/x64/releasedbg/legacy-noconsole/SkyrimTogether.exe
+            GameFiles/Skyrim/SKSE/Plugins/versionlib-ae-to-se-1-5-97-0.map
+
+      # The release overlay: the files that turn an STR 1.8.5 install into the
+      # 1.5.97 build, laid out like the mod they are extracted over.
+      - name: Package release overlay
+        run: |
+          out=build/windows/x64/releasedbg
+          make_pkg() {
+            local launcher_dir=$1 zip=$2
+            rm -rf package && mkdir -p package/SkyrimTogetherRuntime
+            cp "$out/$launcher_dir/SkyrimTogether.exe" "$out/EarlyLoad.dll" "$out/TPProcess.exe" package/SkyrimTogetherRuntime/
+            cp GameFiles/Skyrim/SKSE/Plugins/versionlib-ae-to-se-1-5-97-0.map package/SkyrimTogetherRuntime/
+            cp Packaging/legacy/README-1.5.97.txt package/
+            cp LICENSE package/LICENSE.txt
+            (cd package && 7z a -tzip "../$zip" . > /dev/null)
+            ls -la "$zip"
+          }
+          make_pkg legacy-noconsole SkyrimTogetherReborn-1.8.5-SE-1.5.97.zip
+          make_pkg legacy SkyrimTogetherReborn-1.8.5-SE-1.5.97-console.zip
+
+      - name: Upload release overlay
+        uses: actions/upload-artifact@v7
+        with:
+          name: SkyrimTogetherReborn-1.8.5-SE-1.5.97
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            SkyrimTogetherReborn-1.8.5-SE-1.5.97.zip
+            SkyrimTogetherReborn-1.8.5-SE-1.5.97-console.zip
+
+      # Testing convenience: a rolling pre-release whose files download without a
+      # GitHub login (workflow artifacts need one). Replaced on every push.
+      - name: Publish rolling test pre-release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          out=build/windows/x64/releasedbg
+          mkdir -p publish
+          cp "$out/SkyrimTogetherRuntime_1_5.dll" "$out/SkyrimTogetherSKSE.dll" "$out/TPProcess.exe" "$out/EarlyLoad.dll" "$out/legacy/SkyrimTogether.exe" publish/
+          cp GameFiles/Skyrim/SKSE/Plugins/versionlib-ae-to-se-1-5-97-0.map SkyrimTogetherReborn-1.8.5-SE-1.5.97.zip SkyrimTogetherReborn-1.8.5-SE-1.5.97-console.zip publish/
+          gh release delete legacy-test --yes --cleanup-tag || true
+          gh release create legacy-test publish/* --prerelease --target "$GITHUB_SHA" \
+            --title "Legacy 1.5.97 test build (${GITHUB_SHA::8})" \
+            --notes "Rolling test build of ${GITHUB_REF_NAME} at ${GITHUB_SHA}. Not a release."

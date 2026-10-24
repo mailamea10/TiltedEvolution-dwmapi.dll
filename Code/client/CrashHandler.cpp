@@ -1,7 +1,10 @@
 #include <BranchInfo.h>
+#include <TiltedCore/Filesystem.hpp>
 #include "CrashHandler.h"
 #include <DbgHelp.h>
 #include <Windows.h>
+#include <cstdio>
+#include <cstring>
 #include <chrono>
 #include <filesystem>
 #include <iomanip>
@@ -19,6 +22,42 @@ std::string SerializeTimePoint(const time_point& time, const std::string& format
     std::stringstream ss;
     ss << std::put_time(&tm, format.c_str());
     return ss.str();
+}
+
+// "<module>+0x<offset>" for an address that lies inside a loaded module,
+// "unmapped" otherwise; lets every logged address be tied back to an image.
+void FormatModuleOffset(uintptr_t apAddress, char (&aBuf)[MAX_PATH + 48])
+{
+    HMODULE hMod = nullptr;
+    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           reinterpret_cast<LPCWSTR>(apAddress), &hMod) &&
+        hMod)
+    {
+        char modName[MAX_PATH] = {};
+        if (GetModuleFileNameA(hMod, modName, MAX_PATH))
+        {
+            const char* base = strrchr(modName, '\\');
+            sprintf_s(aBuf, sizeof(aBuf), "%s+0x%llx", base ? base + 1 : modName,
+                      apAddress - reinterpret_cast<uintptr_t>(hMod));
+            return;
+        }
+    }
+    sprintf_s(aBuf, sizeof(aBuf), "unmapped 0x%llx", apAddress);
+}
+
+// SEH guard kept in its own function: __try cannot live in a function that
+// needs C++ object unwinding.
+static bool TryReadStackSlot(const uintptr_t* apSlot, uintptr_t& aValue)
+{
+    __try
+    {
+        aValue = *apSlot;
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return false;
+    }
 }
 
 LONG WINAPI VectoredExceptionHandler(PEXCEPTION_POINTERS pExceptionInfo)
@@ -41,6 +80,38 @@ LONG WINAPI VectoredExceptionHandler(PEXCEPTION_POINTERS pExceptionInfo)
                       pExceptionInfo->ExceptionRecord->ExceptionAddress,
                       pExceptionInfo->ExceptionRecord->ExceptionFlags);
 
+        {
+            // Name the module the fault happened in and the address it tried to touch,
+            // so a crash can be attributed without the (large) minidump.
+            char where[MAX_PATH + 48];
+            FormatModuleOffset(reinterpret_cast<uintptr_t>(pExceptionInfo->ExceptionRecord->ExceptionAddress), where);
+            const auto* rec = pExceptionInfo->ExceptionRecord;
+            const char* access = rec->NumberParameters >= 2 ? (rec->ExceptionInformation[0] == 1 ? "write" : rec->ExceptionInformation[0] == 8 ? "execute" : "read") : "?";
+            spdlog::error(__FUNCTION__ ": faulting module {}, {} of 0x{:x}", where, access,
+                          rec->NumberParameters >= 2 ? rec->ExceptionInformation[1] : 0);
+
+            // Heuristic stack scan: values on the stack that point into a loaded
+            // module are mostly return addresses. Good enough to see who called in.
+            const auto* pStack = reinterpret_cast<const uintptr_t*>(pExceptionInfo->ContextRecord->Rsp);
+            int logged = 0;
+            for (int i = 0; i < 256 && logged < 24; ++i)
+            {
+                uintptr_t value = 0;
+                if (!TryReadStackSlot(pStack + i, value))
+                    break;
+
+                HMODULE hMod = nullptr;
+                if (value < 0x10000 || !GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                                           reinterpret_cast<LPCWSTR>(value), &hMod))
+                    continue;
+
+                char frame[MAX_PATH + 48];
+                FormatModuleOffset(value, frame);
+                spdlog::error(__FUNCTION__ ":   stack[rsp+0x{:x}] {}", i * 8, frame);
+                ++logged;
+            }
+        }
+
 #if (IS_MASTER)
         volatile static bool bMiniDump = false;
 #else
@@ -62,9 +133,12 @@ LONG WINAPI VectoredExceptionHandler(PEXCEPTION_POINTERS pExceptionInfo)
                 oss << "crash_" << SerializeTimePoint(std::chrono::system_clock::now(), "UTC_%Y-%m-%d_%H-%M-%S")
                     << ".dmp";
 
-                GetModuleFileNameA(NULL, dumpPath, sizeof(dumpPath));
-                std::filesystem::path modulePath(dumpPath);
-                auto subPath = modulePath.parent_path();
+                // Next to the logs (the launcher's folder), never in the game's
+                // install folder, and only the latest one is kept.
+                (void)dumpPath;
+                auto subPath = TiltedPhoques::GetPath() / "logs";
+                std::error_code ec;
+                std::filesystem::create_directories(subPath, ec);
 
                 CrashHandler::RemovePreviousDump(subPath);
 
@@ -147,7 +221,8 @@ void CrashHandler::RemovePreviousDump(std::filesystem::path path)
 {
     for (auto& entry : std::filesystem::directory_iterator(path))
     {
-        if (entry.path().string().find("crash") != std::string::npos)
+        const auto name = entry.path().filename().string();
+        if (name.rfind("crash_", 0) == 0 && entry.path().extension() == ".dmp")
         {
             DeleteFileA(entry.path().string().c_str());
         }

@@ -2,6 +2,7 @@
 #include <Camera/PlayerCamera.h>
 #include <NetImmerse/NiCamera.h>
 #include <TiltedOnlinePCH.h>
+#include <Games/Skyrim/RttiScan.h>
 
 PlayerCamera* PlayerCamera::Get() noexcept
 {
@@ -11,6 +12,15 @@ PlayerCamera* PlayerCamera::Get() noexcept
 
 bool PlayerCamera::IsFirstPerson() noexcept
 {
+#ifdef SKYRIM_TARGET_LEGACY
+    // The 1.6 build calls a game helper (AE id 21600) that has no 1.5.x entry in
+    // the id map. The answer is the same as asking whether the active camera
+    // state is the first person one, so compare its vtable against
+    // FirstPersonState's, found through the game's RTTI.
+    static void** s_pFirstPersonVTable = RttiScan::FindVTable(".?AVFirstPersonState@@");
+    auto* pState = static_cast<TESCamera*>(this)->state;
+    return s_pFirstPersonVTable && pState && *reinterpret_cast<void***>(pState) == s_pFirstPersonVTable;
+#else
     TP_THIS_FUNCTION(TIsFirstPerson, void, PlayerCamera, void*, void*, double*);
     POINTER_SKYRIMSE(TIsFirstPerson, isFirstPerson, 21600);
 
@@ -18,6 +28,7 @@ bool PlayerCamera::IsFirstPerson() noexcept
     TiltedPhoques::ThisCall(isFirstPerson, this, nullptr, nullptr, &firstPerson);
 
     return firstPerson == 1.0;
+#endif
 }
 
 bool PlayerCamera::WorldPtToScreenPt3(const NiPoint3& in, NiPoint3& out, float zeroTolerance /* = 1e-5f */)

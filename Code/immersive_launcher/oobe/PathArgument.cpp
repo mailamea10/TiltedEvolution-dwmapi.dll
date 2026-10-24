@@ -13,7 +13,7 @@ using namespace TiltedPhoques;
 
 namespace
 {
-constexpr wchar_t kTiltedRegistryPath[] = LR"(Software\TiltedPhoques\TiltedEvolution\)" SHORT_NAME;
+constexpr wchar_t kTiltedRegistryPath[] = LR"(Software\TiltedPhoques\TiltedEvolution\)" TILTED_REGISTRY_NAME;
 
 #define DIE_NOW(err)    \
     {                   \

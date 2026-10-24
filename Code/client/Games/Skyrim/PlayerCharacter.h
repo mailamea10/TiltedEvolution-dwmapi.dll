@@ -133,7 +133,12 @@ struct PlayerCharacter : Actor
         uint64_t instanceCount;
     };
 
-#ifdef TP_SKYRIM_1_6_1170
+    // Each runtime anchors the tail at its own offset (1.5.97: 0x580, 1.6.1170: 0x588, 1.7.104: 0x590); every
+    // offset after pad1 is relative glue derived from it, so each branch states its own game's real anchor
+    // instead of deriving one from another.
+#if defined(SKYRIM_TARGET_LEGACY)
+    uint8_t pad1[0x580 - sizeof(Actor)];
+#elif defined(TP_SKYRIM_1_6_1170)
     uint8_t pad1[0x588 - sizeof(Actor)];
 #else
     uint8_t pad1[0x590 - sizeof(Actor)];
@@ -152,7 +157,14 @@ struct PlayerCharacter : Actor
     uint8_t padPlayerEnd[0xBE0 - 0xB30];
 };
 
-#ifdef TP_SKYRIM_1_6_1170
+#if defined(SKYRIM_TARGET_LEGACY)
+static_assert(offsetof(PlayerCharacter, objectives) == 0x580);
+static_assert(offsetof(PlayerCharacter, pSkills) == 0x9B0);
+static_assert(offsetof(PlayerCharacter, locationForm) == 0xAC8);
+static_assert(offsetof(PlayerCharacter, baseTints) == 0xB10);
+static_assert(offsetof(PlayerCharacter, overlayTints) == 0xB28);
+static_assert(sizeof(PlayerCharacter) == 0xBE0);
+#elif defined(TP_SKYRIM_1_6_1170)
 static_assert(offsetof(PlayerCharacter, objectives) == 0x588);
 static_assert(offsetof(PlayerCharacter, pSkills) == 0x9B8);
 static_assert(offsetof(PlayerCharacter, locationForm) == 0xAD0);

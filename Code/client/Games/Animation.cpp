@@ -4,6 +4,7 @@
 
 #include <Forms/BGSAction.h>
 #include <Forms/TESIdleForm.h>
+#include <Forms/MagicItem.h>
 
 #include <Structs/ActionEvent.h>
 
@@ -13,6 +14,7 @@
 #include <Misc/BSFixedString.h>
 
 #include <World.h>
+#include <CastProbe.h>
 
 TP_THIS_FUNCTION(TPerformAction, uint8_t, ActorMediator, TESActionData* apAction);
 static TPerformAction* RealPerformAction;
@@ -54,6 +56,23 @@ uint8_t TP_MAKE_THISCALL(HookPerformAction, ActorMediator, TESActionData* apActi
         action.EventName = apAction->eventName.AsAscii();
         action.TargetEventName = apAction->targetEventName.AsAscii();
         action.IdleId = apAction->idleForm ? apAction->idleForm->formID : 0;
+
+        // Temporary cast probe: the owner's side of the casting actions, to line up with what the remote replays.
+        if (pExtension->IsLocalPlayer())
+        {
+            const std::string_view cName = action.EventName.c_str();
+            if (_strnicmp(cName.data(), "MRh_", 4) == 0 || _strnicmp(cName.data(), "MLh_", 4) == 0 || _strnicmp(cName.data(), "DualMagic_", 10) == 0)
+            {
+                static uint32_t s_logged = 0;
+                if (s_logged < 300)
+                {
+                    ++s_logged;
+                    CastProbeLog("local '{}' -> {} (action {:X}, state2 {:X}, hands L{:X} R{:X})", action.EventName.c_str(), res, action.ActionId,
+                                 action.State2, pActor->magicItems[0] ? pActor->magicItems[0]->formID : 0u,
+                                 pActor->magicItems[1] ? pActor->magicItems[1]->formID : 0u);
+                }
+            }
+        }
 
         // Save for later
         if (res)

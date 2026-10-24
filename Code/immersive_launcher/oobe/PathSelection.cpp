@@ -19,7 +19,7 @@ using namespace TiltedPhoques;
 namespace
 {
 constexpr wchar_t kBethesdaRegistryPath[] = LR"(Software\Wow6432Node\Bethesda Softworks\)" SHORT_NAME;
-constexpr wchar_t kTiltedRegistryPath[] = LR"(Software\TiltedPhoques\TiltedEvolution\)" SHORT_NAME;
+constexpr wchar_t kTiltedRegistryPath[] = LR"(Software\TiltedPhoques\TiltedEvolution\)" TILTED_REGISTRY_NAME;
 
 std::wstring SuggestTitlePath()
 {

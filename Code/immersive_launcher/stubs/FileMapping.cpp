@@ -287,6 +287,12 @@ void CoreStubsInit()
     VALIDATE(MH_CreateHookApi(L"kernel32.dll", "GetModuleHandleW", &TP_GetModuleHandleW, (void**)&RealGetModuleHandleW));
     VALIDATE(MH_CreateHookApi(L"kernel32.dll", "GetModuleHandleA", &TP_GetModuleHandleA, (void**)&RealGetModuleHandleA));
 
+#ifdef SKYRIM_TARGET_LEGACY
+    // See memory/LowMemoryReserve.cpp: keeps the low 2 GB free for LuaJIT-based plugins.
+    extern void InstallLowMemoryReserve();
+    InstallLowMemoryReserve();
+#endif
+
     VALIDATE(MH_EnableHook(nullptr));
 }
 

@@ -7,8 +7,6 @@ namespace PapyrusFunctions
 
 bool IsRemotePlayer(Actor* apActor)
 {
-    spdlog::info("Calling IsRemotePlayer");
-
     auto* pExtension = apActor->GetExtension();
     if (!pExtension)
         return false;

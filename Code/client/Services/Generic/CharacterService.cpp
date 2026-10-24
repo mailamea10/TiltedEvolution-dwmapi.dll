@@ -12,6 +12,9 @@
 #include <Games/Misc/SubtitleManager.h>
 
 #include <Forms/TESNPC.h>
+#include <Forms/BGSHeadPart.h>
+#include <Forms/TESRace.h>
+#include <NetImmerse/BSFaceGenNiNode.h>
 #include <Interface/UI.h>
 #include <Forms/TESQuest.h>
 
@@ -300,8 +303,89 @@ void CharacterService::OnActorRemoved(const ActorRemovedEvent& acEvent) noexcept
     spdlog::info("Actor removed, form id: {:X}", acEvent.FormId);
 }
 
+namespace
+{
+// Temporary diagnostics for remote players whose head does not render on 1.5.97.
+void LogHeadDiagnostics(const char* acLabel, Actor* apActor) noexcept
+{
+    if (!apActor)
+        return;
+
+    auto* pNpc = Cast<TESNPC>(apActor->baseForm);
+    if (!pNpc)
+    {
+        spdlog::debug("[headdiag] {} actor {:X} has no NPC base", acLabel, apActor->formID);
+        return;
+    }
+
+    spdlog::debug("[headdiag] {} actor {:X} base {:X} race {:X} originalRace {:X} faceNPC {:X} headparts {}", acLabel, apActor->formID,
+                 pNpc->formID, pNpc->raceForm.race ? pNpc->raceForm.race->formID : 0u, pNpc->originalRace ? pNpc->originalRace->formID : 0u,
+                 pNpc->faceNPC ? pNpc->faceNPC->formID : 0u, static_cast<uint32_t>(pNpc->headpartsCount));
+
+    if (pNpc->headparts)
+    {
+        for (uint32_t i = 0; i < pNpc->headpartsCount && i < 16; ++i)
+        {
+            const auto* pPart = pNpc->headparts[i];
+            if (!pPart)
+            {
+                spdlog::debug("[headdiag] {}   part {} = null", acLabel, i);
+                continue;
+            }
+
+            spdlog::debug("[headdiag] {}   part {} = {:X} type {} name '{}'", acLabel, i, pPart->formID, pPart->type, pPart->name.data ? pPart->name.data : "");
+        }
+    }
+
+    auto* pFace = apActor->GetFaceGenNiNode();
+    if (!pFace)
+    {
+        spdlog::debug("[headdiag] {}   no face node", acLabel);
+        return;
+    }
+
+    spdlog::debug("[headdiag] {}   face node {} children {}", acLabel, static_cast<const void*>(pFace), static_cast<uint32_t>(pFace->children.length));
+
+    for (uint32_t i = 0; i < pFace->children.length && i < 16; ++i)
+    {
+        const auto* pChild = pFace->children.data ? pFace->children.data[i] : nullptr;
+        if (!pChild)
+        {
+            spdlog::debug("[headdiag] {}   child {} = null", acLabel, i);
+            continue;
+        }
+
+        const auto* pBytes = reinterpret_cast<const uint8_t*>(pChild);
+        const char* pName = *reinterpret_cast<const char* const*>(pBytes + 0x10);
+        const uint64_t flags = *reinterpret_cast<const uint64_t*>(pBytes + 0x108);
+        spdlog::debug("[headdiag] {}   child {} = '{}' flags {:X} hidden {}", acLabel, i, pName ? pName : "", flags, (flags & 1) != 0);
+    }
+}
+} // namespace
+
+void CharacterService::RunHeadDiagnostics() const noexcept
+{
+    if (m_headDiagnostics.empty())
+        return;
+
+    const auto now = std::chrono::steady_clock::now();
+    for (auto it = m_headDiagnostics.begin(); it != m_headDiagnostics.end();)
+    {
+        if (now < it->Deadline)
+        {
+            ++it;
+            continue;
+        }
+
+        LogHeadDiagnostics("remote", Cast<Actor>(TESForm::GetById(it->FormId)));
+        LogHeadDiagnostics("local ", PlayerCharacter::Get());
+        it = m_headDiagnostics.erase(it);
+    }
+}
+
 void CharacterService::OnUpdate(const UpdateEvent& acUpdateEvent) noexcept
 {
+    RunHeadDiagnostics();
     RunSpawnUpdates();
     RunLocalUpdates();
     RunFactionsUpdates();
@@ -2039,6 +2123,9 @@ void CharacterService::RunRemoteUpdates() noexcept
             pActor->FixVampireLordModel();
 
         readyEntities.push_back(entity);
+
+        if (waitingFor3D.SpawnRequest.FormId == GameId{})
+            m_headDiagnostics.push_back({pActor->formID, std::chrono::steady_clock::now() + 5s});
 
         spdlog::info("Applied 3D for actor, form id: {:X}, dead: {}", pActor->formID, pActor->IsDead());
     }

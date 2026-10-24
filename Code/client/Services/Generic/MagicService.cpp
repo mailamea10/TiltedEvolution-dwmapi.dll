@@ -52,6 +52,18 @@ void MagicService::OnUpdate(const UpdateEvent& acEvent) noexcept
     if (!m_transport.IsConnected())
         return;
 
+    if (auto* pPlayer = PlayerCharacter::Get())
+    {
+        for (auto* pCaster : pPlayer->casters)
+        {
+            if (pCaster)
+            {
+                ActorMagicCaster::VerifyHooks(pCaster);
+                break;
+            }
+        }
+    }
+
     ApplyQueuedEffects();
 
     UpdateRevealOtherPlayersEffect();
@@ -84,7 +96,8 @@ void MagicService::OnSpellCastEvent(const SpellCastEvent& acEvent) const noexcep
     {
         if ((pSpell->eCastingType != MagicSystem::CastingType::CONCENTRATION || pSpell->IsHealingSpell()) && !pSpell->IsWardSpell() && !pSpell->IsInvisibilitySpell())
         {
-            spdlog::debug("Canceled magic spell");
+            spdlog::debug("[magicdiag] not syncing cast of {:X} through cast sync (casting type {}, healing {})", acEvent.SpellId,
+                         static_cast<int>(pSpell->eCastingType), pSpell->IsHealingSpell());
             return;
         }
     }
@@ -95,7 +108,10 @@ void MagicService::OnSpellCastEvent(const SpellCastEvent& acEvent) const noexcep
     const auto casterEntityIt = std::find_if(std::begin(view), std::end(view), [formId, view](entt::entity entity) { return view.get<FormIdComponent>(entity).Id == formId; });
 
     if (casterEntityIt == std::end(view))
+    {
+        spdlog::debug("[magicdiag] cast of {:X} by {:X} not synced: caster is not a local entity", acEvent.SpellId, formId);
         return;
+    }
 
     auto& localComponent = view.get<LocalComponent>(*casterEntityIt);
 
@@ -126,7 +142,8 @@ void MagicService::OnSpellCastEvent(const SpellCastEvent& acEvent) const noexcep
         }
     }
 
-    spdlog::debug("Spell cast event sent, ID: {:X}, Source: {}, IsDualCasting: {}, desired target: {:X}", request.CasterId, request.CastingSource, request.IsDualCasting, request.DesiredTarget);
+    spdlog::debug("[magicdiag] cast sync sent: caster {:X} spell {:X} source {} dual {} target {:X}", request.CasterId, acEvent.SpellId, request.CastingSource,
+                 request.IsDualCasting, request.DesiredTarget);
 
     m_transport.Send(request);
 }
@@ -134,6 +151,8 @@ void MagicService::OnSpellCastEvent(const SpellCastEvent& acEvent) const noexcep
 void MagicService::OnNotifySpellCast(const NotifySpellCast& acMessage) const noexcept
 {
     using CS = MagicSystem::CastingSource;
+
+    spdlog::debug("[magicdiag] cast sync received: caster {:X} source {} dual {}", acMessage.CasterId, acMessage.CastingSource, acMessage.IsDualCasting);
 
     auto remoteView = m_world.view<RemoteComponent, FormIdComponent>();
     const auto remoteIt = std::find_if(std::begin(remoteView), std::end(remoteView), [remoteView, Id = acMessage.CasterId](auto entity) { return remoteView.get<RemoteComponent>(entity).Id == Id; });
@@ -231,7 +250,8 @@ void MagicService::OnNotifySpellCast(const NotifySpellCast& acMessage) const noe
 
     pCaster->CastSpellImmediate(pSpell, false, pDesiredTarget, 1.0f, false, 0.0f);
 
-    spdlog::debug("Successfully casted remote spell");
+    spdlog::debug("[magicdiag] remote cast {:X} spell {:X} source {} target {:X}", pActor->formID, pSpell->formID, acMessage.CastingSource,
+                 pDesiredTarget ? pDesiredTarget->formID : 0u);
 }
 
 void MagicService::OnInterruptCastEvent(const InterruptCastEvent& acEvent) const noexcept
@@ -256,7 +276,7 @@ void MagicService::OnInterruptCastEvent(const InterruptCastEvent& acEvent) const
     request.CasterId = localComponent.Id;
     request.CastingSource = acEvent.CastingSource;
 
-    spdlog::debug("Sending out interrupt cast");
+    spdlog::debug("[magicdiag] interrupt sync sent: caster {:X} source {}", request.CasterId, request.CastingSource);
 
     m_transport.Send(request);
 }
@@ -294,7 +314,7 @@ void MagicService::OnNotifyInterruptCast(const NotifyInterruptCast& acMessage) c
 
     pCaster->InterruptCast();
 
-    spdlog::debug("Interrupt remote cast successful");
+    spdlog::debug("[magicdiag] interrupt sync applied: actor {:X} source {}", pActor->formID, acMessage.CastingSource);
 }
 
 void MagicService::OnAddTargetEvent(const AddTargetEvent& acEvent) noexcept

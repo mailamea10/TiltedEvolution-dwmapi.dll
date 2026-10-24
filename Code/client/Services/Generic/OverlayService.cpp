@@ -133,8 +133,48 @@ OverlayService::~OverlayService() noexcept
 {
 }
 
+namespace
+{
+// The CEF helper processes (TPProcess.exe) normally exit when the game closes
+// their IPC channel, but a crash leaves them orphaned and they have to be end
+// tasked by hand. Putting the game into a job object that kills its members when
+// the last handle to it closes ties their lifetime to ours: the children CEF
+// spawns afterwards inherit the job, and the kernel ends them together with the
+// game however it exits. Best effort - a failure only means the old behaviour.
+void BindChildProcessesToGameLifetime() noexcept
+{
+    static HANDLE s_job = nullptr;
+    if (s_job)
+        return;
+
+    HANDLE job = CreateJobObjectW(nullptr, nullptr);
+    if (!job)
+    {
+        spdlog::warn("could not create a job object for the overlay helper processes, error {}", GetLastError());
+        return;
+    }
+
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
+    limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+
+    if (!SetInformationJobObject(job, JobObjectExtendedLimitInformation, &limits, sizeof(limits)) ||
+        !AssignProcessToJobObject(job, GetCurrentProcess()))
+    {
+        spdlog::warn("could not bind the overlay helper processes to the game's lifetime, error {}", GetLastError());
+        CloseHandle(job);
+        return;
+    }
+
+    // Deliberately never closed: the handle closing is the kill trigger.
+    s_job = job;
+    spdlog::info("overlay helper processes are bound to the game's lifetime");
+}
+} // namespace
+
 void OverlayService::Create(RenderSystemD3D11* apRenderSystem) noexcept
 {
+    BindChildProcessesToGameLifetime();
+
     m_pProvider = TiltedPhoques::MakeUnique<D3D11RenderProvider>(apRenderSystem);
     m_pOverlay = new OverlayApp(m_pProvider.get(), new ::OverlayClient(m_transport, m_pProvider->Create()));
 
@@ -364,6 +404,8 @@ void OverlayService::OnConnectionError(const ConnectionErrorEvent& acConnectedEv
 
 void OverlayService::OnPlayerJoined(const NotifyPlayerJoined& acMessage) noexcept
 {
+    spdlog::info("player joined: id {:x}, name '{}'", acMessage.PlayerId, acMessage.Username.c_str());
+
     auto pArguments = CefListValue::Create();
     pArguments->SetInt(0, acMessage.PlayerId);
     pArguments->SetString(1, acMessage.Username.c_str());

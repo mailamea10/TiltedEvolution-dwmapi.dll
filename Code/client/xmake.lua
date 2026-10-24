@@ -1,8 +1,13 @@
 
-local function build_client(name)
+local function build_client(name, extra_defines)
 target(name)
     set_kind("static")
     set_group("Client")
+    if extra_defines then
+        for _, d in ipairs(extra_defines) do
+            add_defines(d)
+        end
+    end
     add_includedirs(".","../../Libraries/")
     set_pcxxheader("TiltedOnlinePCH.h")
 
@@ -68,3 +73,8 @@ target(name)
 end
 
 build_client("SkyrimTogetherClient")
+-- per-version client library for legacy game versions (1.5.x): compiles the
+-- engine structs with the 1.5.x layouts (see the SKYRIM_TARGET_LEGACY
+-- conditionals in Games/Skyrim). The matching runtime DLL is built by
+-- Code/skse_client and loaded by the SKSE bootstrap (Code/skse_bootstrap).
+build_client("SkyrimTogetherClientLegacy", {"SKYRIM_TARGET_LEGACY=1"})
