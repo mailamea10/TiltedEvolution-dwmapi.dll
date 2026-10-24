@@ -1,13 +1,13 @@
 """Adds the Ragdoll Together add-on to a Skyrim Together Reborn source tree.
 
-Usage: python apply_addon.py <path to the STR source tree> [--protocol 1.8.5|1.8.3|1.8.7]
+Usage: python apply_addon.py <path to the STR source tree> [--protocol 1.8.3|1.8.4|1.8.5|1.8.7]
 
 Copies the add-on's client sources into Code/client and registers RagdollTogetherService in Code/client/World.cpp.
 Poses travel as Plugin API V2 messages about the ragdolled actor, so the tree must carry Plugin API V2 (Skyrim
 Together builds with it, or the Together Launcher host patch on older ones); the script stops if it does not. Players
 on a server without V2 simply do not share ragdolls.
 
-1.8.3 has no playback clock for remote movement, which --protocol 1.8.3 accounts for (default 1.8.5).
+1.8.3 and 1.8.4 have no playback clock for remote movement, which --protocol accounts for (default 1.8.5).
 """
 
 import pathlib
@@ -32,7 +32,7 @@ def main() -> None:
         index = args.index("--protocol")
         protocol = args[index + 1] if index + 1 < len(args) else ""
         del args[index : index + 2]
-    if len(args) != 1 or protocol not in ("1.8.5", "1.8.3", "1.8.7"):
+    if len(args) != 1 or protocol not in ("1.8.3", "1.8.4", "1.8.5", "1.8.7"):
         sys.exit(__doc__)
 
     tree = pathlib.Path(args[0]).resolve()
@@ -50,15 +50,15 @@ def main() -> None:
             shutil.copy2(source, target)
             print(f"apply_addon: copied {target.relative_to(tree)}")
 
-    if protocol == "1.8.3":
+    if protocol in ("1.8.3", "1.8.4"):
         service = tree / "Code" / "client" / "Services" / "Generic" / "RagdollTogetherService.cpp"
         text = service.read_text(encoding="utf-8")
-        # 1.8.3: no playback clock (see STR_RAGDOLL_PROTOCOL_183).
+        # 1.8.3 and 1.8.4: no playback clock (see STR_RAGDOLL_PROTOCOL_183).
         legacy = "#define STR_RAGDOLL_PROTOCOL_183 0"
         if legacy not in text:
             sys.exit(f"apply_addon: '{legacy}' not found in {service}")
         service.write_text(text.replace(legacy, "#define STR_RAGDOLL_PROTOCOL_183 1"), encoding="utf-8")
-        print("apply_addon: protocol 1.8.3")
+        print(f"apply_addon: protocol {protocol}")
 
     world = tree / "Code" / "client" / "World.cpp"
     text = world.read_text(encoding="utf-8")
