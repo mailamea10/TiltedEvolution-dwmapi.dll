@@ -1,6 +1,6 @@
 """Adds the RaceMenu Together add-on to a Skyrim Together Reborn source tree.
 
-Usage: python apply_addon.py <path to the STR source tree> [--protocol 1.8.3|1.8.5|1.8.7]
+Usage: python apply_addon.py <path to the STR source tree> [--protocol 1.8.3|1.8.4|1.8.5|1.8.7]
 
 Copies the add-on's client sources into Code/client and registers RaceMenuTogetherService in
 Code/client/World.cpp. Appearances travel as Plugin API V2 messages, so the tree must carry Plugin API V2 (Skyrim
@@ -31,7 +31,7 @@ def main() -> None:
         index = args.index("--protocol")
         protocol = args[index + 1] if index + 1 < len(args) else ""
         del args[index : index + 2]
-    if len(args) != 1 or protocol not in ("1.8.5", "1.8.3", "1.8.7"):
+    if len(args) != 1 or protocol not in ("1.8.3", "1.8.4", "1.8.5", "1.8.7"):
         sys.exit(__doc__)
 
     tree = pathlib.Path(args[0]).resolve()
