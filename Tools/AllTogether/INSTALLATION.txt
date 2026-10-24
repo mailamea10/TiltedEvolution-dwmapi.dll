@@ -1,107 +1,104 @@
-AllTogether SKSE (Skyrim Together Add-ons Bundle 1)
-==================================================
+AllTogether SKSE (Skyrim Together Add-ons Bundle)
+=================================================
 
-Use the FOMOD with Mod Organizer 2 or Vortex. It installs the selected SKSE
-plugins, the matching Skyrim Together launcher files, and the LipSync settings
-you choose. The four original add-on installers use the same STR/runtime
-choices; this installer combines those shared choices so you choose once.
+Use the FOMOD with Mod Organizer 2 or Vortex. It installs the SKSE plugins you
+pick, the Skyrim Together launcher for your Skyrim Together version and Skyrim
+runtime, optionally the AllTogether server, and LipSync's relay setting.
 
 Installer choices
 -----------------
-1. Choose any combination of Ragdoll/Physics Together, LipSync Together,
-   RaceMenu Together, and SkyParkour Together. The add-on banner is shown with
-   its choice.
-2. Choose the STR version used by your server. Every player in the session
-   must use that same STR version.
-3. Choose your Skyrim runtime. The installer places SkyrimTogether.exe and any
-   extra 1.5.97 launcher files in the AllTogether mod folder.
-4. If LipSync Together is selected, choose Secure relay (recommended) or Open
-   relay. Secure mode admits players whose key was relayed through your STR
-   server. Open mode allows anyone who can reach the host's UDP port 10579.
+1. Add-ons: any of Ragdoll/Physics Together, LipSync Together, RaceMenu
+   Together and SkyParkour Together.
+2. Skyrim Together version: the one your server runs. Every player and the
+   server must run the same build:
+     - STR 1.8.7-4 (absol89's AllTogether playtest, v1.8.7-4). Note: this is
+       not the same as plain v1.8.7; the two cannot join each other.
+     - STR 1.8.5 (absol89)
+     - STR 1.8.4 (absol89)
+     - STR 1.8.3 (official, Nexus)
+3. Skyrim runtime: 1.7.104, 1.6.1170/1.6.1179, or 1.5.97 (STR 1.8.5 and
+   1.8.7-4 only). The 1.5.97 launcher comes with EarlyLoad.dll, TPProcess.exe
+   and the AE-to-SE id map, and finds KiLoader's Data\KiLoader\Dependencies.
+4. Server: if you host, install the AllTogether server (see below).
+5. LipSync voice relay access, if you picked LipSync Together.
 
-The 1.8.7 launcher includes all four add-on integrations and the PR #16 nametag
-and player UI features. Skyrim 1.5.97 is supported only with STR 1.8.5.
+How the add-ons reach the other players
+---------------------------------------
+The add-ons send their data through Skyrim Together's Plugin API. A server
+that has version 2 of it (the AllTogether server from this installer, or a
+Skyrim Together server built with Plugin API 2) relays each message to the
+players near that character or NPC and stores nothing, however long the
+session runs.
+
+On a server without it:
+  - Ragdoll/Physics Together and RaceMenu Together stay off for that session.
+    The game's log (tp_client.log) says so once.
+  - LipSync Together and SkyParkour Together still work: on STR 1.8.7-4 for
+    your party, on 1.8.3 to 1.8.5 through the older relay.
+Players who do not use the add-ons can join an AllTogether server as usual.
 
 Requirements and downloads
 --------------------------
-Common: install SKSE matching your exact Skyrim runtime:
-  https://skse.silverlock.org/
+Skyrim Together Reborn, installed separately (the bundle supplies the launcher
+and optionally the server, not its UI, libraries or data):
+  STR 1.8.3: https://www.nexusmods.com/skyrimspecialedition/mods/69993
+  STR 1.8.4, 1.8.5, 1.8.7-4: https://github.com/absol89/TiltedEvolutionScriptFixes/releases
 
-Address Library for SKSE Plugins is required for RaceMenu Together and
-SkyParkour Together, and for Skyrim Together on 1.6.x/1.7.x. Select the file
-matching your game version:
-  https://www.nexusmods.com/skyrimspecialedition/mods/32444
+SKSE for your exact Skyrim runtime: https://skse.silverlock.org/
 
-Install Skyrim Together Reborn separately as a mod. Get official STR 1.8.3
-from Nexus, or the matching 1.8.5/1.8.6/1.8.7 version from absol89's releases.
-The bundle supplies the add-on launcher, not STR's UI, libraries, or server.
-  https://www.nexusmods.com/skyrimspecialedition/mods/69993
-  https://github.com/absol89/TiltedEvolutionScriptFixes/releases
+Address Library for SKSE Plugins (the file for your runtime; Skyrim Together
+needs it): https://www.nexusmods.com/skyrimspecialedition/mods/32444
 
-Only when selecting LipSync Together:
-  Mfg Fix NG (recommended; select a file for your Skyrim runtime):
+Only with LipSync Together: Mfg Fix NG for your runtime
   https://www.nexusmods.com/skyrimspecialedition/mods/133568
-  Original Mfg Fix (alternative for supported runtimes):
-  https://www.nexusmods.com/skyrimspecialedition/mods/11669
-
-Only when selecting RaceMenu Together:
-  RaceMenu by expired6978, matching your Skyrim runtime:
+Only with RaceMenu Together: RaceMenu for your runtime
   https://www.nexusmods.com/skyrimspecialedition/mods/19080
-
-Only when selecting SkyParkour Together:
-  SkyParkour by Tsptds:
+Only with SkyParkour Together: SkyParkour
   https://www.nexusmods.com/skyrimspecialedition/mods/132292
 
 Mod Organizer 2
 ---------------
 MO2 starts SkyrimTogether.exe from the real folder on disk; mod priority alone
-does not replace it. After installing this FOMOD:
+does not replace it. After installing:
 
 1. Right-click AllTogether SKSE > Open in Explorer.
-2. Open the AllTogether SKSE folder. The selected runtime's launcher is installed
-   at SkyrimTogetherReborn/SkyrimTogether.exe.
-3. Copy the SkyrimTogetherReborn folder into your Skyrim Together Reborn
-   mod's SkyrimTogetherReborn folder. Back up the existing files first. For
-   Skyrim 1.5.97, copy all four files, including EarlyLoad.dll, TPProcess.exe
-   and versionlib-ae-to-se-1-5-97-0.map.
-4. Keep AllTogether SKSE enabled so its selected SKSE plugins remain active.
-5. Start the game with your usual MO2 executable entry for Skyrim Together
-   Reborn. Do not run the launcher from the AllTogether SKSE folder: it needs
-   the rest of Skyrim Together's files beside it.
+2. Copy the files in its SkyrimTogetherReborn folder into your Skyrim Together
+   Reborn mod's SkyrimTogetherReborn folder, replacing them. Back up the
+   originals first. That is SkyrimTogether.exe, plus for 1.5.97 EarlyLoad.dll,
+   TPProcess.exe and versionlib-ae-to-se-1-5-97-0.map, plus with the server
+   option SkyrimTogetherServer.exe and STServer.dll.
+3. Keep AllTogether SKSE enabled so its SKSE plugins stay active.
+4. Start the game with your usual MO2 entry for Skyrim Together Reborn. Do not
+   point MO2 at the launcher inside the AllTogether SKSE folder: it needs the
+   rest of Skyrim Together's files beside it and closes at once without them.
 
 Vortex
 ------
-Install and deploy the FOMOD. Set AllTogether SKSE to load after Skyrim
-Together Reborn so its launcher wins the file conflict. Start through
+Install and deploy the FOMOD. Load AllTogether SKSE after Skyrim Together
+Reborn so its files win the conflict. Start through
 SkyrimTogetherReborn/SkyrimTogether.exe as usual.
 
-Troubleshooting the launcher
-----------------------------
-After installation, the AllTogether SKSE mod folder must contain
-SkyrimTogetherReborn/SkyrimTogether.exe. If it does not, the runtime choice did not
-correctly; reinstall this updated FOMOD and select the Skyrim version matching
-your game. If the launcher closes immediately, copy it into the existing STR
-folder as described above, then launch it from that folder.
+Hosting
+-------
+Start SkyrimTogetherServer.exe from your Skyrim Together folder as usual. With
+the AllTogether server, its log shows no difference; players' game logs say
+"Plugin API: the server relays messages about actors: yes".
 
-Troubleshooting appearance and animation sync
-----------------------------------------------
-If a returning player's RaceMenu appearance is missing, disconnect and rejoin
-after installing a bundle build that includes the reconnect resend fix. The
-player list must remove the departed player before the reconnect is detected.
-When an appearance arrives but some details differ, check that everyone has the
-same RaceMenu, race/body, overlay, and preset-related mods enabled. RaceMenu
-overlays and custom-race morphs depend on those local assets.
-
-For animation mods, each player must use the same STR version, mod list, and
-generated behavior output. If a character moves while stuck in an idle pose,
-close the game and STR server, regenerate the behavior output with the generator
-the mod list is configured for (Nemesis or Pandora), ensure that output is
-enabled in every MO2 profile, and restart the session. The presence of FNIS.esp
-alone does not identify which behavior generator produced the active files.
-STR's modded-animation support is limited; SkyParkour Together syncs its
-supported SkyParkour events, not every animation added by other behavior mods.
+Troubleshooting
+---------------
+- Ragdolls or appearances do not show: check that the host runs the
+  AllTogether server for the same Skyrim Together version. tp_client.log says
+  whether the server relays them.
+- "Wrong version" when joining: the server runs a different Skyrim Together
+  build (1.8.7-4 and 1.8.7 differ). Pick the matching version in the
+  installer.
+- RaceMenu appearances differ in detail: everyone needs the same RaceMenu,
+  race/body, overlay and preset-related mods.
+- Characters move while stuck in an idle pose: every player needs the same
+  generated behaviour output (Nemesis or Pandora, whichever the mod list
+  uses), enabled in every MO2 profile.
 
 Uninstall
 ---------
-For MO2, restore the backed-up files in the Skyrim Together Reborn mod, then
-remove AllTogether SKSE. For Vortex, remove the mod and redeploy.
+MO2: restore the backed-up files in the Skyrim Together Reborn mod, then
+remove AllTogether SKSE. Vortex: remove the mod and redeploy.

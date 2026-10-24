@@ -1,57 +1,73 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://qconsulting.ca/fo3/ModConfig5.0.xsd">
-  <moduleName>AllTogether SKSE (Skyrim Together Add-ons Bundle 1)</moduleName>
+  <moduleName>AllTogether SKSE (Skyrim Together Add-ons Bundle)</moduleName>
   <moduleImage path="fomod\images\Ragdoll-Together.png" />
   <requiredInstallFiles><folder source="Docs" destination="Docs" priority="0" /></requiredInstallFiles>
   <installSteps order="Explicit">
     <installStep name="Select add-ons">
       <optionalFileGroups order="Explicit"><group name="Choose the add-ons to install" type="SelectAny"><plugins order="Explicit">
-        <plugin name="Ragdoll/Physics Together 1.0.0"><description>Synchronizes ragdoll and physics motion. Requires STR and SKSE. SKSE: https://skse.silverlock.org/</description><image path="fomod\images\Ragdoll-Together.png" /><files><folder source="Add-ons\Ragdoll" destination="" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
-        <plugin name="LipSync Together 0.8.0"><description>Synchronizes mouth movement and optional voice chat. Requires SKSE and Mfg Fix NG or Mfg Fix for your runtime. Mfg Fix NG: https://www.nexusmods.com/skyrimspecialedition/mods/133568 | Mfg Fix: https://www.nexusmods.com/skyrimspecialedition/mods/11669</description><image path="fomod\images\LipSync-Together.jpg" /><conditionFlags><flag name="lipsync">1</flag></conditionFlags><files><folder source="Add-ons\LipSync" destination="" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
-        <plugin name="RaceMenu Together 1.0.0"><description>Synchronizes RaceMenu appearance. Requires RaceMenu for your Skyrim runtime, SKSE, and Address Library on 1.6.x/1.7.x. RaceMenu: https://www.nexusmods.com/skyrimspecialedition/mods/19080 | Address Library: https://www.nexusmods.com/skyrimspecialedition/mods/32444</description><image path="fomod\images\RaceMenu-Together.jpg" /><files><folder source="Add-ons\RaceMenu" destination="" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
-        <plugin name="SkyParkour Together 1.0.1"><description>Synchronizes SkyParkour animations. Requires SkyParkour, SKSE, and Address Library. SkyParkour: https://www.nexusmods.com/skyrimspecialedition/mods/132292 | Address Library: https://www.nexusmods.com/skyrimspecialedition/mods/32444</description><image path="fomod\images\SkyParkour-Together.png" /><files><folder source="Add-ons\SkyParkour" destination="" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
-      </plugins></group></optionalFileGroups>
-    </installStep>
-    <installStep name="Choose Skyrim Together version">
-      <optionalFileGroups order="Explicit"><group name="Which STR server version do you join?" type="SelectExactlyOne"><plugins order="Explicit">
-        <plugin name="STR 1.8.7 (AllTogether, recommended)"><description>Use with STR 1.8.7 servers. Supports Skyrim 1.7.104 and 1.6.1170/1.6.1179. Includes the PR #16 nametag/player UI features.</description><conditionFlags><flag name="str">187</flag></conditionFlags><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
-        <plugin name="STR 1.8.6 (absol89 playtest)"><description>Use only with matching 1.8.6 playtest servers.</description><conditionFlags><flag name="str">186</flag></conditionFlags><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
-        <plugin name="STR 1.8.5 (absol89)"><description>Use with STR 1.8.5 servers. Skyrim 1.5.97 is supported only by this STR version.</description><conditionFlags><flag name="str">185</flag></conditionFlags><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
-        <plugin name="STR 1.8.3 (official Nexus)"><description>Use with official STR 1.8.3 servers.</description><conditionFlags><flag name="str">183</flag></conditionFlags><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+        <plugin name="Ragdoll/Physics Together"><description>Every knocked down, flung, killed or knocked out actor - players and NPCs - falls, comes to rest and gets up the same way on every screen. Needs a server that relays add-on messages (the AllTogether server from this installer, or Skyrim Together 1.8.7 with Plugin API 2); on other servers ragdolls are simply not shared. Requires SKSE.</description><image path="fomod\images\Ragdoll-Together.png" /><files><folder source="Add-ons\Ragdoll\SKSE\Plugins" destination="SKSE\Plugins" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
+        <plugin name="LipSync Together"><description>Your character's mouth follows your microphone, with optional proximity voice chat (Shift+V for settings). Requires SKSE and Mfg Fix NG (or Mfg Fix) for your runtime: https://www.nexusmods.com/skyrimspecialedition/mods/133568</description><image path="fomod\images\LipSync-Together.jpg" /><conditionFlags><flag name="lipsync">1</flag></conditionFlags><files><folder source="Add-ons\LipSync\SKSE\Plugins" destination="SKSE\Plugins" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
+        <plugin name="RaceMenu Together"><description>Your RaceMenu appearance - sculpting, sliders, body morphs, transforms, overlays and presets - shows on you for the other players. Needs a server that relays add-on messages (the AllTogether server from this installer, or Skyrim Together 1.8.7 with Plugin API 2). Requires RaceMenu for your runtime and SKSE: https://www.nexusmods.com/skyrimspecialedition/mods/19080</description><image path="fomod\images\RaceMenu-Together.jpg" /><files><folder source="Add-ons\RaceMenu\SKSE\Plugins" destination="SKSE\Plugins" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
+        <plugin name="SkyParkour Together"><description>SkyParkour's vaults, climbs, ledge grabs and landing rolls play on your character for everyone. Requires SkyParkour and SKSE: https://www.nexusmods.com/skyrimspecialedition/mods/132292</description><image path="fomod\images\SkyParkour-Together.png" /><files><folder source="Add-ons\SkyParkour\SKSE\Plugins" destination="SKSE\Plugins" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
       </plugins></group></optionalFileGroups>
     </installStep>
 
-    <installStep name="Skyrim runtime (STR 1.8.7)"><visible><flagDependency flag="str" value="187" /></visible>
-      <optionalFileGroups order="Explicit"><group name="Select your Skyrim runtime" type="SelectExactlyOne"><plugins order="Explicit">
-        <plugin name="Skyrim 1.7.104"><description>Skyrim AE 1.7.104.</description><files><folder source="Launchers\187-1.7.104" destination="" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
-        <plugin name="Skyrim 1.6.1170 / 1.6.1179"><description>One launcher supports both 1.6.1170 and 1.6.1179.</description><files><folder source="Launchers\187-1.6.1170" destination="" priority="0" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+    <installStep name="Choose Skyrim Together version">
+      <optionalFileGroups order="Explicit"><group name="Which Skyrim Together do you and your server run?" type="SelectExactlyOne"><plugins order="Explicit">
+        <plugin name="STR 1.8.7-4 (absol89, AllTogether playtest)"><description>For servers running absol89's v1.8.7-4 (STR-AllTogether-v1.8.7-4). These do not join plain v1.8.7 servers: every player and the server must use the same build. Skyrim 1.7.104, 1.6.1170/1.6.1179 and 1.5.97.</description><conditionFlags><flag name="str">187</flag></conditionFlags><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
+        <plugin name="STR 1.8.5 (absol89)"><description>For STR 1.8.5 servers. Skyrim 1.7.104, 1.6.1170/1.6.1179 and 1.5.97.</description><conditionFlags><flag name="str">185</flag></conditionFlags><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+        <plugin name="STR 1.8.4 (absol89)"><description>For STR 1.8.4 servers. Skyrim 1.7.104 and 1.6.1170/1.6.1179.</description><conditionFlags><flag name="str">184</flag></conditionFlags><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+        <plugin name="STR 1.8.3 (official, Nexus)"><description>For official STR 1.8.3 servers. Skyrim 1.7.104 and 1.6.1170/1.6.1179.</description><conditionFlags><flag name="str">183</flag></conditionFlags><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
       </plugins></group></optionalFileGroups>
     </installStep>
-    <installStep name="Skyrim runtime (STR 1.8.6)"><visible><flagDependency flag="str" value="186" /></visible>
+
+    <installStep name="Skyrim runtime (STR 1.8.7-4)"><visible><flagDependency flag="str" value="187" /></visible>
       <optionalFileGroups order="Explicit"><group name="Select your Skyrim runtime" type="SelectExactlyOne"><plugins order="Explicit">
-        <plugin name="Skyrim 1.7.104"><files><folder source="Launchers\186-1.7.104" destination="" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
-        <plugin name="Skyrim 1.6.1170 / 1.6.1179"><files><folder source="Launchers\186-1.6.1170" destination="" priority="0" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+        <plugin name="Skyrim 1.7.104"><description>Skyrim AE 1.7.104.</description><files><folder source="Launchers\187-1.7.104\SkyrimTogetherReborn" destination="SkyrimTogetherReborn" priority="0" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+        <plugin name="Skyrim 1.6.1170 / 1.6.1179"><description>One launcher runs both 1.6.1170 and 1.6.1179.</description><files><folder source="Launchers\187-1.6.1170\SkyrimTogetherReborn" destination="SkyrimTogetherReborn" priority="0" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+        <plugin name="Skyrim 1.5.97"><description>Skyrim SE 1.5.97 (legacy launcher, with EarlyLoad.dll, TPProcess.exe and the AE-to-SE id map; supports KiLoader's dependency folder).</description><files><folder source="Launchers\187-1.5.97\SkyrimTogetherReborn" destination="SkyrimTogetherReborn" priority="0" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
       </plugins></group></optionalFileGroups>
     </installStep>
     <installStep name="Skyrim runtime (STR 1.8.5)"><visible><flagDependency flag="str" value="185" /></visible>
       <optionalFileGroups order="Explicit"><group name="Select your Skyrim runtime" type="SelectExactlyOne"><plugins order="Explicit">
-        <plugin name="Skyrim 1.7.104"><files><folder source="Launchers\185-1.7.104" destination="" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
-        <plugin name="Skyrim 1.6.1170 / 1.6.1179"><files><folder source="Launchers\185-1.6.1170" destination="" priority="0" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
-        <plugin name="Skyrim 1.5.97"><description>Only supported with STR 1.8.5.</description><files><folder source="Launchers\185-1.5.97" destination="" priority="0" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+        <plugin name="Skyrim 1.7.104"><files><folder source="Launchers\185-1.7.104\SkyrimTogetherReborn" destination="SkyrimTogetherReborn" priority="0" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+        <plugin name="Skyrim 1.6.1170 / 1.6.1179"><files><folder source="Launchers\185-1.6.1170\SkyrimTogetherReborn" destination="SkyrimTogetherReborn" priority="0" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+        <plugin name="Skyrim 1.5.97"><description>Skyrim SE 1.5.97 (legacy launcher, with EarlyLoad.dll, TPProcess.exe and the AE-to-SE id map; supports KiLoader's dependency folder).</description><files><folder source="Launchers\185-1.5.97\SkyrimTogetherReborn" destination="SkyrimTogetherReborn" priority="0" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+      </plugins></group></optionalFileGroups>
+    </installStep>
+    <installStep name="Skyrim runtime (STR 1.8.4)"><visible><flagDependency flag="str" value="184" /></visible>
+      <optionalFileGroups order="Explicit"><group name="Select your Skyrim runtime" type="SelectExactlyOne"><plugins order="Explicit">
+        <plugin name="Skyrim 1.7.104"><files><folder source="Launchers\184-1.7.104\SkyrimTogetherReborn" destination="SkyrimTogetherReborn" priority="0" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+        <plugin name="Skyrim 1.6.1170 / 1.6.1179"><files><folder source="Launchers\184-1.6.1170\SkyrimTogetherReborn" destination="SkyrimTogetherReborn" priority="0" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
       </plugins></group></optionalFileGroups>
     </installStep>
     <installStep name="Skyrim runtime (STR 1.8.3)"><visible><flagDependency flag="str" value="183" /></visible>
       <optionalFileGroups order="Explicit"><group name="Select your Skyrim runtime" type="SelectExactlyOne"><plugins order="Explicit">
-        <plugin name="Skyrim 1.7.104"><files><folder source="Launchers\183-1.7.104" destination="" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
-        <plugin name="Skyrim 1.6.1170 / 1.6.1179"><files><folder source="Launchers\183-1.6.1170" destination="" priority="0" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+        <plugin name="Skyrim 1.7.104"><files><folder source="Launchers\183-1.7.104\SkyrimTogetherReborn" destination="SkyrimTogetherReborn" priority="0" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+        <plugin name="Skyrim 1.6.1170 / 1.6.1179"><files><folder source="Launchers\183-1.6.1170\SkyrimTogetherReborn" destination="SkyrimTogetherReborn" priority="0" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+      </plugins></group></optionalFileGroups>
+    </installStep>
+
+    <installStep name="Server">
+      <optionalFileGroups order="Explicit"><group name="Do you host the server?" type="SelectExactlyOne"><plugins order="Explicit">
+        <plugin name="I host: install the AllTogether server"><description>Replaces SkyrimTogetherServer.exe and STServer.dll with a build of the same Skyrim Together version that also relays add-on messages to the players in range and stores nothing. Ragdoll/Physics Together and RaceMenu Together need it (or a Skyrim Together server with Plugin API 2). Players without the add-ons can still join it.</description><conditionFlags><flag name="server">1</flag></conditionFlags><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+        <plugin name="I only join servers"><description>Keeps your server files. On a server without add-on relaying, Ragdoll and RaceMenu sync stay off for that session (the game log says so once), LipSync and SkyParkour fall back to what that server offers.</description><conditionFlags><flag name="server">0</flag></conditionFlags><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
       </plugins></group></optionalFileGroups>
     </installStep>
 
     <installStep name="LipSync voice relay access"><visible><flagDependency flag="lipsync" value="1" /></visible>
       <optionalFileGroups order="Explicit"><group name="Who can join LipSync voice chat?" type="SelectExactlyOne"><plugins order="Explicit">
-        <plugin name="Secure — require a Skyrim Together session key"><description>Recommended. Accepts players with a key relayed through the same STR server. STR retains keys until the server restarts.</description><files><file source="fomod\security\LipSyncTogether-Secure.ini" destination="SKSE\Plugins\LipSyncTogether.ini" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
-        <plugin name="Open relay"><description>Anyone who can reach the host's UDP 10579 port can join voice chat. Use only on a trusted network.</description><files><file source="fomod\security\LipSyncTogether-Open.ini" destination="SKSE\Plugins\LipSyncTogether.ini" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+        <plugin name="Secure: require a Skyrim Together session key"><description>Recommended. The voice host accepts players whose key came through the same Skyrim Together server.</description><files><file source="fomod\security\LipSyncTogether-Secure.ini" destination="SKSE\Plugins\LipSyncTogether.ini" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
+        <plugin name="Open relay"><description>Anyone who can reach the voice host's UDP port 10579 can join voice chat. Use only on a trusted network.</description><files><file source="fomod\security\LipSyncTogether-Open.ini" destination="SKSE\Plugins\LipSyncTogether.ini" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
       </plugins></group></optionalFileGroups>
     </installStep>
   </installSteps>
+
+  <conditionalFileInstalls><patterns>
+    <pattern><dependencies operator="And"><flagDependency flag="server" value="1" /><flagDependency flag="str" value="187" /></dependencies><files><folder source="Servers\187\SkyrimTogetherReborn" destination="SkyrimTogetherReborn" priority="1" /></files></pattern>
+    <pattern><dependencies operator="And"><flagDependency flag="server" value="1" /><flagDependency flag="str" value="185" /></dependencies><files><folder source="Servers\185\SkyrimTogetherReborn" destination="SkyrimTogetherReborn" priority="1" /></files></pattern>
+    <pattern><dependencies operator="And"><flagDependency flag="server" value="1" /><flagDependency flag="str" value="184" /></dependencies><files><folder source="Servers\184\SkyrimTogetherReborn" destination="SkyrimTogetherReborn" priority="1" /></files></pattern>
+    <pattern><dependencies operator="And"><flagDependency flag="server" value="1" /><flagDependency flag="str" value="183" /></dependencies><files><folder source="Servers\183\SkyrimTogetherReborn" destination="SkyrimTogetherReborn" priority="1" /></files></pattern>
+  </patterns></conditionalFileInstalls>
 </config>

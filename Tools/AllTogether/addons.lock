@@ -1,5 +1,10 @@
-# Branch, immutable commit, package label
-release/skyparkour-together 5f98d383f0e412aeb898ad877b951a5c3ef697d5 Mods/SkyParkourTogether/StrAddon/apply_addon.py SkyParkour-Together-1.0.1
-release/racemenu-together 16bf293b519af64c78fa47157c9876ce8340265c Mods/RaceMenuTogether/StrAddon/apply_addon.py RaceMenu-Together-1.0.0
-release/lipsync-together c338ca718476737fdf5c054eba12ceac754ab2c8 Mods/LipSyncTogether/StrAddon/apply_addon.py LipSync-Together-0.8.0
-release/ragdoll-together 41df81ff7cda3dcadb84c1ab4e6d81790b400eff Mods/RagdollTogether/StrAddon/apply_addon.py Ragdoll-Physics-Together-1.0.0
+# What the bundle is built from, pinned by commit:
+#   <branch> <commit> <folder on that branch>
+# The launcher line is the Together Launcher (targets.txt, build_launcher.py, Host/); the others are the add-ons,
+# each with StrAddon/apply_addon.py. Their SKSE plugin DLLs come from each add-on's release (unchanged by this
+# bundle).
+launcher feature/together-launcher-v2 c0cbff02ec1a1cded55444fa5ed61ee4019285c3 Mods/TogetherLauncher
+addon feature/ragdoll-together-v2 7916e3c63bd9e8131d70015298fa74322fdf28e0 Mods/RagdollTogether
+addon feature/skyparkour-together-v2 ab240ce2779e376ec8996e56570a00994e0ab5e7 Mods/SkyParkourTogether
+addon feature/racemenu-together-v2 e6c96207461147aa4e8d0cf129fe7929b52a4e67 Mods/RaceMenuTogether
+addon feature/lipsync-together-v2 cc1022c822c05d828c5b3f26d653053416bd9644 Mods/LipSyncTogether

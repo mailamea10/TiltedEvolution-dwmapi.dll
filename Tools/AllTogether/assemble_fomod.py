@@ -1,92 +1,95 @@
 #!/usr/bin/env python3
-"""Assemble the published add-on archives and launchers into one FOMOD."""
-from pathlib import Path
-from zipfile import ZipFile
+"""Assembles the AllTogether FOMOD from built launchers and the four add-on plugins.
+
+Usage: assemble_fomod.py <launchers> <plugins> <out>
+
+<launchers> is what Mods/TogetherLauncher/build_launcher.py collected (on release/together-launcher): one
+"<NN> STR <version> - <runtime>/SkyrimTogetherReborn" folder per launcher, "server-<version>/SkyrimTogetherReborn"
+per Skyrim Together release, and LAUNCHER_MANIFEST.txt. <plugins> holds, per add-on, <Name>/SKSE/Plugins/<dll>
+(Ragdoll, LipSync, RaceMenu, SkyParkour), the add-on's Docs in <Name>/Docs, and LipSync's
+LipSyncTogether-Secure.ini and LipSyncTogether-Open.ini in LipSync/security.
+
+Every launcher and server that fomod/ModuleConfig.xml names must be present, and nothing it does not name is
+packed, so the installer cannot offer a choice without files.
+"""
+import re
 import shutil
 import sys
+from pathlib import Path
+
+ADDONS = ["Ragdoll", "LipSync", "RaceMenu", "SkyParkour"]
 
 
-root = Path(sys.argv[1]).resolve()
-out = Path(sys.argv[2]).resolve()
-if out.exists():
-    shutil.rmtree(out)
-(out / "fomod" / "images").mkdir(parents=True)
-(out / "Docs").mkdir()
-(out / "Add-ons").mkdir()
-(out / "Launchers").mkdir()
-shutil.copy2(root / "Tools/AllTogether/fomod/info.xml", out / "fomod/info.xml")
-shutil.copy2(root / "Tools/AllTogether/fomod/ModuleConfig.xml", out / "fomod/ModuleConfig.xml")
-shutil.copy2(root / "Tools/AllTogether/INSTALLATION.txt", out / "Docs/AllTogether SKSE - Installation Instructions.txt")
-for image in (root / "Tools/AllTogether/fomod/images").iterdir():
-    if image.is_file():
-        shutil.copy2(image, out / "fomod/images" / image.name)
+def fail(message: str) -> None:
+    sys.exit(f"assemble_fomod: {message}")
 
-archives = {
-    "Ragdoll": "ragdoll",
-    "LipSync": "lipsync",
-    "RaceMenu": "racemenu",
-    "SkyParkour": "skyparkour",
-}
-for addon, source_dir in archives.items():
-    files = list((root / "bundle-output/addons" / source_dir).glob("*.zip"))
-    if len(files) != 1:
-        raise SystemExit(f"Expected one latest {addon} archive; found {len(files)}")
-    with ZipFile(files[0]) as archive:
-        dlls = [n for n in archive.namelist() if n.startswith("00 Core/SKSE/Plugins/") and n.lower().endswith(".dll")]
+
+def release_code(version: str) -> str:
+    # "1.8.7-4" -> "187", "v1.8.3" -> "183"
+    match = re.match(r"v?(\d)\.(\d)\.(\d)", version)
+    if not match:
+        fail(f"cannot read a Skyrim Together version from '{version}'")
+    return "".join(match.groups())
+
+
+def main() -> None:
+    if len(sys.argv) != 4:
+        sys.exit(__doc__)
+    launchers, plugins, out = (Path(a).resolve() for a in sys.argv[1:])
+    here = Path(__file__).resolve().parent
+    if out.exists():
+        shutil.rmtree(out)
+
+    # The installer's own files.
+    (out / "fomod" / "images").mkdir(parents=True)
+    for name in ("info.xml", "ModuleConfig.xml"):
+        shutil.copy2(here / "fomod" / name, out / "fomod" / name)
+    for image in (here / "fomod" / "images").iterdir():
+        shutil.copy2(image, out / "fomod" / "images" / image.name)
+    docs = out / "Docs"
+    docs.mkdir()
+    shutil.copy2(here / "INSTALLATION.txt", docs / "AllTogether SKSE - Installation Instructions.txt")
+
+    # Launchers: "41 STR 1.8.7-4 - 1.6.1170" -> Launchers/187-1.6.1170; servers: "server-v1.8.3" -> Servers/183.
+    for folder in sorted(p for p in launchers.iterdir() if p.is_dir()):
+        match = re.fullmatch(r"\d+ STR (\S+) - (\S+)", folder.name)
+        if match:
+            dest = out / "Launchers" / f"{release_code(match.group(1))}-{match.group(2)}"
+        elif folder.name.startswith("server-"):
+            dest = out / "Servers" / release_code(folder.name[len("server-"):])
+        else:
+            continue
+        shutil.copytree(folder, dest)
+    shutil.copy2(launchers / "LAUNCHER_MANIFEST.txt", docs / "AllTogether SKSE - Launcher manifest.txt")
+
+    # Add-on plugins, docs and LipSync's relay settings.
+    for addon in ADDONS:
+        source = plugins / addon
+        dlls = list((source / "SKSE" / "Plugins").glob("*.dll"))
         if len(dlls) != 1:
-            raise SystemExit(f"Expected one {addon} plugin DLL, found {dlls}")
-        target = out / "Add-ons" / addon / "SKSE/Plugins" / Path(dlls[0]).name
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(archive.read(dlls[0]))
+            fail(f"expected one {addon} plugin DLL in {source / 'SKSE' / 'Plugins'}, found {len(dlls)}")
+        shutil.copytree(source / "SKSE", out / "Add-ons" / addon / "SKSE")
+        for doc in sorted((source / "Docs").glob("*")) if (source / "Docs").is_dir() else []:
+            shutil.copy2(doc, docs / f"{addon} - {doc.name}")
+    for name in ("LipSyncTogether-Secure.ini", "LipSyncTogether-Open.ini"):
+        ini = plugins / "LipSync" / "security" / name
+        if not ini.is_file():
+            fail(f"missing {ini}")
+        (out / "fomod" / "security").mkdir(exist_ok=True)
+        shutil.copy2(ini, out / "fomod" / "security" / name)
 
-        # Preserve each add-on's own installation notes alongside the bundle guide.
-        for name in archive.namelist():
-            normalized = name.replace("\\", "/")
-            if normalized.startswith("00 Core/Docs/") and not normalized.endswith("/"):
-                doc_name = Path(normalized).name
-                (out / "Docs" / f"{addon} - {doc_name}").write_bytes(archive.read(name))
+    # Everything the installer offers exists, and nothing else was packed.
+    config = (out / "fomod" / "ModuleConfig.xml").read_text(encoding="utf-8")
+    named = {s.replace("\\", "/") for s in re.findall(r'source="([^"]+)"', config)}
+    for source in sorted(named):
+        if not (out / source).exists():
+            fail(f"ModuleConfig.xml names {source}, which was not built")
+    for group in ("Launchers", "Servers"):
+        for folder in (out / group).iterdir():
+            if f"{group}/{folder.name}/SkyrimTogetherReborn" not in named:
+                fail(f"{group}/{folder.name} was built but the installer never offers it")
+    print(f"assemble_fomod: {out} ({len(named)} sources checked)")
 
-        if addon == "LipSync":
-            ini_name = next((n for n in archive.namelist() if n.replace("\\", "/").lower() == "00 core/skse/plugins/lipsynctogether.ini"), None)
-            if not ini_name:
-                raise SystemExit("LipSync archive is missing its default LipSyncTogether.ini")
-            target_ini = out / "Add-ons/LipSync/SKSE/Plugins/LipSyncTogether.ini"
-            target_ini.write_bytes(archive.read(ini_name))
-            for security_name in ("LipSyncTogether-Secure.ini", "LipSyncTogether-Open.ini"):
-                member = next((n for n in archive.namelist() if n.replace("\\", "/").lower() == f"fomod/security/{security_name}".lower()), None)
-                if not member:
-                    raise SystemExit(f"LipSync archive is missing FOMOD option {security_name}")
-                target_security = out / "fomod/security" / security_name
-                target_security.parent.mkdir(parents=True, exist_ok=True)
-                target_security.write_bytes(archive.read(member))
 
-        for code, source in [("183-1.7.104", "10 STR 1.8.3 - 1.7.104"), ("183-1.6.1170", "11 STR 1.8.3 - 1.6.1170"),
-                             ("185-1.7.104", "20 STR 1.8.5 - 1.7.104"), ("185-1.6.1170", "21 STR 1.8.5 - 1.6.1170"),
-                             ("185-1.5.97", "22 STR 1.8.5 - 1.5.97"), ("186-1.7.104", "30 STR 1.8.6 - 1.7.104"),
-                             ("186-1.6.1170", "31 STR 1.8.6 - 1.6.1170")]:
-            dest = out / "Launchers" / code
-            if dest.exists():
-                continue
-            prefix = source + "/"
-            entries = [n for n in archive.namelist() if n.startswith(prefix) and not n.endswith("/")]
-            if not entries:
-                raise SystemExit(f"Missing legacy launcher folder {source}")
-            for name in entries:
-                relative = name[len(prefix):]
-                target = dest / relative
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(archive.read(name))
-
-for game, label in [("1.7.104", "187-1.7.104"), ("1.6.1170", "187-1.6.1170")]:
-    matches = list(root.glob(f"bundle-output/**/STR-1.8.7-Skyrim-{game}/SkyrimTogether.exe"))
-    if len(matches) != 1:
-        raise SystemExit(f"Expected one STR 1.8.7 launcher for Skyrim {game}, found {len(matches)}")
-    source_dir = matches[0].parent
-    dest = out / "Launchers" / label / "SkyrimTogetherReborn"
-    dest.mkdir(parents=True)
-    for filename in ("SkyrimTogether.exe", "EarlyLoad.dll"):
-        source = source_dir / filename
-        if source.exists():
-            shutil.copy2(source, dest / filename)
-
-print(f"Assembled FOMOD at {out}")
+if __name__ == "__main__":
+    main()
