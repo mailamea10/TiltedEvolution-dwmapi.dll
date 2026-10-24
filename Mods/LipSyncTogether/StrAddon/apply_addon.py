@@ -1,6 +1,6 @@
 """Adds the LipSync Together add-on to a Skyrim Together Reborn source tree.
 
-Usage: python apply_addon.py <path to the STR source tree> [--protocol 1.8.5|1.8.3]
+Usage: python apply_addon.py <path to the STR source tree> [--protocol 1.8.5|1.8.3|1.8.7]
 
 Copies the add-on's client sources into Code/client, registers LipSyncTogetherService in
 Code/client/World.cpp, has the papyrus registration hook in Code/client/Games/Misc/BSScript.cpp hand each
@@ -8,12 +8,10 @@ native to the add-on (it needs Mfg Fix's function object, not only the address t
 has the connect handler in Code/client/Services/Generic/OverlayClient.cpp report the server it dials (voice chat
 reaches its relay on that host), and has Code/client/Services/Generic/ImguiService.cpp give the settings window a
 moment between frames to load its fonts.
-Nothing else in the tree changes, and the server is not touched: mouth states travel through the script
-animation relay every Skyrim Together server already has.
-
-The same add-on goes onto the 1.8.5 trees (1.5.97, 1.6.1170/1.6.1179, 1.7.104) and the official 1.8.3 trees
-(1.6.1170/1.6.1179, 1.7.104). The two releases address relayed script animations differently, which
---protocol accounts for (default 1.8.5).
+The tree must carry Plugin API V2 (Skyrim Together builds with it, or the Together Launcher host patch on older
+ones): mouth states and voice keys go through it. Without V2 on the server they fall back to the script animation
+relay on 1.8.3 to 1.8.5, which address relayed script animations differently (--protocol, default 1.8.5), and to
+party Mod Messages on 1.8.7 (--protocol 1.8.7), whose servers refuse relayed add-on names.
 """
 
 import pathlib
@@ -48,11 +46,15 @@ def main() -> None:
         index = args.index("--protocol")
         protocol = args[index + 1] if index + 1 < len(args) else ""
         del args[index : index + 2]
-    if len(args) != 1 or protocol not in ("1.8.5", "1.8.3"):
+    if len(args) != 1 or protocol not in ("1.8.5", "1.8.3", "1.8.7"):
         sys.exit(__doc__)
 
     tree = pathlib.Path(args[0]).resolve()
     addon = pathlib.Path(__file__).resolve().parent
+
+    api = tree / "Code" / "plugin_api" / "include" / "SkyrimTogetherAPI.h"
+    if not api.is_file() or "IVSkyrimTogether2" not in api.read_text(encoding="utf-8"):
+        sys.exit(f"apply_addon: {tree} has no Plugin API V2; apply the Together Launcher host patch first")
 
     source_root = addon / "Code"
     for source in source_root.rglob("*"):
@@ -61,6 +63,16 @@ def main() -> None:
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
             print(f"apply_addon: copied {target.relative_to(tree)}")
+
+    if protocol == "1.8.7":
+        service = tree / "Code" / "client" / "Services" / "Generic" / "LipSyncTogetherService.cpp"
+        text = service.read_text(encoding="utf-8")
+        default = "#define STR_LIPSYNC_HOST_PARTY_API 0"
+        if default not in text:
+            sys.exit(f"apply_addon: '{default}' not found in {service}")
+        # 1.8.7: the server refuses relayed STR*| names but has party Mod Messages.
+        service.write_text(text.replace(default, "#define STR_LIPSYNC_HOST_PARTY_API 1"), encoding="utf-8")
+        print("apply_addon: protocol 1.8.7")
 
     if protocol == "1.8.3":
         service = tree / "Code" / "client" / "Services" / "Generic" / "LipSyncTogetherService.cpp"

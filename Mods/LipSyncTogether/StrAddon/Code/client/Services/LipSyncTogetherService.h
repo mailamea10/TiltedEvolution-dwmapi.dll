@@ -37,7 +37,7 @@ struct Actor;
 struct LipSyncTogetherService
 {
     LipSyncTogetherService(World& aWorld, TransportService& aTransport, entt::dispatcher& aDispatcher) noexcept;
-    ~LipSyncTogetherService() noexcept = default;
+    ~LipSyncTogetherService() noexcept;
 
     TP_NOCOPYMOVE(LipSyncTogetherService);
 
@@ -53,11 +53,26 @@ struct LipSyncTogetherService
         [[nodiscard]] bool IsClosed() const noexcept { return Open < 0.01f && Wide < 0.01f && Round < 0.01f && Lips < 0.01f && Teeth < 0.01f; }
     };
 
+    // A mouth state or voice key from player aPlayerId, whichever way it came. Run during the World update.
+    void OnState(uint32_t aPlayerId, const String& acState) noexcept;
+    void OnVoiceKey(uint32_t aPlayerId, const String& acKey) noexcept;
+
 protected:
     void OnUpdate(const UpdateEvent& acEvent) noexcept;
     void OnNotifyScriptAnimation(const NotifyScriptAnimation& acMessage) noexcept;
 
 private:
+    // How mouth states and voice keys leave, from what the server offers.
+    enum class Route
+    {
+        None,
+        Near,
+        Party,
+        Relay
+    };
+    [[nodiscard]] Route PickRoute() const noexcept;
+    void SendVoiceKey(const char* acpKey) noexcept;
+
     // The phonemes this service last wrote on one actor; -1 for one it has not touched.
     struct FaceState
     {
@@ -141,6 +156,8 @@ private:
     bool m_voiceSession{};
     String m_voiceHost{};
     uint32_t m_voicePlayer{};
+    // When our voice key last went out (m_clock), to send it again for players who join later.
+    double m_lastKeySent{-1.0};
     Vector<STRLipSync::MixEntry> m_mix{};
 
     entt::scoped_connection m_updateConnection;

@@ -13,6 +13,7 @@
 
 #include <Services/ImguiService.h>
 #include <Services/OverlayService.h>
+#include <Services/PluginService.h>
 #include <Services/TransportService.h>
 
 #include <Actor.h>
@@ -41,15 +42,33 @@ extern "C" __declspec(dllexport) uint32_t STRLipSync_HostApiVersion()
 
 namespace
 {
-// "STRLS1|<sender's player id, hex>|<mouth state>", relayed as a script animation for an object id that the stock
-// client drops without playing anything. 1.8.5 resolves that id as a server id, so one that cannot exist is used;
-// 1.8.3 skips id 0 outright (apply_addon.py --protocol 1.8.3 defines it).
+// Mouth states and voice keys go out by the first of these the server offers:
+// - Plugin API V2 (never stored): a mouth state as a message about the player's character, relayed unreliably to
+//   the players in range; a voice key to every player, sent again now and then for players who join later;
+// - on servers with Plugin API V1 only (1.8.7 without V2, which refuses the relay below): both as party Mod
+//   Messages, "S<mouth state>" and "K<voice key>";
+// - on 1.8.3 to 1.8.5 servers without V2: the script animation relay, "STRLS1|<sender's player id, hex>|<mouth
+//   state>" and "STRVK1|<sender's player id, hex>|<voice key>", for an object id that the stock client drops
+//   without playing anything. 1.8.5 resolves that id as a server id, so one that cannot exist is used; 1.8.3 skips
+//   id 0 outright (apply_addon.py --protocol 1.8.3 defines it). Its string cache keeps every distinct string for the
+//   session, which is why mouth states are a small fixed set.
 #ifndef STR_LIPSYNC_NO_OBJECT
 #define STR_LIPSYNC_NO_OBJECT 0xFFFFFFFFu
 #endif
+// apply_addon.py --protocol 1.8.7 sets this: the server has Plugin API V1 and refuses relayed STR*| names.
+#ifndef STR_LIPSYNC_HOST_PARTY_API
+#define STR_LIPSYNC_HOST_PARTY_API 0
+#endif
+constexpr const char* kChannelName = "mailamea.LipSyncTogether";
+constexpr char kPartyState = 'S';
+constexpr char kPartyKey = 'K';
 constexpr const char* kWirePrefix = "STRLS1|";
 constexpr const char* kVoiceKeyPrefix = "STRVK1|";
 constexpr uint32_t kNoObject = STR_LIPSYNC_NO_OBJECT;
+// Without the cache handing keys to players who join later, a key is sent again this often.
+constexpr double kVoiceKeyRepeat = 20.0;
+// Party Mod Messages allow 20 a second per player; mouth states stay under that.
+constexpr double kPartyMinSendInterval = 1.0 / 15.0;
 
 // A mouth state is three characters: the jaw (0-7), the strongest lip shape (N none, W wide, R round, L lips
 // closed, T teeth) and its strength (0 for N, else 1-3). "-" means the speaker went quiet. The server keeps every
@@ -338,6 +357,29 @@ void LipSyncTogetherService::FaceState::Forget() noexcept
     Owned = false;
 }
 
+namespace
+{
+// The Plugin API calls back into whichever service is alive; channels last for the whole process.
+LipSyncTogetherService* s_pService = nullptr;
+SkyrimTogetherAPI::ChannelHandle s_channel = 0;
+
+void OnNearMessageThunk(uint32_t aSenderId, uint32_t, const char* apBytes, size_t aLength)
+{
+    if (s_pService && apBytes)
+        s_pService->OnState(aSenderId, String(apBytes, aLength));
+}
+
+void OnPartyMessageThunk(uint32_t aSenderId, const char* apBytes, size_t aLength)
+{
+    if (!s_pService || !apBytes || aLength < 1)
+        return;
+    if (apBytes[0] == kPartyState)
+        s_pService->OnState(aSenderId, String(apBytes + 1, aLength - 1));
+    else if (apBytes[0] == kPartyKey)
+        s_pService->OnVoiceKey(aSenderId, String(apBytes + 1, aLength - 1));
+}
+} // namespace
+
 LipSyncTogetherService::LipSyncTogetherService(World& aWorld, TransportService& aTransport, entt::dispatcher& aDispatcher) noexcept
     : m_world(aWorld)
     , m_transport(aTransport)
@@ -345,6 +387,59 @@ LipSyncTogetherService::LipSyncTogetherService(World& aWorld, TransportService& 
 {
     m_updateConnection = aDispatcher.sink<UpdateEvent>().connect<&LipSyncTogetherService::OnUpdate>(this);
     m_notifyConnection = aDispatcher.sink<NotifyScriptAnimation>().connect<&LipSyncTogetherService::OnNotifyScriptAnimation>(this);
+
+    s_pService = this;
+    if (s_channel == 0)
+    {
+        auto& api = PluginService::Get();
+        s_channel = api.RegisterChannel(kChannelName, &OnPartyMessageThunk, nullptr);
+        if (s_channel == 0 || !api.SetNearMessageCallback(s_channel, &OnNearMessageThunk))
+            spdlog::error("LipSync Together: could not register the '{}' channel", kChannelName);
+    }
+}
+
+LipSyncTogetherService::~LipSyncTogetherService() noexcept
+{
+    if (s_pService == this)
+        s_pService = nullptr;
+}
+
+LipSyncTogetherService::Route LipSyncTogetherService::PickRoute() const noexcept
+{
+    auto& api = PluginService::Get();
+    if (s_channel != 0 && api.IsNearSupported())
+        return Route::Near;
+#if STR_LIPSYNC_HOST_PARTY_API
+    return s_channel != 0 && api.IsInParty() ? Route::Party : Route::None;
+#else
+    return Route::Relay;
+#endif
+}
+
+void LipSyncTogetherService::SendVoiceKey(const char* acpKey) noexcept
+{
+    const uint32_t cPlayerId = m_transport.GetLocalPlayerId();
+    auto& api = PluginService::Get();
+    switch (PickRoute())
+    {
+    case Route::Near: api.SendToAll(s_channel, acpKey, strlen(acpKey)); break;
+    case Route::Party:
+    {
+        const String cWire = String(1, kPartyKey) + acpKey;
+        api.Send(s_channel, cWire.data(), cWire.size());
+        break;
+    }
+    case Route::Relay:
+    {
+        ScriptAnimationRequest request{};
+        request.FormID = kNoObject;
+        request.EventName = fmt::format("{}{:X}|{}", kVoiceKeyPrefix, cPlayerId, acpKey).c_str();
+        m_transport.Send(request);
+        break;
+    }
+    case Route::None: return;
+    }
+    m_lastKeySent = m_clock;
 }
 
 void LipSyncTogetherService::ScanForPlugin() noexcept
@@ -501,10 +596,15 @@ void LipSyncTogetherService::SendLocal(const Shape& acMouth, bool aSpeaking) noe
     const double cSince = m_lastSendTime < 0.0 ? 1e9 : m_clock - m_lastSendTime;
 
     String state;
+    const Route cRoute = PickRoute();
+    if (cRoute == Route::None)
+        return;
+
+    const double cMinInterval = cRoute == Route::Party ? kPartyMinSendInterval : kMinSendInterval;
     if (cActive)
     {
         state = EncodeState(acMouth);
-        if (cSince < kMinSendInterval || (state == m_lastSentState && cSince < kRepeatInterval))
+        if (cSince < cMinInterval || (state == m_lastSentState && cSince < kRepeatInterval))
             return;
     }
     else
@@ -514,10 +614,27 @@ void LipSyncTogetherService::SendLocal(const Shape& acMouth, bool aSpeaking) noe
         state = kQuietState;
     }
 
-    ScriptAnimationRequest request{};
-    request.FormID = kNoObject;
-    request.EventName = fmt::format("{}{:X}|{}", kWirePrefix, m_transport.GetLocalPlayerId(), state.c_str()).c_str();
-    m_transport.Send(request);
+    auto& api = PluginService::Get();
+    if (cRoute == Route::Near)
+    {
+        // About the player's character: only the players who can see it get it, and a lost one is replaced.
+        const uint32_t cServerId = api.GetServerId(0x14);
+        if (cServerId == 0 || api.SendNear(s_channel, cServerId, SkyrimTogetherAPI::Delivery::Unreliable, state.data(), state.size()) != SkyrimTogetherAPI::SendResult::Ok)
+            return;
+    }
+    else if (cRoute == Route::Party)
+    {
+        const String cWire = String(1, kPartyState) + state;
+        if (api.Send(s_channel, cWire.data(), cWire.size()) != SkyrimTogetherAPI::SendResult::Ok)
+            return;
+    }
+    else
+    {
+        ScriptAnimationRequest request{};
+        request.FormID = kNoObject;
+        request.EventName = fmt::format("{}{:X}|{}", kWirePrefix, m_transport.GetLocalPlayerId(), state.c_str()).c_str();
+        m_transport.Send(request);
+    }
     ++m_sentCount;
 
     if (Descriptor(m_pDescriptor)->Config->Debug && state != m_lastSentState)
@@ -540,26 +657,11 @@ void LipSyncTogetherService::OnNotifyScriptAnimation(const NotifyScriptAnimation
         const size_t cBar = cWire.find('|', cStart);
         if (cBar == String::npos || cBar == cStart || cBar - cStart > 8)
             return;
-        const uint32_t cPlayerId = static_cast<uint32_t>(strtoul(cWire.substr(cStart, cBar - cStart).c_str(), nullptr, 16));
-        const String cKey = cWire.substr(cBar + 1);
-        if (cKey.size() != 32)
-            return;
-        for (const char c : cKey)
-        {
-            if (!isxdigit(static_cast<unsigned char>(c)))
-                return;
-        }
-        if (m_pDescriptor)
-            Descriptor(m_pDescriptor)->AddVoiceKey(cPlayerId, cKey.c_str());
-        else if (m_pendingVoiceKeys.size() < 256)
-            m_pendingVoiceKeys[cPlayerId] = cKey;
-
-
-
+        OnVoiceKey(static_cast<uint32_t>(strtoul(cWire.substr(cStart, cBar - cStart).c_str(), nullptr, 16)), cWire.substr(cBar + 1));
         return;
     }
 
-    if (!m_pDescriptor || !StartsWith(cWire, kWirePrefix))
+    if (!StartsWith(cWire, kWirePrefix))
         return;
 
     const size_t cStart = strlen(kWirePrefix);
@@ -567,13 +669,33 @@ void LipSyncTogetherService::OnNotifyScriptAnimation(const NotifyScriptAnimation
     if (cBar == String::npos || cBar == cStart || cBar - cStart > 8)
         return;
 
-    const uint32_t cPlayerId = static_cast<uint32_t>(strtoul(cWire.substr(cStart, cBar - cStart).c_str(), nullptr, 16));
+    OnState(static_cast<uint32_t>(strtoul(cWire.substr(cStart, cBar - cStart).c_str(), nullptr, 16)), cWire.substr(cBar + 1));
+}
+
+void LipSyncTogetherService::OnVoiceKey(uint32_t aPlayerId, const String& acKey) noexcept
+{
+    if (acKey.size() != 32)
+        return;
+    for (const char c : acKey)
+    {
+        if (!isxdigit(static_cast<unsigned char>(c)))
+            return;
+    }
+    if (m_pDescriptor)
+        Descriptor(m_pDescriptor)->AddVoiceKey(aPlayerId, acKey.c_str());
+    else if (m_pendingVoiceKeys.size() < 256)
+        m_pendingVoiceKeys[aPlayerId] = acKey;
+}
+
+void LipSyncTogetherService::OnState(uint32_t aPlayerId, const String& acState) noexcept
+{
     // 1.8.3 servers send our own states back to us.
-    if (cPlayerId == m_transport.GetLocalPlayerId())
+    if (!m_pDescriptor || aPlayerId == m_transport.GetLocalPlayerId())
         return;
 
+    const uint32_t cPlayerId = aPlayerId;
     Shape mouth;
-    if (!DecodeState(cWire.substr(cBar + 1), mouth))
+    if (!DecodeState(acState, mouth))
         return;
 
     auto& remote = m_remotes[cPlayerId];
@@ -584,7 +706,7 @@ void LipSyncTogetherService::OnNotifyScriptAnimation(const NotifyScriptAnimation
 
     if (Descriptor(m_pDescriptor)->Config->Debug)
     {
-        const String cState = cWire.substr(cBar + 1);
+        const String& cState = acState;
         if (cState != remote.LastState)
             spdlog::info("LipSync Together: received {} from player {:X}", cState.c_str(), cPlayerId);
         remote.LastState = cState;
@@ -759,6 +881,7 @@ void LipSyncTogetherService::UpdateVoice(bool aOnline, bool aMix) noexcept
         {
             pDescriptor->SetSession(nullptr, 0);
             m_voiceSession = false;
+            m_lastKeySent = -1.0;
             m_voiceHost.clear();
             spdlog::info("LipSync Together: voice chat switched off");
         }
@@ -781,16 +904,10 @@ void LipSyncTogetherService::UpdateVoice(bool aOnline, bool aMix) noexcept
             m_voiceHost = host.c_str();
             m_voicePlayer = cPlayerId;
 
-            // Publish our random voice key once per STR session. The server retains distinct relayed strings and
-            // delivers them to later joiners, so the host can authenticate their relay hello packets.
+            // Publish our random voice key, so the host can authenticate our relay hello packets.
             char voiceKey[33]{};
             if (pDescriptor->GetVoiceKey(voiceKey, sizeof(voiceKey)))
-            {
-                ScriptAnimationRequest request{};
-                request.FormID = kNoObject;
-                request.EventName = fmt::format("{}{:X}|{}", kVoiceKeyPrefix, cPlayerId, voiceKey).c_str();
-                m_transport.Send(request);
-            }
+                SendVoiceKey(voiceKey);
 
             spdlog::info("LipSync Together: voice chat on the server at {} as player {:X}", host, cPlayerId);
         }
@@ -799,8 +916,19 @@ void LipSyncTogetherService::UpdateVoice(bool aOnline, bool aMix) noexcept
     {
         pDescriptor->SetSession(nullptr, 0);
         m_voiceSession = false;
+        m_lastKeySent = -1.0;
         m_voiceHost.clear();
         spdlog::info("LipSync Together: voice chat stopped (left the server)");
+    }
+
+    // Nothing keeps keys for players who join later on these routes, so ours goes out again now and then (and as soon
+    // as a route opens, should there have been none when the session began).
+    if (m_voiceSession && (m_lastKeySent < 0.0 || m_clock - m_lastKeySent >= kVoiceKeyRepeat))
+    {
+        const Route cRoute = PickRoute();
+        char voiceKey[33]{};
+        if (cRoute != Route::None && (cRoute != Route::Relay || m_lastKeySent < 0.0) && pDescriptor->GetVoiceKey(voiceKey, sizeof(voiceKey)))
+            SendVoiceKey(voiceKey);
     }
 
     if (!aMix || !m_voiceSession)
