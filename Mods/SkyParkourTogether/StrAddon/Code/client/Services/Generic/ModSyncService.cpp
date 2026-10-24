@@ -8,6 +8,7 @@
 #include <Events/UpdateEvent.h>
 #include <Messages/NotifyScriptAnimation.h>
 #include <Messages/ScriptAnimationRequest.h>
+#include <Services/PluginService.h>
 #include <Services/TransportService.h>
 
 #include <Actor.h>
@@ -28,12 +29,22 @@ extern "C" __declspec(dllexport) uint32_t STRModSync_HostApiVersion()
 
 namespace
 {
-// "STRMS1|<sender's server id, hex>|<event>|<type>:<name>:<value>|...", relayed as a script animation for an
-// object id that the stock client drops without playing anything. 1.8.5 resolves that id as a server id, so
-// one that cannot exist is used; 1.8.3 skips id 0 outright (apply_addon.py --protocol 1.8.3 defines it).
+// An event goes out as "<event>|<type>:<name>:<value>|...", by the first of these the server offers:
+// - a Plugin API V2 message about the player's character, relayed to the players in range and never stored;
+// - on servers with Plugin API V1 only (1.8.7 without V2, which refuses the relay below), a party Mod Message,
+//   prefixed with "<sender's server id, hex>|";
+// - on 1.8.3 to 1.8.5 servers without V2, the script animation relay, as "STRMS1|<sender's server id, hex>|...",
+//   for an object id that the stock client drops without playing anything. 1.8.5 resolves that id as a server id,
+//   so one that cannot exist is used; 1.8.3 skips id 0 outright (apply_addon.py --protocol 1.8.3 defines it).
+//   Its string cache keeps every distinct event for the session, so only this small vocabulary goes there.
 #ifndef STR_MODSYNC_NO_OBJECT
 #define STR_MODSYNC_NO_OBJECT 0xFFFFFFFFu
 #endif
+// apply_addon.py --protocol 1.8.7 sets this: the server has Plugin API V1 and refuses relayed STR*| names.
+#ifndef STR_MODSYNC_HOST_PARTY_API
+#define STR_MODSYNC_HOST_PARTY_API 0
+#endif
+constexpr const char* kChannelName = "mailamea.SkyParkourTogether";
 constexpr const char* kWirePrefix = "STRMS1|";
 constexpr uint32_t kNoObject = STR_MODSYNC_NO_OBJECT;
 constexpr size_t kMaxWireLength = 480;
@@ -107,12 +118,46 @@ bool HookPlayerNotify(IAnimationGraphManagerHolder* apThis, BSFixedString* apEve
 }
 } // namespace
 
+namespace
+{
+// The Plugin API calls back into whichever service is alive; channels last for the whole process.
+ModSyncService* s_pService = nullptr;
+SkyrimTogetherAPI::ChannelHandle s_channel = 0;
+
+void OnNearMessageThunk(uint32_t, uint32_t aServerId, const char* apBytes, size_t aLength)
+{
+    if (s_pService && apBytes)
+        s_pService->Play(aServerId, std::string(apBytes, aLength));
+}
+
+void OnPartyMessageThunk(uint32_t, const char* apBytes, size_t aLength)
+{
+    if (s_pService && apBytes)
+        s_pService->PlayWithServerId(std::string(apBytes, aLength));
+}
+} // namespace
+
 ModSyncService::ModSyncService(World& aWorld, TransportService& aTransport, entt::dispatcher& aDispatcher) noexcept
     : m_world(aWorld)
     , m_transport(aTransport)
 {
     m_updateConnection = aDispatcher.sink<UpdateEvent>().connect<&ModSyncService::OnUpdate>(this);
     m_notifyConnection = aDispatcher.sink<NotifyScriptAnimation>().connect<&ModSyncService::OnNotifyScriptAnimation>(this);
+
+    s_pService = this;
+    if (s_channel == 0)
+    {
+        auto& api = PluginService::Get();
+        s_channel = api.RegisterChannel(kChannelName, &OnPartyMessageThunk, nullptr);
+        if (s_channel == 0 || !api.SetNearMessageCallback(s_channel, &OnNearMessageThunk))
+            spdlog::error("mod sync: could not register the '{}' channel", kChannelName);
+    }
+}
+
+ModSyncService::~ModSyncService() noexcept
+{
+    if (s_pService == this)
+        s_pService = nullptr;
 }
 
 void ModSyncService::ScanForPlugins() noexcept
@@ -310,18 +355,34 @@ void ModSyncService::SendCaptured() noexcept
     if (!serverId)
         return;
 
+    auto& api = PluginService::Get();
     for (const auto& event : captured)
     {
-        String wire = fmt::format("{}{:X}|{}{}", kWirePrefix, *serverId, event.Event.c_str(), event.Variables.c_str()).c_str();
-        if (wire.size() > kMaxWireLength)
-            wire = fmt::format("{}{:X}|{}", kWirePrefix, *serverId, event.Event.c_str()).c_str();
+        String payload = fmt::format("{}{}", event.Event.c_str(), event.Variables.c_str()).c_str();
+        if (payload.size() > kMaxWireLength)
+            payload = event.Event;
 
+        if (s_channel != 0 && api.IsNearSupported())
+        {
+            const auto cResult = api.SendNear(s_channel, *serverId, SkyrimTogetherAPI::Delivery::Reliable, payload.data(), payload.size());
+            spdlog::debug("mod sync: sent '{}' to the players in range ({})", payload.c_str(), static_cast<int>(cResult));
+            continue;
+        }
+
+#if STR_MODSYNC_HOST_PARTY_API
+        // This server refuses the relay; without V2 only the party sees the event.
+        String party = fmt::format("{:X}|{}", *serverId, payload.c_str()).c_str();
+        if (party.size() > SkyrimTogetherAPI::kMaxMessageSize)
+            party = fmt::format("{:X}|{}", *serverId, event.Event.c_str()).c_str();
+        if (s_channel != 0 && party.size() <= SkyrimTogetherAPI::kMaxMessageSize && api.IsInParty())
+            api.Send(s_channel, party.data(), party.size());
+#else
         ScriptAnimationRequest request{};
         request.FormID = kNoObject;
-        request.EventName = wire;
+        request.EventName = fmt::format("{}{:X}|{}", kWirePrefix, *serverId, payload.c_str()).c_str();
         m_transport.Send(request);
-
-        spdlog::debug("mod sync: sent '{}'", wire.c_str());
+        spdlog::debug("mod sync: sent '{}' through the relay", payload.c_str());
+#endif
     }
 }
 
@@ -331,11 +392,26 @@ void ModSyncService::OnNotifyScriptAnimation(const NotifyScriptAnimation& acMess
     if (!StartsWithNoCase(pWire, kWirePrefix))
         return;
 
-    // Split into "<server id>", "<event>", then the variables.
+    PlayWithServerId(pWire + strlen(kWirePrefix));
+}
+
+void ModSyncService::PlayWithServerId(const std::string& acWire) noexcept
+{
+    // "<server id, hex>|<event>|..." from a sender the server did not vouch for: it only plays on that player's copy.
+    const auto cBar = acWire.find('|');
+    if (cBar == std::string::npos || cBar == 0 || cBar > 8)
+        return;
+
+    Play(static_cast<uint32_t>(strtoul(acWire.substr(0, cBar).c_str(), nullptr, 16)), acWire.substr(cBar + 1));
+}
+
+void ModSyncService::Play(uint32_t aServerId, const std::string& acWire) noexcept
+{
+    // Split into "<event>", then the variables.
     Vector<std::string> parts;
     {
         std::string current;
-        for (const char* p = pWire + strlen(kWirePrefix); *p; ++p)
+        for (const char* p = acWire.c_str(); *p; ++p)
         {
             if (*p == '|')
             {
@@ -347,11 +423,11 @@ void ModSyncService::OnNotifyScriptAnimation(const NotifyScriptAnimation& acMess
         }
         parts.push_back(std::move(current));
     }
-    if (parts.size() < 2)
+    if (parts.empty() || parts[0].empty())
         return;
 
-    const uint32_t cServerId = static_cast<uint32_t>(strtoul(parts[0].c_str(), nullptr, 16));
-    const std::string& cEvent = parts[1];
+    const uint32_t cServerId = aServerId;
+    const std::string& cEvent = parts[0];
 
     const auto entity = Utils::FindEntityByServerId(cServerId);
     if (!entity || m_world.try_get<LocalComponent>(*entity))
@@ -375,7 +451,7 @@ void ModSyncService::OnNotifyScriptAnimation(const NotifyScriptAnimation& acMess
     }
 
     // Variables first, so the copy picks the same animation the owner played.
-    for (size_t i = 2; i < parts.size(); ++i)
+    for (size_t i = 1; i < parts.size(); ++i)
     {
         const std::string& cSpec = parts[i];
         const auto cFirst = cSpec.find(':');
