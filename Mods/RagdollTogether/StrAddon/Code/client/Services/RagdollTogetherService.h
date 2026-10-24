@@ -4,7 +4,6 @@ struct World;
 struct TransportService;
 struct UpdateEvent;
 struct DisconnectedEvent;
-struct NotifyScriptAnimation;
 
 // Where a skeleton bone that carries a ragdoll body is, in world space.
 struct RagdollTogetherBone
@@ -32,20 +31,23 @@ struct RagdollTogetherBone
  * keeps its pose, also for players who arrive later. The owner keeps streaming through the get-up, and once the
  * actor is back on its feet the copy blends back to its animation.
  *
- * Every distinct relayed string stays in the server's string cache for the rest of the session, so poses go out
- * compact and only while a body moves.
+ * Poses travel as Plugin API V2 messages about the actor: the server relays them to the players in range and stores
+ * nothing. Moving poses go unreliable (the next one replaces a lost one), rest and end poses reliable. On a server
+ * without V2 ragdolls are not shared.
  */
 struct RagdollTogetherService
 {
     RagdollTogetherService(World& aWorld, TransportService& aTransport, entt::dispatcher& aDispatcher) noexcept;
-    ~RagdollTogetherService() noexcept = default;
+    ~RagdollTogetherService() noexcept;
 
     TP_NOCOPYMOVE(RagdollTogetherService);
+
+    // A pose from the player who controls the actor aServerId. Runs during the World update.
+    void OnNearMessage(uint32_t aSenderId, uint32_t aServerId, const char* apBytes, size_t aLength) noexcept;
 
 protected:
     void OnUpdate(const UpdateEvent& acEvent) noexcept;
     void OnDisconnected(const DisconnectedEvent& acEvent) noexcept;
-    void OnNotifyScriptAnimation(const NotifyScriptAnimation& acMessage) noexcept;
 
 private:
     using Bone = RagdollTogetherBone;
@@ -111,7 +113,10 @@ private:
     Map<uint32_t, RemoteRagdoll> m_remote;
     double m_sendTimer{};
 
+    // Whether this connection's server relays ragdolls has been logged, and how long it has been connected.
+    bool m_relayChecked{};
+    double m_connectedFor{};
+
     entt::scoped_connection m_updateConnection;
     entt::scoped_connection m_disconnectedConnection;
-    entt::scoped_connection m_notifyConnection;
 };

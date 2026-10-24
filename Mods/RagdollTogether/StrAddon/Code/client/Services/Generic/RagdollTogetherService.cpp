@@ -7,8 +7,7 @@
 
 #include <Events/DisconnectedEvent.h>
 #include <Events/UpdateEvent.h>
-#include <Messages/NotifyScriptAnimation.h>
-#include <Messages/ScriptAnimationRequest.h>
+#include <Services/PluginService.h>
 #include <Services/TransportService.h>
 
 #include <Actor.h>
@@ -32,17 +31,14 @@ namespace
 {
 using Bone = RagdollTogetherBone;
 
-// "STRRD1|" followed by binary poses (see EncodePoses), relayed as a script animation for an object id that the
-// stock client drops without playing anything. 1.8.5 resolves that id as a server id, so one that cannot exist is
-// used; 1.8.3 skips id 0 outright (apply_addon.py --protocol 1.8.3 defines it).
-#ifndef STR_RAGDOLL_NO_OBJECT
-#define STR_RAGDOLL_NO_OBJECT 0xFFFFFFFFu
-#endif
-constexpr const char* kWirePrefix = "STRRD1|";
-constexpr uint32_t kNoObject = STR_RAGDOLL_NO_OBJECT;
+// Poses travel as Plugin API V2 messages about the ragdolled actor: the server relays them to the players who have
+// that actor in range and stores nothing. Servers without V2 do not get them at all (never the script animation
+// relay, whose string cache would keep every pose for the rest of the session).
+constexpr const char* kChannelName = "mailamea.RagdollTogether";
+constexpr uint8_t kWireVersion = 1;
 
-// 1.8.3 sends every message reliably and plays remote movement a fixed time behind the server clock, without the
-// playback clock of 1.8.5 (apply_addon.py --protocol 1.8.3 defines this).
+// 1.8.3 plays remote movement a fixed time behind the server clock, without the playback clock of 1.8.5
+// (apply_addon.py --protocol 1.8.3 defines this).
 #ifndef STR_RAGDOLL_PROTOCOL_183
 #define STR_RAGDOLL_PROTOCOL_183 0
 #endif
@@ -50,13 +46,17 @@ constexpr uint32_t kNoObject = STR_RAGDOLL_NO_OBJECT;
 constexpr double kLegacyMovementDelay = 300.0;
 #endif
 
+// How long to wait for the server's answer on relaying ragdolls before saying it does not.
+constexpr double kRelayAnswerWait = 10.0;
+
 // The plugin can load late, so keep looking for it for a while.
 constexpr double kScanInterval = 1.0;
 constexpr double kScanDuration = 60.0;
 
-// How often poses go out while a body moves, at an even pace. The relay keeps every distinct message for the rest of
-// the session, so this is lower than the movement rate; playback interpolates between them.
+// How often poses go out while a body moves, at an even pace; playback interpolates between them.
 constexpr double kSendInterval = 1.0 / 15.0;
+// Owned bodies are sampled this often as frames begin, twice the send rate, rather than on every frame.
+constexpr double kSampleInterval = 1.0 / 30.0;
 // A still body waits this long before it is sent as at rest.
 constexpr double kRestAfter = 0.75;
 // A body at rest is sent again now and then, for players who come into range or reload it.
@@ -72,8 +72,6 @@ constexpr double kMissingWarnAfter = 0.5;
 // Below these a body counts as still.
 constexpr float kStillDistance = 0.25f;
 constexpr float kStillRotationDot = 0.9998f;
-// Streaming poses per message, so one late message holds back little.
-constexpr size_t kPosesPerMessage = 3;
 // Blending the copy onto the owner's pose, and back to its animation once the ragdoll ends.
 constexpr float kBlendInSeconds = 0.12f;
 constexpr float kBlendOutSeconds = 0.3f;
@@ -147,13 +145,24 @@ NiNode* AsNode(NiAVObject* apObject) noexcept
     return reinterpret_cast<TAsNode>((*reinterpret_cast<void***>(apObject))[3])(apObject);
 }
 
+// The RTTI object of bhkBlendCollisionObject once one has been seen, so later nodes compare a pointer, not a name.
+// Only the render thread uses it.
+const void* s_pRagdollRtti = nullptr;
+
 bool IsRagdollBone(const NiAVObject* apObject) noexcept
 {
     NiObject* pCollision = GetCollisionObject(apObject);
     if (!pCollision)
         return false;
     const auto* pRtti = reinterpret_cast<const RttiView*>(pCollision->GetRTTI());
-    return pRtti && pRtti->Name && std::strcmp(pRtti->Name, kRagdollCollisionRtti) == 0;
+    if (!pRtti)
+        return false;
+    if (pRtti == s_pRagdollRtti)
+        return true;
+    if (s_pRagdollRtti || !pRtti->Name || std::strcmp(pRtti->Name, kRagdollCollisionRtti) != 0)
+        return false;
+    s_pRagdollRtti = pRtti;
+    return true;
 }
 
 uint16_t HashName(const char* acpName) noexcept
@@ -293,10 +302,10 @@ Transform Compose(const Transform& acParent, const Transform& acLocal) noexcept
     return result;
 }
 
-// --- the wire: little-endian binary after the prefix ---
-//   u64 owner tick, u8 pose count, then per pose: u32 server id, u8 flags, u8 bone count, then per bone: u16 name
-//   hash, the position (the first bone as three f32, the others as three i16 offsets from it in 1/64 units) and the
-//   rotation as its three smallest components (u8 index of the largest, three i16).
+// --- the wire: one message per pose, little-endian ---
+//   u8 version, u64 owner tick, u8 flags, u8 bone count, then per bone: u16 name hash, the position (the first bone
+//   as three f32, the others as three i16 offsets from it in 1/64 units) and the rotation as its three smallest
+//   components (u8 index of the largest, three i16). 48 bones come to 731 bytes, under kMaxNearMessageSize.
 
 template <class T> void Put(String& aOut, T aValue) noexcept
 {
@@ -305,11 +314,11 @@ template <class T> void Put(String& aOut, T aValue) noexcept
     aOut.append(bytes, sizeof(T));
 }
 
-template <class T> bool Take(const String& acIn, size_t& aPosition, T& aValue) noexcept
+template <class T> bool Take(const char* apIn, size_t aLength, size_t& aPosition, T& aValue) noexcept
 {
-    if (aPosition + sizeof(T) > acIn.size())
+    if (aPosition + sizeof(T) > aLength)
         return false;
-    std::memcpy(&aValue, acIn.data() + aPosition, sizeof(T));
+    std::memcpy(&aValue, apIn + aPosition, sizeof(T));
     aPosition += sizeof(T);
     return true;
 }
@@ -339,10 +348,10 @@ void PutRotation(String& aOut, const float acQ[4]) noexcept
     }
 }
 
-bool TakeRotation(const String& acIn, size_t& aPosition, float aQ[4]) noexcept
+bool TakeRotation(const char* apIn, size_t aLength, size_t& aPosition, float aQ[4]) noexcept
 {
     uint8_t largest = 0;
-    if (!Take(acIn, aPosition, largest) || largest > 3)
+    if (!Take(apIn, aLength, aPosition, largest) || largest > 3)
         return false;
 
     float sum = 0.f;
@@ -351,7 +360,7 @@ bool TakeRotation(const String& acIn, size_t& aPosition, float aQ[4]) noexcept
         if (i == largest)
             continue;
         int16_t value = 0;
-        if (!Take(acIn, aPosition, value))
+        if (!Take(apIn, aLength, aPosition, value))
             return false;
         aQ[i] = static_cast<float>(value) / kQuatScale;
         sum += aQ[i] * aQ[i];
@@ -360,7 +369,7 @@ bool TakeRotation(const String& acIn, size_t& aPosition, float aQ[4]) noexcept
     return true;
 }
 
-// --- state shared with the frame hook ---
+// --- state shared with the frame hook; the service and the render thread take s_lock to touch it ---
 
 struct HookTarget
 {
@@ -470,7 +479,7 @@ void SamplePose(NiAVObject* apObject, Vector<Bone>& aBones, int aDepth) noexcept
     }
 }
 
-// Puts the owner's pose on a copy, or samples the pose of an actor this client owns.
+// Puts the owner's pose on a copy, or samples the pose of an actor this client owns. Runs with s_lock held.
 void ProcessActor(uint32_t aFormId, bool aSample, const HookTarget* apTarget) noexcept
 {
     auto* pActor = Cast<Actor>(TESForm::GetById(aFormId));
@@ -491,11 +500,9 @@ void ProcessActor(uint32_t aFormId, bool aSample, const HookTarget* apTarget) no
 
     if (aSample)
     {
-        Vector<Bone> bones;
+        Vector<Bone>& bones = s_samples[aFormId];
+        bones.clear();
         SamplePose(pRoot, bones, 0);
-        std::lock_guard guard(s_lock);
-        s_samples[aFormId] = std::move(bones);
-        s_sampleTime = std::chrono::steady_clock::now();
     }
 }
 
@@ -507,19 +514,22 @@ void OnFrameBegin() noexcept
     if (!s_anyWork)
         return;
 
-    Map<uint32_t, HookTarget> targets;
-    Set<uint32_t> samples;
-    {
-        std::lock_guard guard(s_lock);
-        targets = s_targets;
-        samples = s_sampleWanted;
-    }
+    // Held while the poses are put on, instead of copying every target each frame: the service only takes it for
+    // short updates.
+    std::lock_guard guard(s_lock);
 
-    for (const auto& [formId, target] : targets)
-        ProcessActor(formId, samples.count(formId) != 0, &target);
-    for (const uint32_t cFormId : samples)
+    const auto cNow = std::chrono::steady_clock::now();
+    const bool cSample = !s_sampleWanted.empty() && std::chrono::duration<double>(cNow - s_sampleTime).count() >= kSampleInterval;
+    if (cSample)
+        s_sampleTime = cNow;
+
+    for (const auto& [formId, target] : s_targets)
+        ProcessActor(formId, cSample && s_sampleWanted.count(formId) != 0, &target);
+    if (!cSample)
+        return;
+    for (const uint32_t cFormId : s_sampleWanted)
     {
-        if (targets.count(cFormId) == 0)
+        if (s_targets.count(cFormId) == 0)
             ProcessActor(cFormId, true, nullptr);
     }
 }
@@ -601,6 +611,15 @@ static TiltedPhoques::Initializer s_frameHook(
             s_frameHookInstalled = true;
         }
     });
+// The Plugin API calls back into whichever service is alive; channels last for the whole process.
+RagdollTogetherService* s_pService = nullptr;
+SkyrimTogetherAPI::ChannelHandle s_channel = 0;
+
+void OnNearMessageThunk(uint32_t aSenderId, uint32_t aServerId, const char* apBytes, size_t aLength)
+{
+    if (s_pService)
+        s_pService->OnNearMessage(aSenderId, aServerId, apBytes, aLength);
+}
 } // namespace
 
 RagdollTogetherService::RagdollTogetherService(World& aWorld, TransportService& aTransport, entt::dispatcher& aDispatcher) noexcept
@@ -609,7 +628,21 @@ RagdollTogetherService::RagdollTogetherService(World& aWorld, TransportService& 
 {
     m_updateConnection = aDispatcher.sink<UpdateEvent>().connect<&RagdollTogetherService::OnUpdate>(this);
     m_disconnectedConnection = aDispatcher.sink<DisconnectedEvent>().connect<&RagdollTogetherService::OnDisconnected>(this);
-    m_notifyConnection = aDispatcher.sink<NotifyScriptAnimation>().connect<&RagdollTogetherService::OnNotifyScriptAnimation>(this);
+
+    s_pService = this;
+    if (s_channel == 0)
+    {
+        auto& api = PluginService::Get();
+        s_channel = api.RegisterChannel(kChannelName, nullptr, nullptr);
+        if (s_channel == 0 || !api.SetNearMessageCallback(s_channel, &OnNearMessageThunk))
+            spdlog::error("Ragdoll Together: could not register the '{}' channel; ragdolls are not shared", kChannelName);
+    }
+}
+
+RagdollTogetherService::~RagdollTogetherService() noexcept
+{
+    if (s_pService == this)
+        s_pService = nullptr;
 }
 
 void RagdollTogetherService::ScanForPlugin() noexcept
@@ -662,6 +695,8 @@ void RagdollTogetherService::Reset() noexcept
 void RagdollTogetherService::OnDisconnected(const DisconnectedEvent&) noexcept
 {
     Reset();
+    m_relayChecked = false;
+    m_connectedFor = 0.0;
 }
 
 void RagdollTogetherService::OnUpdate(const UpdateEvent& acEvent) noexcept
@@ -677,88 +712,98 @@ void RagdollTogetherService::OnUpdate(const UpdateEvent& acEvent) noexcept
         }
     }
 
-    if (!m_pluginFound || !s_frameHookInstalled || !m_transport.IsOnline())
+    if (!m_pluginFound || !s_frameHookInstalled || !m_transport.IsOnline() || s_channel == 0)
         return;
+
+    // The server answers whether it relays messages about actors shortly after joining; say once what it means.
+    if (!PluginService::Get().IsNearSupported())
+    {
+        m_connectedFor += acEvent.Delta;
+        if (!m_relayChecked && m_connectedFor >= kRelayAnswerWait)
+        {
+            m_relayChecked = true;
+            spdlog::warn("Ragdoll Together: this server does not relay ragdolls (it needs an AllTogether server or a Skyrim "
+                         "Together server with Plugin API V2); ragdolls are not shared in this session");
+        }
+        return;
+    }
+    if (!m_relayChecked)
+    {
+        m_relayChecked = true;
+        spdlog::info("Ragdoll Together: the server relays ragdolls to the players in range");
+    }
 
     UpdateLocal(acEvent.Delta);
     UpdateRemote(acEvent.Delta);
 }
 
-void RagdollTogetherService::OnNotifyScriptAnimation(const NotifyScriptAnimation& acMessage) noexcept
+void RagdollTogetherService::OnNearMessage(uint32_t, uint32_t aServerId, const char* apBytes, size_t aLength) noexcept
 {
-    const String& cWire = acMessage.EventName;
-    const size_t cPrefixLength = strlen(kWirePrefix);
-    if (!m_pluginFound || cWire.size() < cPrefixLength || cWire.compare(0, cPrefixLength, kWirePrefix) != 0)
+    if (!m_pluginFound || !apBytes)
         return;
 
-    size_t position = cPrefixLength;
+    size_t position = 0;
+    uint8_t version = 0;
     uint64_t tick = 0;
-    uint8_t count = 0;
-    if (!Take(cWire, position, tick) || !Take(cWire, position, count))
+    uint8_t flags = 0;
+    uint8_t boneCount = 0;
+    if (!Take(apBytes, aLength, position, version) || version != kWireVersion || !Take(apBytes, aLength, position, tick) ||
+        !Take(apBytes, aLength, position, flags) || !Take(apBytes, aLength, position, boneCount) || boneCount == 0 || boneCount > kMaxBones)
         return;
 
-    for (uint8_t p = 0; p < count; ++p)
+    Snapshot snapshot{tick, flags, {}};
+    snapshot.Bones.resize(boneCount);
+    for (uint8_t b = 0; b < boneCount; ++b)
     {
-        uint32_t serverId = 0;
-        uint8_t flags = 0;
-        uint8_t boneCount = 0;
-        if (!Take(cWire, position, serverId) || !Take(cWire, position, flags) || !Take(cWire, position, boneCount) || boneCount > kMaxBones)
+        Bone& bone = snapshot.Bones[b];
+        if (!Take(apBytes, aLength, position, bone.NameHash))
             return;
-
-        Snapshot snapshot{tick, flags, {}};
-        snapshot.Bones.resize(boneCount);
-        for (uint8_t b = 0; b < boneCount; ++b)
+        if (b == 0)
         {
-            Bone& bone = snapshot.Bones[b];
-            if (!Take(cWire, position, bone.NameHash))
-                return;
-            if (b == 0)
+            for (float& value : bone.Position)
             {
-                for (float& value : bone.Position)
-                {
-                    if (!Take(cWire, position, value))
-                        return;
-                }
+                if (!Take(apBytes, aLength, position, value))
+                    return;
             }
-            else
-            {
-                for (int axis = 0; axis < 3; ++axis)
-                {
-                    int16_t offset = 0;
-                    if (!Take(cWire, position, offset))
-                        return;
-                    bone.Position[axis] = snapshot.Bones[0].Position[axis] + static_cast<float>(offset) / kOffsetScale;
-                }
-            }
-            if (!TakeRotation(cWire, position, bone.Rotation))
-                return;
         }
-
-        // Ours (1.8.3 servers send our own messages back), or an actor this client does not show.
-        const auto cEntity = Utils::FindEntityByServerId(serverId);
-        if (boneCount == 0 || !cEntity || m_world.try_get<LocalComponent>(*cEntity))
-            continue;
-
-        auto& remote = m_remote[serverId];
-        remote.SinceArrival = 0.0;
-
-        // A new ragdoll after the last one ended.
-        if (remote.Ended && !(flags & kEnd))
-        {
-            remote.Ended = false;
-            remote.Snapshots.clear();
-        }
-
-        // Streaming poses can arrive out of order.
-        auto it = std::find_if(remote.Snapshots.begin(), remote.Snapshots.end(), [&](const Snapshot& acOther) { return acOther.Tick >= snapshot.Tick; });
-        if (it != remote.Snapshots.end() && it->Tick == snapshot.Tick)
-            *it = std::move(snapshot);
         else
-            remote.Snapshots.insert(it, std::move(snapshot));
-
-        while (remote.Snapshots.size() > kMaxSnapshots)
-            remote.Snapshots.erase(remote.Snapshots.begin());
+        {
+            for (int axis = 0; axis < 3; ++axis)
+            {
+                int16_t offset = 0;
+                if (!Take(apBytes, aLength, position, offset))
+                    return;
+                bone.Position[axis] = snapshot.Bones[0].Position[axis] + static_cast<float>(offset) / kOffsetScale;
+            }
+        }
+        if (!TakeRotation(apBytes, aLength, position, bone.Rotation))
+            return;
     }
+
+    // An actor this client does not show, or one it took over since.
+    const auto cEntity = Utils::FindEntityByServerId(aServerId);
+    if (!cEntity || m_world.try_get<LocalComponent>(*cEntity))
+        return;
+
+    auto& remote = m_remote[aServerId];
+    remote.SinceArrival = 0.0;
+
+    // A new ragdoll after the last one ended.
+    if (remote.Ended && !(flags & kEnd))
+    {
+        remote.Ended = false;
+        remote.Snapshots.clear();
+    }
+
+    // Streaming poses can arrive out of order.
+    auto it = std::find_if(remote.Snapshots.begin(), remote.Snapshots.end(), [&](const Snapshot& acOther) { return acOther.Tick >= snapshot.Tick; });
+    if (it != remote.Snapshots.end() && it->Tick == snapshot.Tick)
+        *it = std::move(snapshot);
+    else
+        remote.Snapshots.insert(it, std::move(snapshot));
+
+    while (remote.Snapshots.size() > kMaxSnapshots)
+        remote.Snapshots.erase(remote.Snapshots.begin());
 }
 
 void RagdollTogetherService::UpdateLocal(double aDelta) noexcept
@@ -925,56 +970,44 @@ void RagdollTogetherService::Send(Vector<OutgoingPose>& aStreaming, Vector<Outgo
     const uint64_t cAge = static_cast<uint64_t>(std::clamp(aSampleAge, 0.0, 100.0));
     const uint64_t cTick = cNow > cAge ? cNow - cAge : cNow;
 
-    const auto send = [&](const OutgoingPose* apFirst, size_t aCount, bool aReliable)
+    auto& api = PluginService::Get();
+    const auto send = [&](const OutgoingPose& acPose, SkyrimTogetherAPI::Delivery aDelivery)
     {
-        String wire = kWirePrefix;
+        const size_t cBones = std::min(acPose.Bones.size(), kMaxBones);
+        String wire;
+        wire.reserve(12 + cBones * 15);
+        Put<uint8_t>(wire, kWireVersion);
         Put<uint64_t>(wire, cTick);
-        Put<uint8_t>(wire, static_cast<uint8_t>(aCount));
-        for (size_t i = 0; i < aCount; ++i)
+        Put<uint8_t>(wire, acPose.Flags);
+        Put<uint8_t>(wire, static_cast<uint8_t>(cBones));
+        for (size_t b = 0; b < cBones; ++b)
         {
-            const auto& pose = apFirst[i];
-            const size_t cBones = std::min(pose.Bones.size(), kMaxBones);
-            Put<uint32_t>(wire, pose.ServerId);
-            Put<uint8_t>(wire, pose.Flags);
-            Put<uint8_t>(wire, static_cast<uint8_t>(cBones));
-            for (size_t b = 0; b < cBones; ++b)
+            const auto& bone = acPose.Bones[b];
+            Put<uint16_t>(wire, bone.NameHash);
+            if (b == 0)
             {
-                const auto& bone = pose.Bones[b];
-                Put<uint16_t>(wire, bone.NameHash);
-                if (b == 0)
-                {
-                    for (const float cValue : bone.Position)
-                        Put<float>(wire, cValue);
-                }
-                else
-                {
-                    for (int axis = 0; axis < 3; ++axis)
-                        Put<int16_t>(wire, ToInt16((bone.Position[axis] - pose.Bones[0].Position[axis]) * kOffsetScale));
-                }
-                PutRotation(wire, bone.Rotation);
+                for (const float cValue : bone.Position)
+                    Put<float>(wire, cValue);
             }
+            else
+            {
+                for (int axis = 0; axis < 3; ++axis)
+                    Put<int16_t>(wire, ToInt16((bone.Position[axis] - acPose.Bones[0].Position[axis]) * kOffsetScale));
+            }
+            PutRotation(wire, bone.Rotation);
         }
 
-        ScriptAnimationRequest request{};
-        request.FormID = kNoObject;
-        request.EventName = wire;
-#if STR_RAGDOLL_PROTOCOL_183
-        (void)aReliable;
-        m_transport.Send(request);
-#else
-        if (aReliable)
-            m_transport.Send(request);
-        else
-            m_transport.Send(request, TiltedPhoques::kUnreliableNoNagle);
-#endif
+        const auto cResult = api.SendNear(s_channel, acPose.ServerId, aDelivery, wire.data(), wire.size());
+        if (cResult != SkyrimTogetherAPI::SendResult::Ok && cResult != SkyrimTogetherAPI::SendResult::NotOwner)
+            spdlog::debug("Ragdoll Together: pose for {:X} not sent ({})", acPose.ServerId, static_cast<int>(cResult));
     };
 
     // Streaming poses can be lost (the next one replaces them); the ones that end a ragdoll or hold a body at rest
     // must arrive.
-    if (!aHeld.empty())
-        send(aHeld.data(), std::min<size_t>(aHeld.size(), 255), true);
-    for (size_t i = 0; i < aStreaming.size(); i += kPosesPerMessage)
-        send(aStreaming.data() + i, std::min(kPosesPerMessage, aStreaming.size() - i), false);
+    for (const auto& pose : aHeld)
+        send(pose, SkyrimTogetherAPI::Delivery::Reliable);
+    for (const auto& pose : aStreaming)
+        send(pose, SkyrimTogetherAPI::Delivery::Unreliable);
 }
 
 void RagdollTogetherService::UpdateRemote(double aDelta) noexcept

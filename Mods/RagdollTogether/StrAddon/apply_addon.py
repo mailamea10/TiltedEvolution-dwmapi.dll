@@ -3,12 +3,11 @@
 Usage: python apply_addon.py <path to the STR source tree> [--protocol 1.8.5|1.8.3]
 
 Copies the add-on's client sources into Code/client and registers RagdollTogetherService in Code/client/World.cpp.
-Nothing else in the tree changes, and the server is not touched: poses travel through the script animation relay
-every Skyrim Together server already has.
+Poses travel as Plugin API V2 messages about the ragdolled actor, so the tree must carry Plugin API V2 (Skyrim
+Together builds with it, or the Together Launcher host patch on older ones); the script stops if it does not. Players
+on a server without V2 simply do not share ragdolls.
 
-The same add-on goes onto the 1.8.5 trees (1.5.97, 1.6.1170/1.6.1179, 1.7.104) and the official 1.8.3 trees
-(1.6.1170/1.6.1179, 1.7.104). The two releases address relayed script animations differently, which --protocol
-accounts for (default 1.8.5).
+1.8.3 has no playback clock for remote movement, which --protocol 1.8.3 accounts for (default 1.8.5).
 """
 
 import pathlib
@@ -39,6 +38,10 @@ def main() -> None:
     tree = pathlib.Path(args[0]).resolve()
     addon = pathlib.Path(__file__).resolve().parent
 
+    api = tree / "Code" / "plugin_api" / "include" / "SkyrimTogetherAPI.h"
+    if not api.is_file() or "IVSkyrimTogether2" not in api.read_text(encoding="utf-8"):
+        sys.exit(f"apply_addon: {tree} has no Plugin API V2; apply the Together Launcher host patch first")
+
     source_root = addon / "Code"
     for source in source_root.rglob("*"):
         if source.is_file():
@@ -50,12 +53,7 @@ def main() -> None:
     if protocol == "1.8.3":
         service = tree / "Code" / "client" / "Services" / "Generic" / "RagdollTogetherService.cpp"
         text = service.read_text(encoding="utf-8")
-        default = "#define STR_RAGDOLL_NO_OBJECT 0xFFFFFFFFu"
-        if default not in text:
-            sys.exit(f"apply_addon: '{default}' not found in {service}")
-        # 1.8.3: the stock client skips script animations for object id 0.
-        text = text.replace(default, "#define STR_RAGDOLL_NO_OBJECT 0u")
-        # 1.8.3: no send modes and no playback clock (see STR_RAGDOLL_PROTOCOL_183).
+        # 1.8.3: no playback clock (see STR_RAGDOLL_PROTOCOL_183).
         legacy = "#define STR_RAGDOLL_PROTOCOL_183 0"
         if legacy not in text:
             sys.exit(f"apply_addon: '{legacy}' not found in {service}")
