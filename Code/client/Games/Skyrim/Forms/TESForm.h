@@ -71,9 +71,7 @@ struct TESForm : BaseFormComponent
     virtual void sub_16();
     virtual void sub_17();
     virtual void sub_18();
-    // False for non-playable forms, which the inventory menu hides: armour and most items check form flag 0x4,
-    // weapons and ammo their own data flags.
-    virtual bool IsPlayable() const noexcept;
+    virtual void sub_19();
     virtual void sub_1A();
     virtual void sub_1B();
     virtual void sub_1C();

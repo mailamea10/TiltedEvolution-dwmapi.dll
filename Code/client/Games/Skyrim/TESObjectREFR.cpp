@@ -42,10 +42,21 @@ extern const AnimationGraphDescriptor* BehaviorVarPatch(BSAnimationGraphManager*
 
 namespace
 {
-// AI updates run on job threads, so ownership is resolved when the runner hands the event to the main thread
-void QueueReferenceInventoryChange(InventoryChangeEvent aEvent, TESObjectREFR* apTransferReference)
+void QueueReferenceInventoryChange(TESObjectREFR* apReference, InventoryChangeEvent aEvent, TESObjectREFR* apTransferReference)
 {
-    aEvent.IsPlayerTransfer = apTransferReference && apTransferReference == PlayerCharacter::Get();
+    if (const auto* pActor = Cast<Actor>(apReference))
+    {
+        auto ownershipToken = Utils::GetLocalOwnershipToken(pActor->formID);
+        if (!ownershipToken && apTransferReference == PlayerCharacter::Get())
+            ownershipToken = Utils::GetRemoteOwnershipToken(pActor->formID);
+
+        if (!ownershipToken)
+            return;
+
+        aEvent.ServerId = ownershipToken->ServerId;
+        aEvent.OwnershipEpoch = ownershipToken->OwnershipEpoch;
+    }
+
     World::Get().GetRunner().Trigger(std::move(aEvent));
 }
 
@@ -388,6 +399,7 @@ void TESObjectREFR::LoadAnimationVariables(const AnimationVariables& aVariables)
                 }
             }
         }
+
     }
 }
 
@@ -685,14 +697,10 @@ void TESObjectREFR::AddExtraDataFromItem(const Inventory::Entry& arEntry, ExtraD
             pEnchantment = Cast<EnchantmentItem>(TESForm::GetById(enchantId));
         }
 
-        // Null when the enchantment (or all of a created one's effects) comes from a mod this client doesn't have.
-        // Attaching a null enchantment crashes later when the item is equipped or shown, so sync the item without it.
         if (pEnchantment)
             aExtraDataList.SetEnchantmentData(pEnchantment, arEntry.ExtraEnchantCharge, arEntry.ExtraEnchantRemoveUnequip);
         else
-            spdlog::warn(
-                "Item {:X}:{:X}: skipping enchantment {:X}:{:X}, not available on this client (missing mod?)", arEntry.BaseId.ModId, arEntry.BaseId.BaseId,
-                arEntry.ExtraEnchantId.ModId, arEntry.ExtraEnchantId.BaseId);
+            spdlog::warn("{}: Enchantment {:X}:{:X} could not be created or found", __FUNCTION__, arEntry.ExtraEnchantId.ModId, arEntry.ExtraEnchantId.BaseId);
     }
 
     if (arEntry.ExtraPoisonId != 0)
@@ -1243,7 +1251,7 @@ void TP_MAKE_THISCALL(HookAddInventoryItem, TESObjectREFR, TESBoundObject* apIte
         if (apExtraData)
             apThis->GetItemFromExtraData(item, apExtraData);
 
-        QueueReferenceInventoryChange(InventoryChangeEvent(apThis->formID, std::move(item)), apOldOwner);
+        QueueReferenceInventoryChange(apThis, InventoryChangeEvent(apThis->formID, std::move(item)), apOldOwner);
     }
 
     spdlog::debug("Adding inventory item {:X} to {:X}", apItem->formID, apThis->formID);
@@ -1270,7 +1278,7 @@ TP_MAKE_THISCALL(HookRemoveInventoryItem, TESObjectREFR, BSPointerHandle<TESObje
 
         item.Count = -aCount;
 
-        QueueReferenceInventoryChange(InventoryChangeEvent(apThis->formID, std::move(item)), apMoveToRef);
+        QueueReferenceInventoryChange(apThis, InventoryChangeEvent(apThis->formID, std::move(item)), apMoveToRef);
     }
 
     spdlog::debug("Removing inventory item {:X} from {:X}", apItem->formID, apThis->formID);

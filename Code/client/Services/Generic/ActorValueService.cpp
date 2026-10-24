@@ -5,7 +5,6 @@
 #include <Forms/ActorValueInfo.h>
 #include <Games/References.h>
 #include <Components.h>
-#include <Systems/OwnershipSystem.h>
 
 #include <Events/UpdateEvent.h>
 #include <Events/ActorRemovedEvent.h>
@@ -316,12 +315,19 @@ void ActorValueService::OnHealthChangeBroadcast(const NotifyHealthChangeBroadcas
 
 void ActorValueService::OnActorValueChanges(const NotifyActorValueChanges& acMessage) const noexcept
 {
-    const auto entity = OwnershipSystem::AcceptRemoteUpdate(m_world, acMessage.Id, acMessage.OwnershipEpoch);
-    const auto* pFormIdComponent = entity ? m_world.try_get<FormIdComponent>(*entity) : nullptr;
-    if (!pFormIdComponent)
+    auto view = m_world.view<FormIdComponent, RemoteComponent>();
+
+    const auto itor = std::find_if(std::begin(view), std::end(view), [&acMessage, view](entt::entity entity)
+    {
+        const auto& remote = view.get<RemoteComponent>(entity);
+        return remote.Id == acMessage.Id && acMessage.OwnershipEpoch != 0 && remote.OwnershipEpoch == acMessage.OwnershipEpoch;
+    });
+
+    if (itor == std::end(view))
         return;
 
-    Actor* const pActor = Cast<Actor>(TESForm::GetById(pFormIdComponent->Id));
+    auto& formIdComponent = view.get<FormIdComponent>(*itor);
+    Actor* const pActor = Cast<Actor>(TESForm::GetById(formIdComponent.Id));
 
     if (!pActor)
         return;
@@ -345,12 +351,19 @@ void ActorValueService::OnActorValueChanges(const NotifyActorValueChanges& acMes
 
 void ActorValueService::OnActorMaxValueChanges(const NotifyActorMaxValueChanges& acMessage) const noexcept
 {
-    const auto entity = OwnershipSystem::AcceptRemoteUpdate(m_world, acMessage.Id, acMessage.OwnershipEpoch);
-    const auto* pFormIdComponent = entity ? m_world.try_get<FormIdComponent>(*entity) : nullptr;
-    if (!pFormIdComponent)
+    auto view = m_world.view<FormIdComponent, RemoteComponent>();
+
+    const auto it = std::find_if(std::begin(view), std::end(view), [&acMessage, view](entt::entity entity)
+    {
+        const auto& remote = view.get<RemoteComponent>(entity);
+        return remote.Id == acMessage.Id && acMessage.OwnershipEpoch != 0 && remote.OwnershipEpoch == acMessage.OwnershipEpoch;
+    });
+
+    if (it == std::end(view))
         return;
 
-    Actor* pActor = Cast<Actor>(TESForm::GetById(pFormIdComponent->Id));
+    auto& formIdComponent = view.get<FormIdComponent>(*it);
+    Actor* pActor = Cast<Actor>(TESForm::GetById(formIdComponent.Id));
 
     if (!pActor)
         return;
@@ -368,9 +381,15 @@ void ActorValueService::OnActorMaxValueChanges(const NotifyActorMaxValueChanges&
 
 void ActorValueService::OnDeathStateChange(const NotifyDeathStateChange& acMessage) const noexcept
 {
-    const auto entity = OwnershipSystem::AcceptRemoteUpdate(m_world, acMessage.Id, acMessage.OwnershipEpoch);
-    const auto* pFormIdComponent = entity ? m_world.try_get<FormIdComponent>(*entity) : nullptr;
-    if (!pFormIdComponent)
+    auto view = m_world.view<FormIdComponent, RemoteComponent>();
+
+    const auto it = std::find_if(std::begin(view), std::end(view), [&acMessage, view](entt::entity entity)
+    {
+        const auto& remote = view.get<RemoteComponent>(entity);
+        return remote.Id == acMessage.Id && acMessage.OwnershipEpoch != 0 && remote.OwnershipEpoch == acMessage.OwnershipEpoch;
+    });
+
+    if (it == std::end(view))
     {
         const auto cEntity = Utils::FindEntityByServerId(acMessage.Id);
         spdlog::info(
@@ -379,7 +398,8 @@ void ActorValueService::OnDeathStateChange(const NotifyDeathStateChange& acMessa
         return;
     }
 
-    Actor* pActor = Cast<Actor>(TESForm::GetById(pFormIdComponent->Id));
+    auto& formIdComponent = view.get<FormIdComponent>(*it);
+    Actor* pActor = Cast<Actor>(TESForm::GetById(formIdComponent.Id));
 
     if (!pActor)
         return;

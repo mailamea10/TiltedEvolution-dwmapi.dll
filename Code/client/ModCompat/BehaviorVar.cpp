@@ -80,15 +80,10 @@ void LowerCaseKeys(const TiltedPhoques::Map<TiltedPhoques::String, uint32_t>& ac
         aLowerCaseMap.insert({ToLowerCase(item.first), item.second});
 }
 
-// Slot of a synced variable this graph doesn't have. Save/LoadAnimationVariables skip indices outside the variable set,
-// so the slot keeps its place on the wire without touching the graph.
-constexpr uint32_t kMissingVariable = std::numeric_limits<uint32_t>::max();
-
-// Process a list of original variables, translating each to its index in this graph. Variables are synced by slot
-// position, so every name keeps its slot, missing ones as kMissingVariable.
+// Process a set of variables, adding them to the aVariableSet
 void ProcessVariableSet(
     TiltedPhoques::Map<TiltedPhoques::String, uint32_t>& acReverseMap,
-    TiltedPhoques::Vector<uint32_t>& aVariables,
+    TiltedPhoques::Set<uint32_t>& aVariableSet,
     const TiltedPhoques::Vector<TiltedPhoques::String>& acVariables,
     spdlog::level::level_enum aLogLevel)
 {
@@ -97,12 +92,6 @@ void ProcessVariableSet(
 
     for (const auto& item : acVariables)
     {
-        if (item.empty())
-        {
-            aVariables.push_back(kMissingVariable);
-            continue;
-        }
-
         auto foundForm = item;
         auto found = acReverseMap.find(item);
         if (found == acReverseMap.end())
@@ -119,40 +108,23 @@ void ProcessVariableSet(
             found = acReverseMap.find(foundForm);
         }
 
-        if (found != acReverseMap.end())
+        if (found == acReverseMap.end())
         {
-            aVariables.push_back(found->second);
-            if (item != found->first)
-                spdlog::warn(__FUNCTION__ ": misspelled variable {} corrected to {}", item, found->first);
-            continue;
+            // Check case-independent
+            if (lowerCaseMap.empty())
+                LowerCaseKeys(acReverseMap, lowerCaseMap);
+            found = lowerCaseMap.find(foundForm);
         }
 
-        // Check case-independent
-        if (lowerCaseMap.empty())
-            LowerCaseKeys(acReverseMap, lowerCaseMap);
-
-        const auto lowerCaseFound = lowerCaseMap.find(foundForm);
-        if (lowerCaseFound != lowerCaseMap.end())
-        {
-            aVariables.push_back(lowerCaseFound->second);
-            spdlog::warn(__FUNCTION__ ": misspelled variable {} corrected to index {}", item, lowerCaseFound->second);
-        }
+        if (found == acReverseMap.end())
+            spdlog::warn(__FUNCTION__ ": unable to find variable {} in any of the common misspellings", item);
         else
         {
-            spdlog::log(aLogLevel, __FUNCTION__ ": unable to find variable {} in any of the common misspellings", item);
-            aVariables.push_back(kMissingVariable);
+            aVariableSet.insert(found->second);
+            if (item != found->first)
+                spdlog::warn(__FUNCTION__ ": misspelled variable {} corrected to {}", item, found->first);
         }
     }
-}
-
-// The variables a replacer asks to sync on top of the original ones, without duplicates and in an order that doesn't
-// depend on how the replacer files were enumerated.
-TiltedPhoques::Vector<TiltedPhoques::String> SortedExtraVariables(const TiltedPhoques::Vector<TiltedPhoques::String>& acVariables)
-{
-    TiltedPhoques::Vector<TiltedPhoques::String> result(acVariables.begin(), acVariables.end());
-    std::sort(result.begin(), result.end(), [](const auto& acLhs, const auto& acRhs) { return ToLowerCase(acLhs) < ToLowerCase(acRhs); });
-    result.erase(std::unique(result.begin(), result.end(), [](const auto& acLhs, const auto& acRhs) { return ToLowerCase(acLhs) == ToLowerCase(acRhs); }), result.end());
-    return result;
 }
 
 } // End anonymous namespace
@@ -172,14 +144,13 @@ void BehaviorVar::SeedAnimationVariables(
     const uint64_t acHash,
     const AnimationGraphDescriptor* acpDescriptor,
     TiltedPhoques::Map<TiltedPhoques::String, uint32_t>& acReverseMap,
-    TiltedPhoques::Vector<uint32_t>& aBoolVars,
-    TiltedPhoques::Vector<uint32_t>& aFloatVars,
-    TiltedPhoques::Vector<uint32_t>& aIntVars)
+    TiltedPhoques::Set<uint32_t>& aBoolVars,
+    TiltedPhoques::Set<uint32_t>& aFloatVars,
+    TiltedPhoques::Set<uint32_t>& aIntVars)
 {
     auto& origVars = BehaviorVarsMap::getInstance();
 
-    // Prepare lists of variables to process, in the original descriptor's order so the slots line up with clients
-    // running the unmodded behavior. An empty name keeps the slot of a variable we can't translate.
+    // Prepare lists of variables to process
     TiltedPhoques::Vector<TiltedPhoques::String> boolVarNames;
     TiltedPhoques::Vector<TiltedPhoques::String> floatVarNames;
     TiltedPhoques::Vector<TiltedPhoques::String> intVarNames;
@@ -187,25 +158,22 @@ void BehaviorVar::SeedAnimationVariables(
     // Populate lists from the original descriptor
     TiltedPhoques::String strValue;
     for (auto& item : acpDescriptor->BooleanLookUpTable)
-    {
         if ((strValue = origVars.find(acHash, item)).empty())
             spdlog::error(__FUNCTION__ ": unable to find string for original BooleanVar {}", item);
-        boolVarNames.push_back(strValue);
-    }
+        else
+            boolVarNames.push_back(strValue);
 
     for (auto& item : acpDescriptor->FloatLookupTable)
-    {
         if ((strValue = origVars.find(acHash, item)).empty())
             spdlog::error(__FUNCTION__ ": unable to find string for original FloatVar {}", item);
-        floatVarNames.push_back(strValue);
-    }
+        else
+            floatVarNames.push_back(strValue);
 
     for (auto& item : acpDescriptor->IntegerLookupTable)
-    {
         if ((strValue = origVars.find(acHash, item)).empty())
             spdlog::error(__FUNCTION__ ": unable to find string for original IntVar {}", item);
-        intVarNames.push_back(strValue);
-    }
+        else
+            intVarNames.push_back(strValue);
 
     // Process each set of variables
     ProcessVariableSet(acReverseMap, aBoolVars, boolVarNames, spdlog::level::level_enum::err);
@@ -246,11 +214,10 @@ const AnimationGraphDescriptor* BehaviorVar::ConstructModdedDescriptor(
     const Replacer& acReplacer,
     TiltedPhoques::Map<TiltedPhoques::String, uint32_t>& acReverseMap)
 {
-    // Variables are synced by slot position, so the slots must not depend on where this graph keeps them.
-    // The original variables come first in the original descriptor's order, then the replacer's extras sorted by name.
-    TiltedPhoques::Vector<uint32_t> boolVector;
-    TiltedPhoques::Vector<uint32_t> floatVector;
-    TiltedPhoques::Vector<uint32_t> intVector;
+    // Build the set of BehaviorVar strings as sets (not vectors) to eliminate dups
+    TiltedPhoques::Set<uint32_t> boolVar;
+    TiltedPhoques::Set<uint32_t> floatVar;
+    TiltedPhoques::Set<uint32_t> intVar;
 
     // If we can find the original behavior that is being modded,
     // get the descriptor and seed the behavior vars with it.
@@ -259,56 +226,73 @@ const AnimationGraphDescriptor* BehaviorVar::ConstructModdedDescriptor(
     const AnimationGraphDescriptor* pTmpGraph = nullptr;
     if (acReplacer.origHash && (pTmpGraph = AnimationGraphDescriptorManager::Get().GetDescriptor(acReplacer.origHash)))
     {
-        SeedAnimationVariables(acReplacer.origHash, pTmpGraph, acReverseMap, boolVector, floatVector, intVector);
+        SeedAnimationVariables(acReplacer.origHash, pTmpGraph, acReverseMap, boolVar, floatVar, intVar);
         spdlog::info(
             __FUNCTION__ ": Original game descriptor with hash {} has {} boolean, {} float, {} integer behavior vars",
             acReplacer.origHash,
-            boolVector.size(),
-            floatVector.size(),
-            intVector.size());
+            boolVar.size(),
+            floatVar.size(),
+            intVar.size());
     }
 
-    // Add the requested behavior vars that aren't original ones. Every requested name gets a slot, the ones this graph
-    // doesn't have as kMissingVariable, so the slots line up between clients whose behavior mods differ. Which names are
-    // skipped only depends on the names, never on this graph.
-    const auto addExtras = [&](TiltedPhoques::Vector<uint32_t>& aVector, const TiltedPhoques::Vector<uint32_t>* acpOriginalTable,
-                               const TiltedPhoques::Vector<TiltedPhoques::String>& acNames, const char* acpType)
+    // Check requested behavior vars for those that ARE legit
+    // behavior vars for this Actor AND are not yet synced
+    int foundCount = 0;
+    for (auto& item : acReplacer.syncBooleanVar)
     {
-        TiltedPhoques::Set<TiltedPhoques::String> originalNames;
-        if (pTmpGraph && acpOriginalTable)
+        bool found = acReverseMap.find(item) != acReverseMap.end();
+        if (found && boolVar.find(acReverseMap[item]) == boolVar.end())
         {
-            for (auto item : *acpOriginalTable)
-                originalNames.insert(ToLowerCase(BehaviorVarsMap::getInstance().find(acReplacer.origHash, item)));
-        }
-
-        int foundCount = 0;
-        int missingCount = 0;
-        for (auto& item : SortedExtraVariables(acNames))
-        {
-            if (originalNames.find(ToLowerCase(item)) != originalNames.end())
-                continue;
-
-            const auto found = acReverseMap.find(item);
-            if (found == acReverseMap.end())
-            {
-                aVector.push_back(kMissingVariable);
-                missingCount++;
-                continue;
-            }
-
             if (foundCount++ == 0)
-                spdlog::info("{} variables added to sync:", acpType);
-            aVector.push_back(found->second);
+                spdlog::info("Boolean variables added to sync:");
+            boolVar.insert(acReverseMap[item]);
             spdlog::info("    {}", item);
         }
-        if (foundCount || missingCount)
-            spdlog::info(__FUNCTION__ ": now have {} {} descriptors ({} not in this behavior) after searching {} BehavivorVar strings", aVector.size(),
-                         acpType, missingCount, acNames.size());
-    };
+    }
+    if (foundCount)
+        spdlog::info("Now have {} boolVar descriptors after searching {} BehavivorVar strings", boolVar.size(), acReplacer.syncBooleanVar.size());
 
-    addExtras(boolVector, pTmpGraph ? &pTmpGraph->BooleanLookUpTable : nullptr, acReplacer.syncBooleanVar, "Boolean");
-    addExtras(floatVector, pTmpGraph ? &pTmpGraph->FloatLookupTable : nullptr, acReplacer.syncFloatVar, "Float");
-    addExtras(intVector, pTmpGraph ? &pTmpGraph->IntegerLookupTable : nullptr, acReplacer.syncIntegerVar, "Int");
+    foundCount = 0;
+    for (auto& item : acReplacer.syncFloatVar)
+    {
+        bool found = acReverseMap.find(item) != acReverseMap.end();
+        if (found && floatVar.find(acReverseMap[item]) == floatVar.end())
+        {
+            if (foundCount++ == 0)
+                spdlog::info("Float variables added to sync:");
+            floatVar.insert(acReverseMap[item]);
+            spdlog::info("    {}", item);
+        }
+    }
+    if (foundCount)
+        spdlog::info("Now have {} floatVar descriptors after searching {} BehavivorVar strings", floatVar.size(), acReplacer.syncFloatVar.size());
+
+    foundCount = 0;
+    for (auto& item : acReplacer.syncIntegerVar)
+    {
+        bool found = acReverseMap.find(item) != acReverseMap.end();
+        if (found && intVar.find(acReverseMap[item]) == intVar.end())
+        {
+            if (foundCount++ == 0)
+                spdlog::info("Int variables added to sync:");
+            intVar.insert(acReverseMap[item]);
+            spdlog::info("    {}", item);
+        }
+    }
+    if (foundCount)
+        spdlog::info(__FUNCTION__ ": now have {} intVar descriptors after searching {} BehavivorVar strings", intVar.size(), acReplacer.syncIntegerVar.size());
+
+    // We need the sets sorted, and TiltedPhoques::Set is not. Copying to an std::set
+    // isn't the most efficient approach, but it is simple and doesn't happen often enough
+    // to worry about. And doing it here isolates/minimizes use of std::set.
+    std::set<uint32_t> boolVarSorted(boolVar.begin(), boolVar.end());
+    std::set<uint32_t> floatVarSorted(floatVar.begin(), floatVar.end());
+    std::set<uint32_t> intVarSorted(intVar.begin(), intVar.end());
+
+    // Reshape the (sorted, unique) sets to vectors
+    TiltedPhoques::Vector<uint32_t> boolVector(boolVarSorted.begin(), boolVarSorted.end());
+    TiltedPhoques::Vector<uint32_t> floatVector(floatVarSorted.begin(), floatVarSorted.end());
+    TiltedPhoques::Vector<uint32_t> intVector(intVarSorted.begin(), intVarSorted.end());
 
     // Construct a new descriptor
     auto panimGraphDescriptor = new AnimationGraphDescriptor();

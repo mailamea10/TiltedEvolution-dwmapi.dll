@@ -22,7 +22,6 @@ enum class ExtraDataType : uint32_t
     Faction = 0x5B,
     AliasInstanceArray = 0x88,
     OutfitItem = 0x8E,
-    SceneData = 0x92,
     TextDisplayData = 0x99,
     Enchantment = 0x9B,
     Soul = 0x9C,

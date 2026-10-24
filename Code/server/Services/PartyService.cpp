@@ -180,8 +180,7 @@ void PartyService::OnPartyKick(const PacketEvent<PartyKickRequest>& acPacket) no
         {
             spdlog::debug("[PartyService]: Kicking player {} from party", pKick->GetId());
             RemovePlayerFromParty(pKick);
-            // The kicked player is still connected: everyone, them included, gets the full list.
-            BroadcastPlayerList();
+            BroadcastPlayerList(pKick);
         }
     }
 }

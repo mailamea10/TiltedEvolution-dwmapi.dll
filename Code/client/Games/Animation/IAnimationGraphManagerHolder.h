@@ -1,9 +1,11 @@
 #pragma once
 
-#include <BSCore/BSTSmartPointer.h>
-
 struct BSAnimationGraphManager;
 struct BSFixedString;
+
+// Replace this if we do ref counted object refactor
+struct AnimationGraphManagerReleaser;
+using AnimationGraphManagerPtr = std::unique_ptr<BSAnimationGraphManager, AnimationGraphManagerReleaser>;
 
 struct IAnimationGraphManagerHolder
 {
@@ -11,7 +13,7 @@ struct IAnimationGraphManagerHolder
 
     virtual bool SendAnimationEvent(BSFixedString* apAnimEvent);
 
-    virtual bool GetBSAnimationGraph(BSTSmartPointer<BSAnimationGraphManager>& aOut) const;
+    virtual bool GetBSAnimationGraph(BSAnimationGraphManager** aPtr) const;
     virtual uint32_t sub_3();
     virtual uint32_t sub_4();
     virtual uint32_t sub_5();
@@ -26,6 +28,8 @@ struct IAnimationGraphManagerHolder
     virtual uint32_t sub_E();
     virtual uint32_t sub_F();
 
+    AnimationGraphManagerPtr GetAnimationGraphManagerPtr() const noexcept;
+
     virtual bool GetVariableFloat(BSFixedString* apVariable, float* apReturn);
     virtual bool GetVariableInt(BSFixedString* apVariable, uint32_t* apReturn);
     virtual bool GetVariableBool(BSFixedString* apVariable, bool* apReturn);
@@ -35,5 +39,9 @@ struct IAnimationGraphManagerHolder
     bool SetVariableBool(BSFixedString* apVariable, bool aValue);
     bool IsReady();
     bool RevertAnimationGraphManager();
-    BSTSmartPointer<BSAnimationGraphManager> GetAnimationGraphManagerPtr() const noexcept;
+};
+
+struct AnimationGraphManagerReleaser
+{
+    void operator()(BSAnimationGraphManager* apManager) const;
 };

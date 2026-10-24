@@ -33,7 +33,6 @@ void sendPlayerMessage(const ChatMessageType acType, const String acContent, Pla
 
     std::regex escapeHtml{"<[^>]+>\\s+(?=<)|<[^>]+>"};
     notifyMessage.MessageType = acType;
-    notifyMessage.PlayerId = aSendingPlayer->GetId();
     notifyMessage.PlayerName = std::regex_replace(aSendingPlayer->GetUsername(), escapeHtml, "");
     notifyMessage.ChatMessage = std::regex_replace(acContent, escapeHtml, "");
 

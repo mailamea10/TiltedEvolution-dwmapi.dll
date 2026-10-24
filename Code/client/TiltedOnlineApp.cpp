@@ -18,8 +18,6 @@
 #include <Services/ImguiService.h>
 #include <Services/DiscordService.h>
 
-#include <Games/Misc/SubtitleManager.h>
-
 #include <NvidiaUtil.h>
 
 using TiltedPhoques::Debug;
@@ -126,9 +124,6 @@ void TiltedOnlineApp::Update()
     POINTER_SKYRIMSE(uint32_t, bAlwaysActive, 380768);
 
     *bAlwaysActive = 1;
-
-    // SKSE has sent kPostLoad by the first frame, so plugins have installed their hooks.
-    SubtitleManager::InstallHooks();
 
     World::Get().Update();
 }

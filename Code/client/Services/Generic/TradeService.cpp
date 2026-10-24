@@ -179,22 +179,6 @@ CefRefPtr<CefListValue> GetLocalCustomNames(ModSystem& aModSystem, const Invento
     }
     return names;
 }
-
-// Creature skins, transformation gear (werewolf, Vampire Lord), bound weapons, traps and dummy items: the game marks
-// them non-playable, which also hides them from the inventory menu, or gives them no name.
-bool IsUntradableForm(ModSystem& aModSystem, const Inventory::Entry& aEntry)
-{
-    if (!aEntry.Potion.Effects.empty())
-        return false;
-
-    const uint32_t formId = aModSystem.GetGameId(aEntry.BaseId);
-    const TESForm* pForm = formId ? TESForm::GetById(formId) : nullptr;
-    if (!pForm)
-        return false;
-
-    const char* pName = pForm->GetName();
-    return !pForm->IsPlayable() || !pName || !*pName;
-}
 } // namespace
 
 TradeService::TradeService(World& aWorld, entt::dispatcher& aDispatcher, TransportService& aTransport) noexcept
@@ -307,9 +291,6 @@ void TradeService::ApplyOfferSelection(const TiltedPhoques::Vector<OfferSelectio
 
         const auto& sourceEntry = m_session.SelfInventory[selection.Index];
         if (selection.Count > sourceEntry.Count)
-            continue;
-
-        if (IsUntradableForm(m_world.GetModSystem(), sourceEntry))
             continue;
 
         Inventory::Entry entry = sourceEntry;
@@ -480,7 +461,6 @@ void TradeService::EmitStateToUI() const noexcept
         dict->SetBool("isQuestItem", entry.IsQuestItem);
         dict->SetBool("isEquipped", entry.IsWorn());
         dict->SetBool("isUnsupportedTemporary", entry.BaseId.ModId == 0xFFFFFFFF && !entry.Potion.IsValid());
-        dict->SetBool("isUntradable", IsUntradableForm(modSystem, entry));
         dict->SetString("name", MakeDisplayName(modSystem, entry));
         dict->SetBool("isGold", entry.BaseId.ModId == 0 && entry.BaseId.BaseId == 0x0000000F);
         const uint32_t formId = modSystem.GetGameId(entry.BaseId);

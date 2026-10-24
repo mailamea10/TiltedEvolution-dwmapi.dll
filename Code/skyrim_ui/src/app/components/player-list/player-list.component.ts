@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
-import { faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons';
 import { combineLatest, Observable, pluck, ReplaySubject, share } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { ClientService } from 'src/app/services/client.service';
@@ -7,7 +6,6 @@ import { TradeUiService } from 'src/app/services/trade-ui.service';
 import { GroupService } from 'src/app/services/group.service';
 import { PlayerListService } from 'src/app/services/player-list.service';
 import { Player } from '../../models/player';
-import { PlayerUiService } from 'src/app/services/player-ui.service';
 
 @Component({
   selector: 'app-player-list',
@@ -26,13 +24,9 @@ export class PlayerListComponent {
   >;
   playerListLength$: Observable<number>;
   isPartyLeader$: Observable<boolean>;
-  readonly faEye = faEye;
-  readonly faEyeSlash = faEyeSlash;
-  hiddenPlayerIds$ = this.playerUiService.hiddenPlayerIds$;
 
   constructor(
     private readonly playerListService: PlayerListService,
-    private readonly playerUiService: PlayerUiService,
     private readonly clientService: ClientService,
     private readonly groupService: GroupService,
     private readonly tradeUiService: TradeUiService,
@@ -83,10 +77,6 @@ export class PlayerListComponent {
         resetOnRefCountZero: true,
       }),
     );
-  }
-
-  public toggleName(name: string, isHidden: boolean) {
-    this.playerUiService.setNameRevealed(name, isHidden);
   }
 
   public sendPartyInvite(inviteeId: number) {

@@ -9,6 +9,7 @@ enum ClientOpcode : unsigned char
     kEnterInteriorCellRequest,
     kRequestFactionsChanges,
     kRequestQuestUpdate,
+    kRequestQuestSceneUpdate,
     kPartyInviteRequest,
     kPartyAcceptInviteRequest,
     kPartyLeaveRequest,
@@ -27,7 +28,6 @@ enum ClientOpcode : unsigned char
     kRequestOwnershipClaim,
     kRequestObjectInventoryChanges,
     kRequestInventoryChanges,
-    kRequestInventorySnapshot,
     kSpellCastRequest,
     kInterruptCastRequest,
     kAddTargetRequest,
@@ -65,7 +65,6 @@ enum ClientOpcode : unsigned char
     kTradeCancelRequest,
     kTradeInventorySyncRequest,
     kRequestActionEvents,
-    kSendModMessageRequest,
     kClientOpcodeMax
 };
 
@@ -79,6 +78,7 @@ enum ServerOpcode : unsigned char
     kNotifyFactionsChanges,
     kNotifyRemoveCharacter,
     kNotifyQuestUpdate,
+    kNotifyQuestSceneUpdate,
     kNotifyPlayerList,
     kNotifyPartyInfo,
     kNotifyPartyInvite,
@@ -94,7 +94,6 @@ enum ServerOpcode : unsigned char
     kNotifyOwnershipTransfer,
     kNotifyObjectInventoryChanges,
     kNotifyInventoryChanges,
-    kNotifyInventorySnapshot,
     kNotifySpellCast,
     kNotifyInterruptCast,
     kNotifyAddTarget,
@@ -137,6 +136,5 @@ enum ServerOpcode : unsigned char
     kNotifyTradeCancel,
     kNotifyTradeComplete,
     kNotifyActionEvents,
-    kNotifyModMessage,
     kServerOpcodeMax
 };

@@ -190,32 +190,32 @@ struct TESResolveNPCTemplatesEvent
 {
 };
 
+// The RE'd fields in TESSceneEvent, TESSceneActionEvent and TESScenePhaseEvent may be incorrect
+
 struct TESSceneEvent
 {
-    void* callback;
+    void* ref;
     uint32_t sceneFormId;
-    uint32_t type; // 0 = begin, otherwise end
+    uint32_t sceneType; // BEGIN (0) or END (1)
 };
-static_assert(offsetof(TESSceneEvent, type) == 0xC);
 
 struct TESSceneActionEvent
 {
-    void* callback;
+    void* ref;
     uint32_t sceneFormId;
     uint32_t actionIndex;
     uint32_t questFormId;
-    uint32_t aliasId;
+    uint32_t actorAliasId;
 };
-static_assert(offsetof(TESSceneActionEvent, aliasId) == 0x14);
 
 struct TESScenePhaseEvent
 {
     void* callback;
     uint32_t sceneFormId;
-    uint32_t phaseIndex;
-    uint32_t type; // 0 = begin, otherwise end
+    uint16_t phaseIndex;
+    uint32_t sceneType;     // BEGIN (0) or END (1)
+    uint32_t questStageId;
 };
-static_assert(offsetof(TESScenePhaseEvent, type) == 0x10);
 
 struct TESSellEvent
 {
@@ -254,13 +254,12 @@ struct TESPlayerBowShotEvent
 
 struct TESTopicInfoEvent
 {
+    TESObjectREFR* hSpeakerRef;
     void* pCallback;
-    TESObjectREFR* pSpeakerRef;
     uint32_t uiTopicInfoFormID;
-    uint32_t eType; // 0 = begin, otherwise end
+    int32_t eType;
+    uint16_t usStage;
 };
-static_assert(offsetof(TESTopicInfoEvent, uiTopicInfoFormID) == 0x10);
-static_assert(offsetof(TESTopicInfoEvent, eType) == 0x14);
 
 struct TESTrackedStatsEvent
 {
@@ -375,7 +374,3 @@ static_assert(offsetof(EventDispatcherManager, fastTravelEndEvent) == 4664);
 static_assert(offsetof(EventDispatcherManager, questInitEvent) == 0x9F8);
 static_assert(offsetof(EventDispatcherManager, questStageEvent) == 0xA50);
 static_assert(offsetof(EventDispatcherManager, questStartStopEvent) == 0xB00);
-static_assert(offsetof(EventDispatcherManager, sceneEvent) == 0xC08);
-static_assert(offsetof(EventDispatcherManager, sceneActionEvent) == 0xC60);
-static_assert(offsetof(EventDispatcherManager, scenePhaseEvent) == 0xCB8);
-static_assert(offsetof(EventDispatcherManager, topicInfoEvent) == 0xEC8);

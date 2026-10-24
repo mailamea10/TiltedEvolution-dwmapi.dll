@@ -19,8 +19,6 @@ export interface TradeItemPayload {
   isQuestItem: boolean;
   isEquipped?: boolean;
   isUnsupportedTemporary?: boolean;
-  /** Non-playable or nameless (skins, transformation gear, dummies). */
-  isUntradable?: boolean;
   name: string;
   customNames?: string[];
   inventoryIndex?: number;
@@ -370,13 +368,6 @@ export class ClientService implements OnDestroy {
 
   public openPlayGuide(): void {
     skyrimtogether.openPlayGuide();
-  }
-
-  /**
-   * Send the name tag settings to the game client.
-   */
-  public setNameTagSettings(settings: NameTagSettings): void {
-    skyrimtogether.setNameTagSettings(settings);
   }
 
   /**
@@ -893,7 +884,6 @@ export class ClientService implements OnDestroy {
       isQuestItem,
       isEquipped: Boolean(payload?.isEquipped),
       isUnsupportedTemporary: Boolean(payload?.isUnsupportedTemporary),
-      isUntradable: Boolean(payload?.isUntradable),
       name,
     };
 

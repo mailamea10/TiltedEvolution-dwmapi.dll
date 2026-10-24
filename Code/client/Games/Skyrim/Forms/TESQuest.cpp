@@ -84,25 +84,70 @@ bool TESQuest::EnsureQuestStarted(bool& success, bool force)
     return SetRunning(this, &success, force);
 }
 
-bool TESQuest::SetStage(uint16_t newStage)
+bool TESQuest::SetStage(uint16_t stageIndex)
 {
-    ScopedQuestOverride _;
-
+    // According to wiki, calling newStage == currentStage does nothing.
+    // Calling with newStage < currentStage, will rerun the stage actions
+    // IFF the target newStage is not marked IsCompleted(). Regardless,
+    // will not reduce currentStage (it stays the same).
+    // Actually reducing currentStage requires reset() to be called first.
     TP_THIS_FUNCTION(TSetStage, bool, TESQuest, uint16_t);
     POINTER_SKYRIMSE(TSetStage, SetStage, 25004);
-    return SetStage(this, newStage);
+    bool bSuccess = SetStage(this, stageIndex);
+    if (!bSuccess)
+    {
+        spdlog::warn(__FUNCTION__ ": returned false quest formId {:X}, currentStage {}, newStage {}, name {}",
+                     formID, currentStage, stageIndex, fullName.value.AsAscii());
+    }
+    return bSuccess;
 }
 
-bool TESQuest::ScriptSetStage(uint16_t stageIndex)
+bool TESQuest::ScriptSetStage(uint16_t stageIndex, bool bForce)
 {
-    if (IsStageReached(stageIndex))
-        return false;
+    // Since SetStage() rules are not well-known and hooks may be confused, filter rewind
+    // according to TESQuest::SetStage rules.
+    bool bSuccess = stageIndex > currentStage || stageIndex != currentStage && !IsStageDone(stageIndex) || bForce;
 
-    using Quest = TESQuest;
-    PAPYRUS_FUNCTION(void, Quest, SetCurrentStageID, int);
-    s_pSetCurrentStageID(this, stageIndex);
-    return IsStageReached(stageIndex);
+    if (bSuccess)
+    {
+        using Quest = TESQuest;
+        PAPYRUS_FUNCTION(bool, Quest, SetCurrentStageID, int);
+        bSuccess = s_pSetCurrentStageID(this, stageIndex);
+    }
+
+    if (!bSuccess)
+    {
+        spdlog::warn(__FUNCTION__ ": returned false quest formId {:X}, currentStage {}, newStage {}, name {}", formID, currentStage, stageIndex, fullName.value.AsAscii());
+    }
+
+    return bSuccess;
 }
+
+void TESQuest::ScriptReset()
+{
+    using Quest = TESQuest;
+    PAPYRUS_FUNCTION(void, Quest, Reset);
+    s_pReset(this);
+}
+
+void TESQuest::ScriptResetAndUpdate()
+{
+    ScriptReset();
+
+    if (!IsEnabled())
+    {
+        if (!IsStopped())
+            SetStopped();
+    }
+
+    else
+    {
+        bool isStarted;
+        if (flags & StartsEnabled && !EnsureQuestStarted(isStarted, false))
+            spdlog::warn(__FUNCTION__ ": EnsureQuestStarted failed questId {:X}, is Started {}", formID, isStarted);
+    }
+}
+
 
 void TESQuest::SetStopped()
 {
@@ -110,34 +155,35 @@ void TESQuest::SetStopped()
     MarkChanged(2);
 }
 
-bool TESQuest::IsStageReached(uint16_t aStage) noexcept
+bool TESQuest::IsAnyCutscenePlaying()
 {
-    return currentStage == aStage || IsStageDone(aStage);
+    for (const auto& scene : scenes)
+    {
+        if (scene->isPlaying)
+            return true;
+    }
+    return false;
 }
 
-uint32_t TESQuest::GetStageItemCount(uint16_t aStage) noexcept
+void BGSScene::ScriptForceStart()
 {
-    for (Stage* pStage : stages)
-    {
-        if (!pStage || pStage->stageIndex != aStage)
-            continue;
+    spdlog::info(__FUNCTION__ ": force starting scene questId {:X}, sceneId: {:X}, isPlaying? {}", owningQuest->formID, formID, isPlaying);
+    using Scene = BGSScene;
+    PAPYRUS_FUNCTION(void, Scene, ForceStart);
+    s_pForceStart(this);
+}
 
-        uint32_t count = 0;
-        for (void* pItem : pStage->items)
-        {
-            if (pItem)
-                ++count;
-        }
-
-        return count;
-    }
-
-    return 0;
+void BGSScene::ScriptStop()
+{
+    spdlog::info(__FUNCTION__ ": stopping scene questId {:X}, sceneId: {:X}, isPlaying? {}", owningQuest->formID, formID, isPlaying);
+    using Scene = BGSScene;
+    PAPYRUS_FUNCTION(void, Scene, Stop);
+    s_pStop(this);
 }
 
 static TiltedPhoques::Initializer s_questInitHooks(
     []()
     {
-        // kill quest init in cold blood
-        // TiltedPhoques::Write<uint8_t>(25003, 0xC3);
+    // kill quest init in cold blood
+    // TiltedPhoques::Write<uint8_t>(25003, 0xC3);
     });

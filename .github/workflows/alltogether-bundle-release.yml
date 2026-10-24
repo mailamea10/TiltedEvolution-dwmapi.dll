@@ -1,20 +1,23 @@
 name: AllTogether SKSE bundle release
 
+# Builds every launcher in the Together Launcher's targets.txt with every add-on (and one AllTogether server per
+# Skyrim Together release), assembles the FOMOD and uploads it to the release. Inputs are pinned in
+# Tools/AllTogether/addons.lock. Runs only when started by hand: publishing is a decision, not a side effect of a push.
+
 on:
   workflow_dispatch:
     inputs:
-      launcher-run-id:
-        description: Reuse artifacts from a successful launcher build run; leave blank to rebuild
-        required: false
-        type: string
-        default: ''
-  push:
-    branches:
-      - 'release/alltogether-skse-bundle'
+      tag:
+        description: Release tag to upload the bundle to (created as a pre-release if missing)
+        required: true
+        default: alltogether-skse-bundle-2
+      asset:
+        description: File name of the bundle on the release
+        required: true
+        default: AllTogether-SKSE-Bundle-2.zip
 
 permissions:
   contents: write
-  actions: read
 
 concurrency:
   group: alltogether-skse-bundle
@@ -22,83 +25,62 @@ concurrency:
 
 jobs:
   launcher:
-    if: ${{ inputs.launcher-run-id == '' }}
-    name: STR 1.8.7 / Skyrim ${{ matrix.game-version }}
+    name: Launcher ${{ matrix.id }}
     runs-on: windows-2022
     strategy:
       fail-fast: false
       matrix:
-        game-version: ['1.7.104', '1.6.1170']
+        include:
+          - { id: 183-1.7.104, server: true }
+          - { id: 183-1.6.1170, server: false }
+          - { id: 184-1.7.104, server: true }
+          - { id: 184-1.6.1170, server: false }
+          - { id: 185-1.7.104, server: true }
+          - { id: 185-1.6.1170, server: false }
+          - { id: 185-1.5.97, server: false }
+          - { id: 187-1.7.104, server: true }
+          - { id: 187-1.6.1170, server: false }
+          - { id: 187-1.5.97, server: false }
     defaults:
       run:
         shell: bash
     steps:
-      - name: Checkout STR 1.8.7 source
-        uses: actions/checkout@v7
-        with:
-          repository: absol89/TiltedEvolutionScriptFixes
-          ref: cee0754eec54b52c6198f7ba59b93e0f413e5b75
-          path: str
-          fetch-depth: 0
-
-      - name: Checkout add-ons
+      - name: Checkout the bundle
         uses: actions/checkout@v7
         with:
           path: bundle
 
-      - name: Checkout pinned latest add-on commits
-        shell: bash
+      - name: Checkout the Together Launcher and the add-ons at their pinned commits
         run: |
           set -euo pipefail
-          i=0
-          while read -r branch commit script label; do
-            [[ -z "$branch" || "$branch" == \#* ]] && continue
-            i=$((i + 1))
-            git clone --no-checkout "https://github.com/mailamea10/TiltedEvolution-dwmapi.dll.git" "addon-$i"
-            git -C "addon-$i" fetch --depth 1 origin "$commit"
-            git -C "addon-$i" checkout --detach FETCH_HEAD
-            test "$(git -C "addon-$i" rev-parse HEAD)" = "$commit"
-            echo "$branch $commit $label $script" >> bundle/Tools/AllTogether/addons.resolved.txt
-          done < bundle/Tools/AllTogether/addons.lock
-          test "$i" -eq 4
+          grep -vE '^\s*(#|$)' bundle/Tools/AllTogether/addons.lock | while read -r kind branch commit folder; do
+            dir="src-$(basename "$folder")"
+            git init -q "$dir"
+            git -C "$dir" fetch -q --depth 1 "https://github.com/${GITHUB_REPOSITORY}.git" "$commit"
+            git -C "$dir" checkout -q --detach FETCH_HEAD
+            test "$(git -C "$dir" rev-parse HEAD)" = "$commit"
+            echo "$kind $dir/$folder" >> inputs.txt
+          done
+          cat inputs.txt
 
-      - name: Pin STR version and submodules
-        working-directory: str
-        run: |
-          git checkout --force cee0754eec54b52c6198f7ba59b93e0f413e5b75
-          git tag -f v1.8.7 HEAD
-          git submodule sync --recursive
-          git submodule update --init --force --recursive --depth=1
-
-      - name: Apply pinned privacy and runtime patches
-        shell: pwsh
-        run: python bundle/Tools/AllTogether/prepare_source.py str --skyrim-version '${{ matrix.game-version }}'
-
-      - name: Apply all four current add-ons
-        shell: bash
-        run: |
-          set -euo pipefail
-          i=0
-          while read -r branch commit script label; do
-            [[ -z "$branch" || "$branch" == \#* ]] && continue
-            i=$((i + 1))
-            python "addon-$i/$script" str --protocol 1.8.5
-          done < bundle/Tools/AllTogether/addons.lock
-
-      - name: Apply bundle RaceMenu reconnect fix
-        run: python bundle/Tools/AllTogether/apply_addon_fixes.py str
+      - name: Checkout a Skyrim Together tree
+        uses: actions/checkout@v7
+        with:
+          path: str
+          fetch-depth: 0
+          fetch-tags: false
 
       - name: Restore xmake packages
         id: pkgcache
         uses: actions/cache/restore@v6
         with:
           path: ~/AppData/Local/.xmake/packages
-          key: windows-2022-xmake-pkgs-${{ hashFiles('str/**/xmake.lua') }}-${{ matrix.game-version }}
+          key: windows-2022-xmake-pkgs-${{ matrix.id }}-${{ hashFiles('bundle/Tools/AllTogether/addons.lock') }}
           restore-keys: |
-            windows-2022-xmake-pkgs-${{ hashFiles('str/**/xmake.lua') }}-
+            windows-2022-xmake-pkgs-${{ matrix.id }}-
             windows-2022-xmake-pkgs-
 
-      - name: Configure xmake
+      - name: Setup xmake
         uses: xmake-io/github-action-setup-xmake@v1
         with:
           xmake-version: 3.1.0
@@ -110,206 +92,88 @@ jobs:
         with:
           arch: x64
 
-      - name: Save xmake packages
-        if: always() && steps.pkgcache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
-        with:
-          path: ~/AppData/Local/.xmake/packages
-          key: windows-2022-xmake-pkgs-${{ hashFiles('str/**/xmake.lua') }}-${{ matrix.game-version }}
-
-      - name: Build launcher
-        working-directory: str
-        run: |
-          if [[ '${{ matrix.game-version }}' == '1.6.1170' ]]; then
-            xmake config --plat=windows --arch=x64 --mode=releasedbg --skyrim_version=1.6.1170 --yes -vD
-          else
-            xmake config --plat=windows --arch=x64 --mode=releasedbg --yes -vD
-          fi
-          xmake build -y -vD SkyrimImmersiveLauncher
-
-      - name: Collect launcher
-        shell: pwsh
-        run: |
-          $dir = "bundle-output/STR-1.8.7-Skyrim-${{ matrix.game-version }}"
-          New-Item -ItemType Directory -Force $dir | Out-Null
-          Copy-Item "str/build/windows/x64/releasedbg/SkyrimTogether.exe" "$dir/"
-          Copy-Item "str/build/windows/x64/releasedbg/EarlyLoad.dll" "$dir/" -ErrorAction SilentlyContinue
-          Copy-Item "bundle/Tools/AllTogether/INSTALLATION.txt" "$dir/"
-          Copy-Item "bundle/Tools/AllTogether/addons.resolved.txt" "$dir/"
-          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          $vs = & $vswhere -latest -property installationPath
-          $dumpbin = Get-ChildItem -Recurse "$vs\VC\Tools\MSVC" -Filter dumpbin.exe | Where-Object { $_.FullName -match 'Hostx64\\x64' } | Select-Object -First 1
-          $exports = (& $dumpbin.FullName /exports "$dir/SkyrimTogether.exe") -join "`n"
-          foreach ($name in @('STRModSync_HostApiVersion','STRRaceMenu_HostApiVersion','STRLipSync_HostApiVersion','STRRagdoll_HostApiVersion')) {
-            if (-not ($exports -match [regex]::Escape($name))) { throw "Missing required add-on export: $name" }
-          }
-
-      - name: Upload launcher artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: launcher-1.8.7-${{ matrix.game-version }}
-          path: bundle-output
-          if-no-files-found: error
-          retention-days: 14
-
-  legacy-ki-loader:
-    name: STR 1.8.5 / Skyrim 1.5.97 with KiLoader support
-    runs-on: windows-2022
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          repository: mailamea10/TiltedEvolution-dwmapi.dll
-          ref: e6a097e1915a58d53343b167c24367f92303bcc0
-          path: str
-          fetch-depth: 0
-
-      - uses: actions/checkout@v7
-        with:
-          path: bundle
-
-      - name: Checkout pinned add-on commits
-        shell: bash
+      - name: Build the launcher
         run: |
           set -euo pipefail
-          i=0
-          while read -r branch commit script label; do
-            [[ -z "$branch" || "$branch" == \#* ]] && continue
-            i=$((i + 1))
-            git clone --no-checkout "https://github.com/mailamea10/TiltedEvolution-dwmapi.dll.git" "addon-$i"
-            git -C "addon-$i" fetch --depth 1 origin "$commit"
-            git -C "addon-$i" checkout --detach FETCH_HEAD
-            test "$(git -C "addon-$i" rev-parse HEAD)" = "$commit"
-          done < bundle/Tools/AllTogether/addons.lock
-          test "$i" -eq 4
-
-      - name: Apply all four add-ons to the legacy source
-        shell: bash
-        run: |
-          set -euo pipefail
-          i=0
-          while read -r branch commit script label; do
-            [[ -z "$branch" || "$branch" == \#* ]] && continue
-            i=$((i + 1))
-            python "addon-$i/$script" str --protocol 1.8.5
-          done < bundle/Tools/AllTogether/addons.lock
-
-      - name: Pin STR protocol version and checkout submodules
-        working-directory: str
-        run: |
-          git tag -f v1.8.5 HEAD
-          git submodule sync --recursive
-          git submodule update --init --force --recursive --depth=1
-          grep -q 'Data.*KiLoader.*Dependencies' Code/immersive_launcher/loader/PathRerouting.cpp
-
-      - name: Restore xmake packages
-        id: pkgcache
-        uses: actions/cache/restore@v6
-        with:
-          path: ~/AppData/Local/.xmake/packages
-          key: windows-2022-xmake-pkgs-legacy-ki-loader-${{ hashFiles('str/**/xmake.lua') }}
-          restore-keys: |
-            windows-2022-xmake-pkgs-legacy-ki-loader-
-            windows-2022-xmake-pkgs-
-
-      - name: Configure xmake
-        uses: xmake-io/github-action-setup-xmake@v1
-        with:
-          xmake-version: 3.1.0
-          actions-cache-folder: '.xmake-cache'
-          actions-cache-key: windows-2022
-
-      - name: Configure MSVC
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
-
-      - name: Configure xmake and save packages
-        working-directory: str
-        run: |
-          xmake config --plat=windows --arch=x64 --mode=releasedbg --yes -vD
-
-      - name: Build KiLoader-enabled legacy launcher files
-        working-directory: str
-        run: |
-          xmake build -y -vD SkyrimImmersiveLauncherLegacyNoConsole
-          xmake build -y -vD TPProcess
-          xmake build -y -vD SkyrimTogetherSKSE
+          # The checkout's own tags would compete with the pinned version.
+          git -C str tag -l | xargs -r git -C str tag -d > /dev/null
+          launcher=$(awk '$1 == "launcher" { print $2 }' inputs.txt)
+          addons=$(awk '$1 == "addon" { printf " --addon %s", $2 }' inputs.txt)
+          server=""
+          [ "${{ matrix.server }}" = "true" ] && server="--server"
+          python "$launcher/build_launcher.py" "${{ matrix.id }}" --tree str --out out $server $addons
 
       - name: Save xmake packages
         if: always() && steps.pkgcache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: ~/AppData/Local/.xmake/packages
-          key: windows-2022-xmake-pkgs-legacy-ki-loader-${{ hashFiles('str/**/xmake.lua') }}
+          key: windows-2022-xmake-pkgs-${{ matrix.id }}-${{ hashFiles('bundle/Tools/AllTogether/addons.lock') }}
 
-      - name: Collect and validate legacy launcher files
-        working-directory: str
-        run: |
-          set -euo pipefail
-          out=build/windows/x64/releasedbg
-          target=../bundle/bundle-output/legacy-ki-loader/SkyrimTogetherReborn
-          mkdir -p "$target"
-          cp "$out/legacy-noconsole/SkyrimTogether.exe" "$out/EarlyLoad.dll" "$out/TPProcess.exe" \
-            GameFiles/Skyrim/SKSE/Plugins/versionlib-ae-to-se-1-5-97-0.map "$target/"
-          test -f "$target/SkyrimTogether.exe"
-          test -f "$target/EarlyLoad.dll"
-          test -f "$target/TPProcess.exe"
-          test -f "$target/versionlib-ae-to-se-1-5-97-0.map"
-
-      - name: Upload KiLoader legacy launcher artifact
+      - name: Upload the launcher
         uses: actions/upload-artifact@v7
         with:
-          name: legacy-ki-loader
-          path: bundle/bundle-output/legacy-ki-loader/SkyrimTogetherReborn
+          name: launcher-${{ matrix.id }}
+          path: out
           if-no-files-found: error
           retention-days: 14
 
-  release:
-    needs: [launcher, legacy-ki-loader]
-    if: ${{ always() && (needs.launcher.result == 'success' || inputs.launcher-run-id != '') && needs['legacy-ki-loader'].result == 'success' }}
+  bundle:
+    name: Assemble and upload the bundle
+    needs: launcher
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Download 1.8.7 launcher artifacts
+
+      - name: Download every launcher
         uses: actions/download-artifact@v7
         with:
-          path: bundle-output
-          pattern: launcher-1.8.7-*
-          run-id: ${{ inputs.launcher-run-id || github.run_id }}
-          github-token: ${{ github.token }}
-      - name: Download KiLoader legacy launcher artifact
-        uses: actions/download-artifact@v7
-        with:
-          name: legacy-ki-loader
-          path: bundle-output/legacy-ki-loader
-      - name: Download latest released add-on packages
+          path: artifacts
+          pattern: launcher-*
+
+      - name: Merge the launchers and their manifests
+        run: |
+          set -euo pipefail
+          mkdir -p launchers
+          for dir in artifacts/launcher-*; do
+            for item in "$dir"/*; do
+              [ "$(basename "$item")" = LAUNCHER_MANIFEST.txt ] && continue
+              cp -r "$item" launchers/
+            done
+          done
+          cat artifacts/launcher-*/LAUNCHER_MANIFEST.txt > launchers/LAUNCHER_MANIFEST.txt
+          cat launchers/LAUNCHER_MANIFEST.txt
+
+      - name: Collect the add-on plugins from their releases
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mkdir -p bundle-output/addons/ragdoll bundle-output/addons/lipsync bundle-output/addons/racemenu bundle-output/addons/skyparkour
-          gh release download ragdoll-together-v1.0.0 -R mailamea10/TiltedEvolution-dwmapi.dll -D bundle-output/addons/ragdoll --pattern 'Ragdoll_Together_Physics_Sync-1.0.0-*.zip'
-          gh release download lipsync-together-v0.2.0 -R mailamea10/TiltedEvolution-dwmapi.dll -D bundle-output/addons/lipsync --pattern 'LipSync_Together_Voice_Lip_Sync-0.8.0-*.zip'
-          gh release download racemenu-together-v1.0.0 -R mailamea10/TiltedEvolution-dwmapi.dll -D bundle-output/addons/racemenu --pattern 'RaceMenu_Together_Appearance_Sync-1.0.0-*.zip'
-          gh release download skyparkour-together-v1.0.0 -R mailamea10/TiltedEvolution-dwmapi.dll -D bundle-output/addons/skyparkour --pattern 'SkyParkour_Together_Parkour_Animations_Sync-1.0.1-*.zip'
-          test "$(find bundle-output/addons -type f -name '*.zip' | wc -l)" -eq 4
-      - name: Assemble and publish bundle
+          mkdir -p archives/ragdoll archives/lipsync archives/racemenu archives/skyparkour
+          gh release download ragdoll-together-v1.0.0 -D archives/ragdoll --pattern 'Ragdoll_Together_Physics_Sync-*.zip'
+          gh release download lipsync-together-v0.2.0 -D archives/lipsync --pattern 'LipSync_Together_Voice_Lip_Sync-0.8.0-*.zip'
+          gh release download racemenu-together-v1.0.0 -D archives/racemenu --pattern 'RaceMenu_Together_Appearance_Sync-1.0.0-*.zip'
+          gh release download skyparkour-together-v1.0.0 -D archives/skyparkour --pattern 'SkyParkour_Together_Parkour_Animations_Sync-1.0.1-*.zip'
+          python Tools/AllTogether/collect_plugins.py archives plugins
+
+      - name: Assemble the FOMOD
+        run: |
+          set -euo pipefail
+          python Tools/AllTogether/assemble_fomod.py launchers plugins package
+          cp Tools/AllTogether/SOURCES.txt Tools/AllTogether/addons.lock package/Docs/
+          (cd package && zip -qr "$GITHUB_WORKSPACE/${{ inputs.asset }}" .)
+          unzip -l "${{ inputs.asset }}" | tail -1
+
+      - name: Upload to the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          python Tools/AllTogether/assemble_fomod.py "$PWD" bundle-output/fomod-package
-          cp Tools/AllTogether/SOURCES.txt bundle-output/fomod-package/Docs/
-          (cd bundle-output/fomod-package && zip -qr "$GITHUB_WORKSPACE/AllTogether-SKSE-Bundle-1-KiLoader-Fix.zip" .)
-          tag=alltogether-skse-bundle-1
-          title='AllTogether SKSE (Skyrim Together Add-ons Bundle 1)'
-          if gh release view "$tag" > /dev/null 2>&1; then
-            gh release upload "$tag" AllTogether-SKSE-Bundle-1-KiLoader-Fix.zip
-          else
-            gh release create "$tag" AllTogether-SKSE-Bundle-1-KiLoader-Fix.zip \
-              --title "$title" \
-              --notes-file Tools/AllTogether/RELEASE_NOTES.md
+          tag="${{ inputs.tag }}"
+          if ! gh release view "$tag" > /dev/null 2>&1; then
+            gh release create "$tag" --prerelease --target "$GITHUB_SHA" \
+              --title "AllTogether SKSE (Skyrim Together Add-ons Bundle 2)" --notes-file Tools/AllTogether/RELEASE_NOTES.md
           fi
+          # Never deletes anything: an asset of the same name is replaced, every other asset stays.
+          gh release upload "$tag" "${{ inputs.asset }}" --clobber
+          gh release view "$tag" --json assets --jq '.assets[] | "\(.name) \(.size)"'

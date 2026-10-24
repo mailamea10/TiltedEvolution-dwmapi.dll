@@ -63,12 +63,8 @@
       "LEAVE_PARTY": "Opustit skupinu"
     },
     "PARTY_LIST": {
-      "STRANGER": "",
-      "SHOW_NAME": "",
-      "HIDE_NAME": "",
       "NO_OTHER_PLAYERS": "Nikdo tu není",
       "TABLE_HEADERS": {
-        "KNOWN": "",
         "LEVEL": "Lv.",
         "NAME": "Jméno",
         "LOCATION": "Lokace"
@@ -107,44 +103,6 @@
       "JOIN": "Připojit"
     },
     "SETTINGS": {
-      "PLAYER_UI": {
-        "TITLE": "",
-        "KNOWN_NAMES": "",
-        "KNOWN_NAMES_HINT": "",
-        "KNOWN_NAMES_OPTIONS": {
-          "ALL": "",
-          "PARTY": "",
-          "NONE": ""
-        },
-        "KNOWN_CHAT_NAMES": "",
-        "KNOWN_CHAT_NAMES_HINT": "",
-        "PARTY_INVITES": "",
-        "PARTY_INVITES_HINT": "",
-        "TRADE_INVITES": "",
-        "TRADE_INVITES_HINT": "",
-        "MINI_CHAT": "",
-        "MINI_CHAT_HINT": "",
-        "FLOATING_CHAT": "",
-        "FLOATING_CHAT_HINT": "",
-        "NAME_TAGS": "",
-        "NAME_TAGS_HINT": "",
-        "NAME_TAG_BACKPLATE": "",
-        "NAME_TAG_BACKPLATE_HINT": "",
-        "NAME_TAG_SIZE": "",
-        "DISTANCES": "",
-        "NAME_FADE_START": "",
-        "NAME_FADE_START_HINT": "",
-        "NAME_INVISIBLE": "",
-        "NAME_INVISIBLE_HINT": "",
-        "PARTY_FADE_START": "",
-        "PARTY_INVISIBLE": "",
-        "UNITS": "",
-        "FILTERS": {
-          "ON": "",
-          "PARTY": "",
-          "OFF": ""
-        }
-      },
       "VERSION": {
         "HEADER": "Verze",
         "INFO": "Aktuálně nainstalována:",

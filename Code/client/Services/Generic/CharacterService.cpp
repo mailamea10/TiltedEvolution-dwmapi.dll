@@ -4,7 +4,6 @@
 #include <Services/PartyService.h>
 
 #include <Services/CharacterService.h>
-#include <Services/InventoryService.h>
 #include <Services/QuestService.h>
 #include <Services/TransportService.h>
 
@@ -23,7 +22,6 @@
 #include <Systems/CacheSystem.h>
 #include <Systems/FaceGenSystem.h>
 #include <Systems/LeveledNpcSystem.h>
-#include <Systems/OwnershipSystem.h>
 
 #include <Events/ActorAddedEvent.h>
 #include <Events/ActorRemovedEvent.h>
@@ -53,7 +51,6 @@
 #include <Messages/RequestOwnershipTransfer.h>
 #include <Messages/NotifyOwnershipTransfer.h>
 #include <Messages/RequestOwnershipClaim.h>
-#include <Messages/RequestInventorySnapshot.h>
 #include <Messages/MountRequest.h>
 #include <Messages/NotifyMount.h>
 #include <Messages/NewPackageRequest.h>
@@ -140,8 +137,6 @@ void CharacterService::ReconcileActorData(
         pWaitingFor3D->SpawnRequest.IsDead = acActorData.IsDead;
         pWaitingFor3D->SpawnRequest.IsWeaponDrawn = acActorData.IsWeaponDrawn;
         pWaitingFor3D->SpawnRequest.OwnershipEpoch = aOwnershipEpoch;
-        // The server's inventory already contains them
-        pWaitingFor3D->PendingEquipmentChanges.clear();
     }
 
     if (!apActor)
@@ -470,20 +465,6 @@ void CharacterService::OnAssignCharacter(const AssignCharacterResponse& acMessag
         localComponent.IsDead = acMessage.IsDead;
         localComponent.IsWeaponDrawn = acMessage.IsWeaponDrawn;
         pActor->GetExtension()->SetRemote(false);
-
-        // The hooks can't send inventory changes without a LocalComponent, so anything that changed while the request was
-        // in flight (e.g. the outfit being equipped as the actor loads) is missing on the server. Send the whole inventory.
-        const Inventory currentInventory = pActor->GetActorInventory();
-        if (currentInventory.Entries != acMessage.CurrentInventory.Entries || currentInventory.CurrentMagicEquipment != acMessage.CurrentInventory.CurrentMagicEquipment)
-        {
-            spdlog::info("Inventory of local actor {:X} changed while its assignment was in flight, sending it to the server", pActor->formID);
-
-            RequestInventorySnapshot request{};
-            request.ServerId = acMessage.ServerId;
-            request.OwnershipEpoch = acMessage.OwnershipEpoch;
-            request.CurrentInventory = currentInventory;
-            m_transport.Send(request);
-        }
     }
     else
     {
@@ -524,35 +505,7 @@ void CharacterService::OnCharacterSpawn(const CharacterSpawnRequest& acMessage) 
 
     if (remoteItor != std::end(remoteView))
     {
-        auto& remoteComponent = remoteView.get<RemoteComponent>(*remoteItor);
-        if (acMessage.OwnershipEpoch <= remoteComponent.OwnershipEpoch)
-        {
-            spdlog::warn("Character with remote id {:X} is already spawned.", acMessage.ServerId);
-            return;
-        }
-
-        // A transfer was missed, so the updates relayed since then were dropped as stale. Catch up from the spawn state.
-        spdlog::info("Adopting ownership epoch {} for spawned actor {:X}, the transfer from epoch {} was missed", acMessage.OwnershipEpoch, acMessage.ServerId, remoteComponent.OwnershipEpoch);
-        remoteComponent.OwnershipEpoch = acMessage.OwnershipEpoch;
-
-        InventoryService::ApplyRemoteInventory(m_world, *remoteItor, acMessage.InventoryContent);
-
-        if (auto* pWaitingFor3D = m_world.try_get<WaitingFor3D>(*remoteItor))
-        {
-            pWaitingFor3D->SpawnRequest.InitialActorValues = acMessage.InitialActorValues;
-            pWaitingFor3D->SpawnRequest.IsDead = acMessage.IsDead;
-            pWaitingFor3D->SpawnRequest.OwnershipEpoch = acMessage.OwnershipEpoch;
-        }
-        else if (const auto* pFormIdComponent = m_world.try_get<FormIdComponent>(*remoteItor))
-        {
-            if (Actor* pActor = Cast<Actor>(TESForm::GetById(pFormIdComponent->Id)))
-            {
-                pActor->SetActorValues(acMessage.InitialActorValues);
-                if (!acMessage.IsPlayer && pActor->IsDead() != acMessage.IsDead)
-                    acMessage.IsDead ? pActor->Kill() : pActor->Respawn();
-            }
-        }
-
+        spdlog::warn("Character with remote id {:X} is already spawned.", acMessage.ServerId);
         return;
     }
 
@@ -805,7 +758,14 @@ void CharacterService::OnOwnershipTransfer(const NotifyOwnershipTransfer& acMess
     if (entity && !m_world.any_of<LocalComponent, RemoteComponent>(*entity))
         entity.reset();
 
-    const uint32_t currentEpoch = entity ? OwnershipSystem::GetOwnershipEpoch(m_world, *entity) : 0;
+    uint32_t currentEpoch = 0;
+    if (entity)
+    {
+        if (const auto* pLocalComponent = m_world.try_get<LocalComponent>(*entity))
+            currentEpoch = pLocalComponent->OwnershipEpoch;
+        else if (const auto* pRemoteComponent = m_world.try_get<RemoteComponent>(*entity))
+            currentEpoch = pRemoteComponent->OwnershipEpoch;
+    }
 
     if (currentEpoch != 0 && acMessage.OwnershipEpoch <= currentEpoch)
     {
@@ -903,48 +863,26 @@ void CharacterService::OnOwnershipTransfer(const NotifyOwnershipTransfer& acMess
         ApplyLeveledNpcPick(pActor, acMessage.LeveledNpcPickId);
 
     spdlog::info("Actor {:X} is now owned by player {:X} at epoch {}", acMessage.ServerId, acMessage.OwnerPlayerId, acMessage.OwnershipEpoch);
-
-    // The leader owns every actor it has loaded. It gets here when an actor went to someone else while the leader wasn't
-    // ready for it, or when a stale claim was answered with the current owner. Without 3D the grant would only be declined.
-    if (pFormIdComponent && pActor && pActor->GetNiNode() && !m_world.all_of<WaitingFor3D>(cEntity))
-        ProcessNewEntity(cEntity);
 }
 
 void CharacterService::OnRemoveCharacter(const NotifyRemoveCharacter& acMessage) const noexcept
 {
-    const auto entity = Utils::FindEntityByServerId(acMessage.ServerId);
-    if (!entity || !m_world.any_of<LocalComponent, RemoteComponent>(*entity))
-        return;
+    auto view = m_world.view<RemoteComponent>();
 
-    const entt::entity cEntity = *entity;
-    const auto* pFormIdComponent = m_world.try_get<FormIdComponent>(cEntity);
-    Actor* pActor = pFormIdComponent ? Cast<Actor>(TESForm::GetById(pFormIdComponent->Id)) : nullptr;
+    const auto itor = std::find_if(std::begin(view), std::end(view), [id = acMessage.ServerId, view](entt::entity entity) { return view.get<RemoteComponent>(entity).Id == id; });
 
-    if (m_world.all_of<LocalComponent>(cEntity))
+    if (itor != std::end(view))
     {
-        // The server only drops an actor once nobody accepts it, so we can still be holding it as local when our assignment
-        // request was answered after we had declined the same grant. Streaming it under the old id would sync nothing.
-        spdlog::warn("Server removed actor {:X} while it is still owned locally", acMessage.ServerId);
-        m_world.remove<LocalAnimationComponent, LocalComponent>(cEntity);
-    }
-    else
-    {
-        if (pActor && pActor->IsTemporary())
+        if (auto* pFormIdComponent = m_world.try_get<FormIdComponent>(*itor))
         {
-            CharacterService::DeleteTempActor(pActor->formID);
-            pActor = nullptr;
+            Actor* pActor = Cast<Actor>(TESForm::GetById(pFormIdComponent->Id));
+            if (pActor && pActor->IsTemporary())
+                CharacterService::DeleteTempActor(pFormIdComponent->Id);
+            else if (pActor)
+                pActor->GetExtension()->SetRemote(false);
         }
-        else if (pActor)
-            pActor->GetExtension()->SetRemote(false);
 
-        DeleteRemoteEntityComponents(cEntity);
-    }
-
-    // Nobody owns the actor on the server anymore, so if it is still loaded here, ask for it instead of running it unsynced.
-    if (pActor && pActor->GetNiNode() && !pActor->GetExtension()->IsPlayer())
-    {
-        spdlog::info("Requesting assignment of actor {:X} after the server removed it, server id: {:X}", pActor->formID, acMessage.ServerId);
-        ProcessNewEntity(cEntity);
+        DeleteRemoteEntityComponents(*itor);
     }
 }
 
@@ -1173,87 +1111,69 @@ void CharacterService::OnNotifySyncExperience(const NotifySyncExperience& acMess
     pPlayer->AddSkillExperience(PlayerCharacter::LastUsedCombatSkill, acMessage.Experience);
 }
 
-// Whether the phase waits on a package of an NPC remote here. Packages only complete on the client running the NPC's AI,
-// so this copy of the scene can't get past the phase on its own.
-static bool IsPhaseStuckOnRemotePackage(BGSScene* apScene, uint32_t aPhaseIndex) noexcept
-{
-    // A phase with completion conditions ends once they pass, even mid-action, so this copy catches up within milliseconds.
-    const BGSScenePhase* pPhase = apScene->phases[aPhaseIndex];
-    if (!pPhase || pPhase->HasCompletionConditions())
-        return false;
-
-    for (BGSSceneAction* pAction : apScene->actions)
-    {
-        if (!pAction || pAction->GetType() != BGSSceneAction::Type::kPackage || !pAction->BlocksPhase(aPhaseIndex))
-            continue;
-
-        Actor* pActor = Cast<Actor>(apScene->owningQuest ? apScene->owningQuest->GetAliasedRef(pAction->actorId) : nullptr);
-        ActorExtension* pExtension = pActor ? pActor->GetExtension() : nullptr;
-        if (pExtension && pExtension->IsRemote())
-            return true;
-    }
-
-    return false;
-}
-
-// Whether the local copy of the line's scene voices it itself or already did, so the sender's would cut it off and end the
-// phase early. A copy stuck in an earlier phase on a remote NPC's package never reaches the line, so it plays the sender's.
-static bool IsLineVoicedByLocalScene(Actor* apActor, const GameId& acSceneId, uint32_t aScenePhase) noexcept
-{
-    BGSScene* pScene = apActor->GetCurrentScene();
-    if (!acSceneId || !pScene || !pScene->isPlaying || pScene->formID != World::Get().GetModSystem().GetGameId(acSceneId))
-        return false;
-
-    // At or past the sender's phase. A phase index past the end means the scene is starting or ending here.
-    const uint32_t cPhase = pScene->currentPhaseIndex;
-    if (cPhase >= aScenePhase || cPhase >= pScene->phases.length)
-        return true;
-
-    return !IsPhaseStuckOnRemotePackage(pScene, cPhase);
-}
-
 void CharacterService::OnDialogueEvent(const DialogueEvent& acEvent) noexcept
 {
     if (!m_transport.IsConnected())
         return;
 
+    const bool isLeader = World::Get().GetPartyService().IsLeader(); // Helps distinguish in 2-party logs
     auto view = m_world.view<FormIdComponent>(entt::exclude<ObjectComponent>);
-    auto entityIt = std::find_if(view.begin(), view.end(), [view, formId = acEvent.ActorID](auto entity) { return view.get<FormIdComponent>(entity).Id == formId; });
+    auto entityIt = std::find_if(view.begin(), view.end(), [view, formId = acEvent.ActorID](auto entity) {
+        return view.get<FormIdComponent>(entity).Id == formId;
+    });
 
     if (entityIt == view.end())
+    {
+        spdlog::debug(__FUNCTION__ ": failed to find speaking Actor's FormIdComponent, formId {:X}, isLeader {}", acEvent.ActorID, isLeader);
         return;
+    }
 
     auto serverIdRes = Utils::GetServerId(*entityIt);
     if (!serverIdRes)
     {
-        spdlog::error("{}: server id not found for form id {:X}", __FUNCTION__, acEvent.ActorID);
+        spdlog::debug(__FUNCTION__ ": server id not found for formId {:X}, isLeader {}", acEvent.ActorID, isLeader);
         return;
     }
 
-    DialogueRequest request{};
-    request.ServerId = serverIdRes.value();
-    request.SoundFilename = acEvent.VoiceFile;
-    if (acEvent.SceneID && m_world.GetModSystem().GetServerModId(acEvent.SceneID, request.SceneId))
-        request.ScenePhase = acEvent.ScenePhase;
+    Actor* pActor = Cast<Actor>(TESForm::GetById(acEvent.ActorID));
+    if (!pActor)
+        return;
 
-    m_transport.Send(request);
+    bool isLocal = pActor->GetExtension()->IsLocal();
+    bool isInScene = pActor->IsInScene();
+    auto sceneId = isInScene ? pActor->GetCurrentScene()->formID : 0;
+    bool isTaskDialogue = pActor->IsTalking() && pActor->IsInDialogueWithPlayer();
+    bool isSpeakingInScene = pActor->IsSpeakingInScene();
+
+    const bool willSync = isTaskDialogue || isLocal && !isInScene;
+
+    spdlog::debug(
+        __FUNCTION__ ": isLocal {}, isInScene {}, isSpeakingInScene {}, isTaskDialogue {}, willSync {}, scene {:X}, Actor "
+                     "{:X}, serverId {:X}, isLeader {}, name {}, soundFile {}",
+        isLocal, isInScene, isSpeakingInScene, isTaskDialogue, willSync, sceneId, pActor->formID, serverIdRes.value(), isLeader, pActor->baseForm->GetName(),
+        acEvent.VoiceFile);
+
+    if (willSync)
+    {
+        DialogueRequest request{};
+        request.ServerId = serverIdRes.value();
+        request.SoundFilename = acEvent.VoiceFile;
+
+        m_transport.Send(request);
+    }
 }
 
 void CharacterService::OnNotifyDialogue(const NotifyDialogue& acMessage) noexcept
 {
+    const bool isLeader = m_world.GetPartyService().IsLeader();
     // A member can initiate dialogue with an NPC owned by this client.
     Actor* pActor = Utils::GetByServerId<Actor>(acMessage.ServerId);
     if (!pActor)
         return;
 
-    // Every client plays scenes itself, the local copy usually voices the line. Menu and other-scene lines still play.
-    if (IsLineVoicedByLocalScene(pActor, acMessage.SceneId, acMessage.ScenePhase))
-    {
-        spdlog::info(
-            "Skipping remote dialogue for actor {:X}, sender's phase {}, it plays the same scene {:X} here, file: {}", pActor->formID, acMessage.ScenePhase,
-            pActor->GetCurrentScene()->formID, acMessage.SoundFilename);
-        return;
-    }
+    spdlog::debug(
+        __FUNCTION__ ": playing dialogue Actor {:X}, serverId {:X}, isLeader {}, name {}, soundFile {}", pActor->formID, acMessage.ServerId, isLeader, pActor->baseForm->GetName(),
+        acMessage.SoundFilename);
 
     pActor->StopCurrentDialogue(true);
     pActor->SpeakSound(acMessage.SoundFilename.c_str());
@@ -1264,27 +1184,49 @@ void CharacterService::OnSubtitleEvent(const SubtitleEvent& acEvent) noexcept
     if (!m_transport.IsConnected())
         return;
 
+    const bool isLeader = World::Get().GetPartyService().IsLeader(); // Helps distinguish in 2-party logs
     auto view = m_world.view<FormIdComponent>(entt::exclude<ObjectComponent>);
     auto entityIt = std::find_if(view.begin(), view.end(), [view, formId = acEvent.SpeakerID](auto entity) { return view.get<FormIdComponent>(entity).Id == formId; });
 
     if (entityIt == view.end())
+    {
+        spdlog::debug(__FUNCTION__ ": failed to find subtitle Actor's FormIdComponent, formId {:X}, isLeader {}", acEvent.SpeakerID, isLeader);
         return;
+    }
 
     auto serverIdRes = Utils::GetServerId(*entityIt);
     if (!serverIdRes)
     {
-        spdlog::error("{}: server id not found for form id {:X}", __FUNCTION__, acEvent.SpeakerID);
+        spdlog::debug(__FUNCTION__ ": server id not found for formId {:X}, isLeader {}", acEvent.SpeakerID, isLeader);
         return;
     }
 
-    SubtitleRequest request{};
-    request.ServerId = serverIdRes.value();
-    request.Text = acEvent.Text;
-    request.TopicFormId = acEvent.TopicFormID;
-    if (acEvent.SceneID && m_world.GetModSystem().GetServerModId(acEvent.SceneID, request.SceneId))
-        request.ScenePhase = acEvent.ScenePhase;
+    Actor* pActor = Cast<Actor>(TESForm::GetById(acEvent.SpeakerID));
+    if (!pActor)
+        return;
 
-    m_transport.Send(request);
+    bool isLocal = pActor->GetExtension()->IsLocal();
+    bool isInScene = pActor->IsInScene();
+    auto isSpeakingInScene = pActor->IsSpeakingInScene();
+    auto sceneId = isInScene ? pActor->GetCurrentScene()->formID : 0;
+    bool isTaskDialogue = pActor->IsTalking() && pActor->IsInDialogueWithPlayer();
+
+    const bool willSync = isTaskDialogue || isLocal && !isInScene;
+
+    spdlog::debug(
+        __FUNCTION__ ": isLocal {}, isInScene {}, isSpeakingInScene {}, isTaskDialogue {}, willSync {}, scene {:X}, Actor "
+                     "{:X}, serverId {:X}, isLeader {}, name {}, subtitle {}",
+        isLocal, isInScene, isSpeakingInScene, isTaskDialogue, willSync, sceneId, pActor->formID, serverIdRes.value(), isLeader, pActor->baseForm->GetName(),
+        acEvent.Text);
+
+    if (willSync)
+    {
+        SubtitleRequest request{};
+        request.ServerId = serverIdRes.value();
+        request.Text = acEvent.Text;
+        request.TopicFormId = acEvent.TopicFormID;
+        m_transport.Send(request);
+    }
 }
 
 void CharacterService::OnNotifySubtitle(const NotifySubtitle& acMessage) noexcept
@@ -1292,11 +1234,6 @@ void CharacterService::OnNotifySubtitle(const NotifySubtitle& acMessage) noexcep
     const bool isLeader = m_world.GetPartyService().IsLeader();
     Actor* pActor = Utils::GetByServerId<Actor>(acMessage.ServerId);
     if (!pActor)
-        return;
-
-    // The local copy of the scene shows its own subtitle, see OnNotifyDialogue. Only the actor's own voice line ending
-    // hides a subtitle, so a remote one arriving after the local line has finished would stay on screen.
-    if (IsLineVoicedByLocalScene(pActor, acMessage.SceneId, acMessage.ScenePhase))
         return;
 
     // This is only for fallout 4
@@ -2013,17 +1950,6 @@ void CharacterService::RunRemoteUpdates() noexcept
 
         pActor->SetActorInventory(waitingFor3D.SpawnRequest.InventoryContent);
         pActor->SetFactions(waitingFor3D.SpawnRequest.FactionsContent);
-
-        const auto& inventoryEntries = waitingFor3D.SpawnRequest.InventoryContent.Entries;
-        for (const auto& change : waitingFor3D.PendingEquipmentChanges)
-        {
-            // Items removed again before the 3D loaded are gone from the inventory, don't equip them back
-            const bool isInventoryItem = !change.IsSpell && !change.IsShout;
-            if (isInventoryItem && std::none_of(inventoryEntries.begin(), inventoryEntries.end(), [&change](const auto& acEntry) { return acEntry.BaseId == change.ItemId && acEntry.Count > 0; }))
-                continue;
-
-            InventoryService::ApplyEquipmentChange(pActor, change);
-        }
 
         if (!waitingFor3D.SpawnRequest.ActionsToReplay.Actions.empty())
         {

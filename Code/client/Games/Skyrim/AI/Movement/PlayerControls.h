@@ -38,9 +38,11 @@ struct PlayerControls
 
     void SetBlockPlayerInput(bool abFlag) { bBlockPlayerInput = abFlag; }
 
-    void SetActivateEnabled(bool abFlag);
+    void SetEnabled(bool abFlag);
 
     void SetCamSwitch(bool aSet) noexcept;
+
+    static bool IsMovementControlsEnabled() noexcept;
 
 public:
     char pad0[0x20];
@@ -81,20 +83,7 @@ static_assert(offsetof(PlayerControls, PlayerControls::Data) == 0x20);
 
 struct BSInputEnableManager
 {
-    enum Flags : int32_t
-    {
-        kLooking = 0x2,
-        kFighting = 0x40,
-        kSneaking = 0x80,
-        kMenu = 0x100,
-        kMovement = 0x401,
-        // What Papyrus Game.EnablePlayerControls() restores
-        kPlayerControls = kMovement | kFighting | kLooking | kSneaking | kMenu,
-    };
-
     static BSInputEnableManager* Get();
-
-    static bool IsMovementControlsEnabled() noexcept;
 
     void EnableOtherEvent(int32_t aFlags, bool aEnable, bool aUnk2);
 };

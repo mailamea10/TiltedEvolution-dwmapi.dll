@@ -46,8 +46,6 @@
 #include <ExtraData/ExtraTextDisplayData.h>
 #include <Forms/EnchantmentItem.h>
 #include <Forms/AlchemyItem.h>
-#include <Forms/SpellItem.h>
-#include <Forms/TESShout.h>
 #include <Forms/TESObjectCELL.h>
 
 #include <Structs/Skyrim/AnimationGraphDescriptor_BHR_Master.h>
@@ -62,10 +60,17 @@
 
 namespace
 {
-// AI updates run on job threads, so ownership is resolved when the runner hands the event to the main thread
-void QueueActorInventoryChange(InventoryChangeEvent aEvent, TESObjectREFR* apTransferReference = nullptr)
+void QueueActorInventoryChange(Actor* apActor, InventoryChangeEvent aEvent, TESObjectREFR* apTransferReference = nullptr)
 {
-    aEvent.IsPlayerTransfer = apTransferReference && apTransferReference == PlayerCharacter::Get();
+    auto ownershipToken = Utils::GetLocalOwnershipToken(apActor->formID);
+    if (!ownershipToken && apTransferReference == PlayerCharacter::Get())
+        ownershipToken = Utils::GetRemoteOwnershipToken(apActor->formID);
+
+    if (!ownershipToken)
+        return;
+
+    aEvent.ServerId = ownershipToken->ServerId;
+    aEvent.OwnershipEpoch = ownershipToken->OwnershipEpoch;
     World::Get().GetRunner().Trigger(std::move(aEvent));
 }
 }
@@ -714,48 +719,25 @@ void Actor::SetMagicEquipment(const MagicEquipment& acEquipment) noexcept
     auto* pEquipManager = EquipManager::Get();
     auto& modSystem = World::Get().GetModSystem();
 
-    // The owner may have magic from a mod this client doesn't have (e.g. a power a werewolf mod
-    // equips after transforming back). Such ids resolve to 0, and equipping a null form leaves the
-    // actor with an empty hand/voice entry that combat AI dereferences later (crash in
-    // Actor::VisitSpells while building the combat inventory). Skip anything that doesn't resolve.
-    const auto equipHandSpell = [&](const GameId& acSpellId, uint32_t aSlot, const char* apHand)
-    {
-        const uint32_t cSpellId = modSystem.GetGameId(acSpellId);
-        auto* pSpell = Cast<MagicItem>(TESForm::GetById(cSpellId));
-        if (!pSpell)
-        {
-            spdlog::warn(
-                "Actor {:X}: skipping {} hand spell {:X}:{:X}, not a spell on this client (missing mod?)", formID, apHand, acSpellId.ModId, acSpellId.BaseId);
-            return;
-        }
-
-        spdlog::debug("Setting {} hand spell: {:X}", apHand, cSpellId);
-        pEquipManager->EquipSpell(this, pSpell, aSlot);
-    };
-
     if (acEquipment.LeftHandSpell)
-        equipHandSpell(acEquipment.LeftHandSpell, 0, "left");
+    {
+        uint32_t mainHandWeaponId = modSystem.GetGameId(acEquipment.LeftHandSpell);
+        spdlog::debug("Setting left hand spell: {:X}", mainHandWeaponId);
+        pEquipManager->EquipSpell(this, TESForm::GetById(mainHandWeaponId), 0);
+    }
 
     if (acEquipment.RightHandSpell)
-        equipHandSpell(acEquipment.RightHandSpell, 1, "right");
+    {
+        uint32_t secondaryHandWeaponId = modSystem.GetGameId(acEquipment.RightHandSpell);
+        spdlog::debug("Setting right hand spell: {:X}", secondaryHandWeaponId);
+        pEquipManager->EquipSpell(this, TESForm::GetById(secondaryHandWeaponId), 1);
+    }
 
     if (acEquipment.Shout)
     {
-        const uint32_t cShoutId = modSystem.GetGameId(acEquipment.Shout);
-        TESForm* pShout = TESForm::GetById(cShoutId);
-
-        // The voice slot holds either a shout or a power (a spell)
-        if (!Cast<TESShout>(pShout) && !Cast<MagicItem>(pShout))
-        {
-            spdlog::warn(
-                "Actor {:X}: skipping shout/power {:X}:{:X}, not a shout or power on this client (missing mod?)", formID, acEquipment.Shout.ModId,
-                acEquipment.Shout.BaseId);
-        }
-        else
-        {
-            spdlog::debug("Setting shout: {:X}", cShoutId);
-            pEquipManager->EquipShout(this, pShout);
-        }
+        uint32_t shoutId = modSystem.GetGameId(acEquipment.Shout);
+        spdlog::debug("Setting shout: {:X}", shoutId);
+        pEquipManager->EquipShout(this, TESForm::GetById(shoutId));
     }
 }
 
@@ -1110,7 +1092,7 @@ void TP_MAKE_THISCALL(HookAddInventoryItem, Actor, TESBoundObject* apItem, Extra
         if (apExtraData)
             apThis->GetItemFromExtraData(item, apExtraData);
 
-        QueueActorInventoryChange(InventoryChangeEvent(apThis->formID, std::move(item)), apOldOwner);
+        QueueActorInventoryChange(apThis, InventoryChangeEvent(apThis->formID, std::move(item)), apOldOwner);
     }
 
     TiltedPhoques::ThisCall(RealAddInventoryItem, apThis, apItem, apExtraData, aCount, apOldOwner);
@@ -1134,7 +1116,7 @@ void* TP_MAKE_THISCALL(HookPickUpObject, Actor, TESObjectREFR* apObject, int32_t
         // The inventory change event should always be sent to the server, otherwise the server inventory won't be updated.
         bool shouldUpdateClients = apObject->IsTemporary() && !ScopedActivateOverride::IsOverriden();
 
-        QueueActorInventoryChange(InventoryChangeEvent(apThis->formID, std::move(item), shouldUpdateClients));
+        QueueActorInventoryChange(apThis, InventoryChangeEvent(apThis->formID, std::move(item), shouldUpdateClients));
     }
 
     // A dropped item may be server-tracked; the other clients need to delete their copy.
@@ -1165,7 +1147,7 @@ void* TP_MAKE_THISCALL(HookDropObject, Actor, void* apResult, TESBoundObject* ap
     item.Count = -aCount;
 
     // Other clients only remove the item from the inventory; DroppedItemService syncs the placed reference.
-    QueueActorInventoryChange(InventoryChangeEvent(apThis->formID, item));
+    QueueActorInventoryChange(apThis, InventoryChangeEvent(apThis->formID, item));
 
     void* pResult = nullptr;
     {
@@ -1243,7 +1225,6 @@ void TP_MAKE_THISCALL(HookUnequipObject, Actor, void* apUnk1, TESBoundObject* ap
     TiltedPhoques::ThisCall(RealUnequipObject, apThis, apUnk1, apObject, aUnk2, apUnk3);
 }
 
-// Returns a float in xmm0, 0 when nothing was played. Callers check it for -1.0 (lip file failed to load).
 TP_THIS_FUNCTION(TSpeakSoundFunction, float, Actor, const char* apName, uint32_t* a3, uint32_t a4, uint32_t a5, uint32_t a6, uint64_t a7, uint64_t a8, uint64_t a9, bool a10, uint64_t a11, bool a12, bool a13, bool a14);
 static TSpeakSoundFunction* RealSpeakSoundFunction = nullptr;
 
@@ -1255,22 +1236,8 @@ float TP_MAKE_THISCALL(HookSpeakSoundFunction, Actor, const char* apName, uint32
 
     // The player having the conversation may not own this NPC. Ambient
     // speech still comes only from the actor's simulation owner.
-    const bool cIsPlayerDialogue = MenuTopicManager::IsPlayerDialogueSpeaker(apThis);
-    const bool cShouldSync = apThis->GetExtension()->IsLocal() || cIsPlayerDialogue;
-
-    // Lines from a scene let other clients that play the same scene skip them, unless their copy is stuck in an earlier
-    // phase. Menu dialogue always plays.
-    BGSScene* pScene = cIsPlayerDialogue ? nullptr : apThis->GetCurrentScene();
-    uint32_t sceneId = 0;
-    uint32_t scenePhase = 0;
-    if (pScene && pScene->isPlaying)
-    {
-        sceneId = pScene->formID;
-        scenePhase = pScene->currentPhaseIndex;
-    }
-
-    if (cShouldSync)
-        World::Get().GetRunner().Trigger(DialogueEvent(apThis->formID, apName, sceneId, scenePhase));
+    if (apThis->GetExtension()->IsLocal() || MenuTopicManager::IsPlayerDialogueSpeaker(apThis))
+        World::Get().GetRunner().Trigger(DialogueEvent(apThis->formID, apName));
 
     return TiltedPhoques::ThisCall(RealSpeakSoundFunction, apThis, apName, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14);
 }

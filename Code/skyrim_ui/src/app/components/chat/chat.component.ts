@@ -18,7 +18,6 @@ import {
   MessageTypes,
 } from 'src/app/services/chat.service';
 import { ClientService } from 'src/app/services/client.service';
-import { PlayerUiService } from 'src/app/services/player-ui.service';
 
 interface ChatComponentMessage extends ChatMessage {
   date: number;
@@ -81,21 +80,12 @@ export class ChatComponent implements AfterViewChecked {
     private readonly chatService: ChatService,
     private readonly sound: SoundService,
     private readonly translocoService: TranslocoService,
-    private readonly playerUiService: PlayerUiService,
   ) {
     chatService.messageList
       .pipe(takeUntil(this.destroy$))
       .subscribe(message => {
         const typeClass = messageTypeToClassName(message.type);
-        const senderName =
-          message.senderName &&
-          this.playerUiService.chatSenderName(message.senderName);
-        this.messages.push({
-          ...message,
-          senderName,
-          date: Date.now(),
-          typeClass,
-        });
+        this.messages.push({ ...message, date: Date.now(), typeClass });
 
         if (this.messages.length > 100) {
           if (this.entryRefQuery && this.entryRefQuery.first) {

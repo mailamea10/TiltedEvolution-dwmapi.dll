@@ -9,7 +9,6 @@ import { View } from '../models/view.enum';
 import { UiRepository } from '../store/ui.repository';
 import { ClientService } from './client.service';
 import { PopupNotificationService } from './popup-notification.service';
-import { SettingService } from './setting.service';
 
 @Injectable({
   providedIn: 'root',
@@ -43,7 +42,6 @@ export class PlayerListService implements OnDestroy {
     private readonly popupNotificationService: PopupNotificationService,
     private readonly uiRepository: UiRepository,
     private readonly translocoService: TranslocoService,
-    private readonly settingService: SettingService,
   ) {
     this.onDebug();
     this.onConnectionStateChanged();
@@ -151,10 +149,6 @@ export class PlayerListService implements OnDestroy {
     this.partyInviteReceivedSubscription =
       this.clientService.partyInviteReceivedChange.subscribe(
         ({ inviterId, expiresInMs }: PartyInvite) => {
-          if (!this.settingService.settings.partyInvites.getValue()) {
-            return;
-          }
-
           const invitingPlayer = this.getPlayerById(inviterId);
           if (
             !this.isConnect ||
@@ -182,10 +176,7 @@ export class PlayerListService implements OnDestroy {
           invitingPlayer.hasInvitedLocalPlayer = true;
           this.updatePlayerList();
           this.popupNotificationService.addPartyInvite(
-            // The inviter can't be in our party yet.
-            this.settingService.isNameRevealed(invitingPlayer.name, false)
-              ? invitingPlayer.name
-              : this.translocoService.translate('COMPONENT.PARTY_LIST.STRANGER'),
+            invitingPlayer.name,
             () => {
               // A popup for a replaced invite must not accept the newer one.
               if (this.receivedInvites.get(inviterId) === invitation) {

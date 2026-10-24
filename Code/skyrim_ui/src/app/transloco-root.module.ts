@@ -40,7 +40,6 @@ export class TranslocoHttpLoader implements TranslocoLoader {
           { id: 'tr', label: 'Türkçe' },
           { id: 'cs', label: 'Čeština' },
           { id: 'pl', label: 'Polski' },
-          { id: 'uk', label: 'Українська' },
           { id: 'overwrite', label: 'Custom' },
         ],
         defaultLang: 'en',

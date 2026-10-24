@@ -1,34 +1,25 @@
-AllTogether SKSE bundle build inputs
+AllTogether SKSE bundle: what it is built from
+==============================================
 
-Base Skyrim Together Reborn source:
-  Repository: https://github.com/absol89/TiltedEvolutionScriptFixes
-  Release target: v1.8.7
-  Commit: cee0754eec54b52c6198f7ba59b93e0f413e5b75
+Launchers and servers: the Together Launcher's targets.txt (pinned in addons.lock), one launcher per Skyrim
+Together release and Skyrim runtime, each built from that release's own source with the Plugin API host patch
+(Mods/TogetherLauncher/Host) and the four add-ons:
 
-Pinned source patches:
-  e1de917ce206d8df35982584e11272a6d569c1bc: Skyrim 1.6.1170 build option and runtime layouts
-  137db0271b657622a239465c90ba12d1e0e07826: global stranger-name privacy semantics and invite filtering
-  e4cbeee3d8a081c5f0063ccf2bd89e1c7fc76ce1: unknown name tags use Stranger#<id>
+  STR 1.8.3 (official, Nexus)      1.7.104 4917189f, 1.6.1170 db8af2cf          version v1.8.3
+  STR 1.8.4 (absol89)              1.7.104 951c3641, 1.6.1170 e8b452d2          version v1.8.4
+  STR 1.8.5 (absol89)              1.7.104 0f1876e6, 1.6.1170 043dad02,
+                                   1.5.97 e6a097e1 (legacy port, KiLoader)     version v1.8.5
+  STR 1.8.7-4 (absol89 playtest)   1.7.104 and 1.6.1170 4b2cd432,
+                                   1.5.97 ffece63f (legacy port onto 1.8.7-4)  version v1.8.7-4-g4b2cd432
 
-Requested PR930 and the relevant v1.8.6/v1.8.6b feature changes are already present in the v1.8.7 base.
-PR931's core nametag and UI work is already present there; only its two follow-up fixes listed above are applied.
+Each launcher reports exactly the version its release's servers accept. One AllTogether server per release is
+built from the same source: the stock server plus Plugin API versions 1 and 2, which relay add-on messages to the
+players in range and store nothing.
 
-PR #16 (absol89/TiltedEvolutionScriptFixes, feat/nametag-privacy) is not merged as a pull request,
-but its nametag and player UI features are already in the selected v1.8.7 source under equivalent
-commits: 84213dffc2 -> 44917d0a, e15d4e78e0 -> c34f666c, 35c6110774 -> e1c84cd8, and
-275437fb27 -> cee0754e. Its two privacy/name-label fixes, 137db0271b and e4cbeee3d8, are applied
-above as source patches. The PR's final commit a7c098ed17 is a UI/code refactor to keep nametag
-changes clear of player-trading changes; it does not add a user-facing nametag feature. Therefore
-the STR 1.8.7 option already ships the PR #16 nametag features and fixes. A second optional launcher
-for those same embedded features would install a duplicate SkyrimTogether.exe.
+Add-ons (launcher side, pinned in addons.lock): Ragdoll/Physics Together, SkyParkour Together, RaceMenu Together
+and LipSync Together, all sending through the Plugin API rather than the script animation relay.
 
-Add-ons (release branches):
-  Ragdoll/Physics Together 1.0.0: release/ragdoll-together at 41df81ff7cda3dcadb84c1ab4e6d81790b400eff
-  LipSync Together 0.8.0: release/lipsync-together at c338ca718476737fdf5c054eba12ceac754ab2c8
-  RaceMenu Together 1.0.0: release/racemenu-together at 16bf293b519af64c78fa47157c9876ce8340265c
-  SkyParkour Together 1.0.1: release/skyparkour-together at 5f98d383f0e412aeb898ad877b951a5c3ef697d5
+SKSE plugins: unchanged from each add-on's release (Ragdoll Together 1.0.0, SkyParkour Together 1.0.1, RaceMenu
+Together 1.0.0, LipSync Together 0.8.0). Each is one DLL for every runtime.
 
-Bundle source fix: RaceMenu appearance resend now treats a player ID as new again after that
-player disappears and reconnects. This covers servers that reuse a returning player's ID.
-
-The upstream v1.8.6b STCampfireSync add-on is not included; it is a separate third-party mod.
+Not included: absol89's STCampfireSync, a separate mod.

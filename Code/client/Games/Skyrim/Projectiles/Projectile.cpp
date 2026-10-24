@@ -97,20 +97,12 @@ BSPointerHandle<Projectile>* TP_MAKE_THISCALL(HookLaunch, BSPointerHandle<Projec
 
     auto result = TiltedPhoques::ThisCall(RealLaunch, apThis, arData);
 
-    if (!result)
-    {
-        spdlog::warn("No projectile handle returned, not syncing the launch");
-        return result;
-    }
+    TP_ASSERT(result, "No projectile handle returned.");
 
-    // There is nothing to sync when the returned handle doesn't resolve to a projectile.
     TESObjectREFR* pObject = TESObjectREFR::GetByHandle(result->handle.iBits);
     Projectile* pProjectile = Cast<Projectile>(pObject);
-    if (!pProjectile)
-    {
-        spdlog::warn("No projectile found for handle {:X}, not syncing the launch", result->handle.iBits);
-        return result;
-    }
+
+    TP_ASSERT(pProjectile, "No projectile found.");
 
     Event.Power = pProjectile->fPower;
 

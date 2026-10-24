@@ -34,7 +34,6 @@ void ProcessHandler::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<C
     m_pCoreObject->SetValue("updateTradeOffer", CefV8Value::CreateFunction("updateTradeOffer", m_pOverlayHandler), V8_PROPERTY_ATTRIBUTE_NONE);
     m_pCoreObject->SetValue("toggleDebugUI", CefV8Value::CreateFunction("toggleDebugUI", m_pOverlayHandler), V8_PROPERTY_ATTRIBUTE_NONE);
     m_pCoreObject->SetValue("openPlayGuide", CefV8Value::CreateFunction("openPlayGuide", m_pOverlayHandler), V8_PROPERTY_ATTRIBUTE_NONE);
-    m_pCoreObject->SetValue("setNameTagSettings", CefV8Value::CreateFunction("setNameTagSettings", m_pOverlayHandler), V8_PROPERTY_ATTRIBUTE_NONE);
 }
 
 void ProcessHandler::OnContextReleased(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context)

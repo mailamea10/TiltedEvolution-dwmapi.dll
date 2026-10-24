@@ -1,3 +1,5 @@
+local function istable(t) return type(t) == 'table' end
+
 add_requires("sol2 v3.3.0", {configs = {lua = "lua"}})
 
 local function build_server()
@@ -21,12 +23,14 @@ local function build_server()
         "Resources",
         "ESLoader",
         "BaseLib",
+        "AdminProtocol",
         "TiltedConnect"
     )
     add_packages(
         "gamenetworkingsockets",
         "spdlog",
         "hopscotch-map",
+        "sqlite3",
         "lua",
         "sol2",
         "glm",

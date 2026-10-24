@@ -1,6 +1,5 @@
 #pragma once
 
-#include <BSCore/BSIntrusiveRefCounted.h>
 #include <Misc/BSFixedString.h>
 #include <tuple>
 

@@ -21,8 +21,6 @@ struct TESSpellList : BaseFormComponent
     Lists* lists;
 
     void Initialize();
-    // Drops null spells/shouts left by a change-form load, returns how many were dropped
-    uint32_t RemoveNullEntries() noexcept;
 };
 
 static_assert(sizeof(TESSpellList::Lists) == 0x28);

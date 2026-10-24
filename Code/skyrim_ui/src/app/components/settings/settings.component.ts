@@ -5,9 +5,7 @@ import { Tag } from 'src/app/models/tag';
 import {
   autoHideTimerLengths,
   FontSize,
-  KnownNames,
-  PlayerUiFilter,
-  ScreenCorner,
+  PartyAnchor,
   SettingService,
 } from 'src/app/services/setting.service';
 import { Sound, SoundService } from '../../services/sound.service';
@@ -29,60 +27,29 @@ export class SettingsComponent {
     { id: FontSize.L, label: 'COMPONENT.SETTINGS.FONT_SIZES.L' },
     { id: FontSize.XL, label: 'COMPONENT.SETTINGS.FONT_SIZES.XL' },
   ];
-  readonly availableCorners: { id: ScreenCorner; label: string }[] = [
+  readonly availablePartyAnchors: { id: PartyAnchor; label: string }[] = [
     {
-      id: ScreenCorner.TOP_LEFT,
+      id: PartyAnchor.TOP_LEFT,
       label: 'COMPONENT.SETTINGS.PARTY_ANCHOR_POSITION.TOP_LEFT',
     },
     {
-      id: ScreenCorner.TOP_RIGHT,
+      id: PartyAnchor.TOP_RIGHT,
       label: 'COMPONENT.SETTINGS.PARTY_ANCHOR_POSITION.TOP_RIGHT',
     },
     {
-      id: ScreenCorner.BOTTOM_RIGHT,
-      label: 'COMPONENT.SETTINGS.PARTY_ANCHOR_POSITION.BOTTOM_RIGHT',
+      id: PartyAnchor.BOTTOM_RIGHT,
+      label: 'COMPONENT.SETTINGS.PARTY_ANCHOR_POSITION.BOTTOM_LEFT',
     },
     {
-      id: ScreenCorner.BOTTOM_LEFT,
-      label: 'COMPONENT.SETTINGS.PARTY_ANCHOR_POSITION.BOTTOM_LEFT',
+      id: PartyAnchor.BOTTOM_LEFT,
+      label: 'COMPONENT.SETTINGS.PARTY_ANCHOR_POSITION.BOTTOM_RIGHT',
     },
   ];
   readonly availableAutoHideTimes = autoHideTimerLengths;
-  // Trade invitations only matter in builds that include player trading.
-  readonly hasTrading = 'sendTradeInvite' in skyrimtogether;
-  readonly availableKnownNames: { id: KnownNames; label: string }[] = [
-    {
-      id: KnownNames.ALL,
-      label: 'COMPONENT.SETTINGS.PLAYER_UI.KNOWN_NAMES_OPTIONS.ALL',
-    },
-    {
-      id: KnownNames.PARTY,
-      label: 'COMPONENT.SETTINGS.PLAYER_UI.KNOWN_NAMES_OPTIONS.PARTY',
-    },
-    {
-      id: KnownNames.NONE,
-      label: 'COMPONENT.SETTINGS.PLAYER_UI.KNOWN_NAMES_OPTIONS.NONE',
-    },
-  ];
-  readonly availablePlayerUiFilters: { id: PlayerUiFilter; label: string }[] =
-    [
-      {
-        id: PlayerUiFilter.ON,
-        label: 'COMPONENT.SETTINGS.PLAYER_UI.FILTERS.ON',
-      },
-      {
-        id: PlayerUiFilter.PARTY,
-        label: 'COMPONENT.SETTINGS.PLAYER_UI.FILTERS.PARTY',
-      },
-      {
-        id: PlayerUiFilter.OFF,
-        label: 'COMPONENT.SETTINGS.PLAYER_UI.FILTERS.OFF',
-      },
-    ];
 
   public settings = this.settingService.settings;
   public autoHideTime: number;
-  public partyAnchor: ScreenCorner;
+  public partyAnchor: PartyAnchor;
   public partyAnchorOffsetX: number;
   public partyAnchorOffsetY: number;
   public fontSize: FontSize;

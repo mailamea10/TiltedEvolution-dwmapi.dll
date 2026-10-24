@@ -7,11 +7,11 @@ PlayerControls* PlayerControls::GetInstance()
     return *(s_instance.Get());
 }
 
-void PlayerControls::SetActivateEnabled(bool abFlag)
+void PlayerControls::SetEnabled(bool abFlag)
 {
-    TP_THIS_FUNCTION(TSetActivateEnabled, void, PlayerControls, bool);
-    POINTER_SKYRIMSE(TSetActivateEnabled, setActivateEnabled, 42345);
-    TiltedPhoques::ThisCall(setActivateEnabled, this, abFlag);
+    TP_THIS_FUNCTION(TSetEnabled, void, PlayerControls, bool);
+    POINTER_SKYRIMSE(TSetEnabled, setEnabled, 42345);
+    TiltedPhoques::ThisCall(setEnabled, this, abFlag);
 }
 
 void PlayerControls::SetCamSwitch(bool aSet) noexcept
@@ -19,17 +19,17 @@ void PlayerControls::SetCamSwitch(bool aSet) noexcept
     Data.remapMode = aSet;
 }
 
-BSInputEnableManager* BSInputEnableManager::Get()
-{
-    POINTER_SKYRIMSE(BSInputEnableManager*, s_instance, 400863);
-    return *(s_instance.Get());
-}
-
-bool BSInputEnableManager::IsMovementControlsEnabled() noexcept
+bool PlayerControls::IsMovementControlsEnabled() noexcept
 {
     using TIsMovementControlsEnabled = bool();
     POINTER_SKYRIMSE(TIsMovementControlsEnabled, s_isMovementControlsEnabled, 55485);
     return s_isMovementControlsEnabled.Get()();
+}
+
+BSInputEnableManager* BSInputEnableManager::Get()
+{
+    POINTER_SKYRIMSE(BSInputEnableManager*, s_instance, 400863);
+    return *(s_instance.Get());
 }
 
 void BSInputEnableManager::EnableOtherEvent(int32_t aFlags, bool aEnable, bool aUnk2)

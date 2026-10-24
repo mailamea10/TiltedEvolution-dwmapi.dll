@@ -351,28 +351,7 @@ void CharacterService::OnOwnershipClaimRequest(const PacketEvent<RequestOwnershi
     const entt::entity cEntity = static_cast<entt::entity>(message.ServerId);
 
     if (!CanClaimOwnership(acMessage.pPlayer, cEntity, message.ExpectedOwnershipEpoch, OwnershipTransferReason::LeaderClaim))
-    {
-        // A claim from an older epoch means the leader missed a transfer and would keep claiming with it.
-        // Send it the current owner so it catches up and can claim again.
-        const auto view = m_world.view<OwnerComponent, CharacterComponent>();
-        const auto it = view.find(cEntity);
-        if (it == view.end())
-            return;
-
-        const auto& ownerComponent = view.get<OwnerComponent>(*it);
-        Player* const pOwner = ownerComponent.GetOwner();
-        if (!pOwner || pOwner == acMessage.pPlayer || message.ExpectedOwnershipEpoch >= ownerComponent.OwnershipEpoch)
-            return;
-
-        NotifyOwnershipTransfer notify{};
-        notify.ServerId = message.ServerId;
-        notify.OwnerPlayerId = pOwner->GetId();
-        notify.OwnershipEpoch = ownerComponent.OwnershipEpoch;
-        notify.CurrentActorData = BuildActorData(cEntity);
-        notify.LeveledNpcPickId = view.get<CharacterComponent>(*it).LeveledNpcPickId.Id;
-        acMessage.pPlayer->Send(notify);
         return;
-    }
 
     TransferOwnership(acMessage.pPlayer, cEntity, OwnershipTransferReason::LeaderClaim);
 }
@@ -615,8 +594,6 @@ void CharacterService::OnDialogueRequest(const PacketEvent<DialogueRequest>& acM
     NotifyDialogue notify{};
     notify.ServerId = message.ServerId;
     notify.SoundFilename = message.SoundFilename;
-    notify.SceneId = message.SceneId;
-    notify.ScenePhase = message.ScenePhase;
 
     const entt::entity cEntity = static_cast<entt::entity>(message.ServerId);
     if (!GameServer::Get()->SendToPlayersInRange(notify, cEntity, acMessage.GetSender()))
@@ -630,8 +607,6 @@ void CharacterService::OnSubtitleRequest(const PacketEvent<SubtitleRequest>& acM
     NotifySubtitle notify{};
     notify.ServerId = message.ServerId;
     notify.Text = message.Text;
-    notify.SceneId = message.SceneId;
-    notify.ScenePhase = message.ScenePhase;
 
     const entt::entity cEntity = static_cast<entt::entity>(message.ServerId);
     if (!GameServer::Get()->SendToPlayersInRange(notify, cEntity, acMessage.GetSender()))

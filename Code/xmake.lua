@@ -8,6 +8,7 @@ end
 includes("common")
 includes("components")
 includes("base")
+includes("admin_protocol")
 includes("server_runner")
 includes("server")
 includes("encoding")

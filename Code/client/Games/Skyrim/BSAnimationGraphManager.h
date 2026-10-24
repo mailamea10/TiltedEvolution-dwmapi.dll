@@ -1,17 +1,23 @@
 #pragma once
 
 #include <Games/Primitives.h>
-#include <BSCore/BSIntrusiveRefCounted.h>
 
 #include <Havok/BShkbAnimationGraph.h>
 
 struct BSFixedString;
 
-struct BSAnimationGraphManager : BSIntrusiveRefCounted
+struct BSAnimationGraphManager
 {
     virtual ~BSAnimationGraphManager();
     virtual void sub_1(void* apUnk1);
 
+    void Release()
+    {
+        if (InterlockedDecrement(&refCount) == 0)
+            delete this;
+    }
+
+    volatile LONG refCount;
     void* pad_ptrs[6];
     BSTSmallArray<BShkbAnimationGraph> animationGraphs; // 40 - 20
     void* pad_ptrs2[9];
@@ -30,12 +36,10 @@ struct BSAnimationGraphManager : BSIntrusiveRefCounted
 };
 
 #if TP_PLATFORM_64
-static_assert(offsetof(BSAnimationGraphManager, refCount) == 0x8);
 static_assert(offsetof(BSAnimationGraphManager, animationGraphs) == 0x40);
 static_assert(offsetof(BSAnimationGraphManager, lock) == 0xA0);
 static_assert(offsetof(BSAnimationGraphManager, animationGraphIndex) == 0xB0);
 #else
-static_assert(offsetof(BSAnimationGraphManager, refCount) == 0x4);
 static_assert(offsetof(BSAnimationGraphManager, animationGraphs) == 0x20);
 static_assert(offsetof(BSAnimationGraphManager, lock) == 0x4C);
 static_assert(offsetof(BSAnimationGraphManager, animationGraphIndex) == 0x5C);
