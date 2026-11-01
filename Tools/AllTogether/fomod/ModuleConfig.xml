@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://qconsulting.ca/fo3/ModConfig5.0.xsd">
+  <moduleName>AllTogether SKSE (Skyrim Together Add-ons Bundle)</moduleName>
+  <moduleImage path="fomod\images\Ragdoll-Together.png" />
+  <requiredInstallFiles><folder source="Docs" destination="Docs" priority="0" /></requiredInstallFiles>
+  <installSteps order="Explicit">
+    <installStep name="Select add-ons">
+      <optionalFileGroups order="Explicit"><group name="Choose the add-ons to install" type="SelectAny"><plugins order="Explicit">
+        <plugin name="Ragdoll/Physics Together"><description>Every knocked down, flung, killed or knocked out actor - players and NPCs - falls, comes to rest and gets up the same way on every screen. Needs a server that relays add-on messages (the AllTogether server from this installer); on other servers ragdolls are simply not shared. Requires SKSE.</description><image path="fomod\images\Ragdoll-Together.png" /><files><folder source="Add-ons\Ragdoll\SKSE\Plugins" destination="SKSE\Plugins" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
+        <plugin name="LipSync Together"><description>Your character's mouth follows your microphone, with optional proximity voice chat (Shift+V for settings). Requires SKSE and Mfg Fix NG (or Mfg Fix) for your runtime: https://www.nexusmods.com/skyrimspecialedition/mods/133568</description><image path="fomod\images\LipSync-Together.jpg" /><conditionFlags><flag name="lipsync">1</flag></conditionFlags><files><folder source="Add-ons\LipSync\SKSE\Plugins" destination="SKSE\Plugins" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
+        <plugin name="RaceMenu Together"><description>Your RaceMenu appearance - sculpting, sliders, body morphs, transforms, overlays and presets - shows on you for the other players. Needs a server that relays add-on messages (the AllTogether server from this installer). Requires RaceMenu for your runtime and SKSE: https://www.nexusmods.com/skyrimspecialedition/mods/19080</description><image path="fomod\images\RaceMenu-Together.jpg" /><files><folder source="Add-ons\RaceMenu\SKSE\Plugins" destination="SKSE\Plugins" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
+        <plugin name="SkyParkour Together"><description>SkyParkour's vaults, climbs, ledge grabs and landing rolls play on your character for everyone. Requires SkyParkour and SKSE: https://www.nexusmods.com/skyrimspecialedition/mods/132292</description><image path="fomod\images\SkyParkour-Together.png" /><files><folder source="Add-ons\SkyParkour\SKSE\Plugins" destination="SKSE\Plugins" priority="0" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
+      </plugins></group></optionalFileGroups>
+    </installStep>
+
+    <installStep name="Game version">
+      <optionalFileGroups order="Explicit"><group name="Select your Skyrim runtime" type="SelectExactlyOne"><plugins order="Explicit">
+        <plugin name="Skyrim 1.7.104"><files><folder source="Launchers\184-1.7.104\SkyrimTogetherReborn" destination="SkyrimTogetherReborn" priority="0" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+        <plugin name="Skyrim 1.6.1170 / 1.6.1179"><files><folder source="Launchers\184-1.6.1170\SkyrimTogetherReborn" destination="SkyrimTogetherReborn" priority="0" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+      </plugins></group></optionalFileGroups>
+    </installStep>
+
+    <installStep name="Server">
+      <optionalFileGroups order="Explicit"><group name="Do you host the server?" type="SelectExactlyOne"><plugins order="Explicit">
+        <plugin name="I host: install the AllTogether server"><description>Replaces SkyrimTogetherServer.exe and STServer.dll with a build of Skyrim Together 1.8.4 that also relays add-on messages to the players in range and stores nothing. Ragdoll/Physics Together and RaceMenu Together need it. Players without the add-ons can still join it.</description><conditionFlags><flag name="server">1</flag></conditionFlags><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+        <plugin name="I only join servers"><description>Keeps your server files. On a server without add-on relaying, Ragdoll and RaceMenu sync stay off for that session (the game log says so once), LipSync and SkyParkour fall back to what that server offers.</description><conditionFlags><flag name="server">0</flag></conditionFlags><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
+      </plugins></group></optionalFileGroups>
+    </installStep>
+
+    <installStep name="LipSync voice relay access"><visible><flagDependency flag="lipsync" value="1" /></visible>
+      <optionalFileGroups order="Explicit"><group name="Who can join LipSync voice chat?" type="SelectExactlyOne"><plugins order="Explicit">
+        <plugin name="Secure: require a Skyrim Together session key"><description>Recommended. The voice host accepts players whose key came through the same Skyrim Together server.</description><files><file source="fomod\security\LipSyncTogether-Secure.ini" destination="SKSE\Plugins\LipSyncTogether.ini" /></files><typeDescriptor><type name="Recommended" /></typeDescriptor></plugin>
+        <plugin name="Open relay"><description>Anyone who can reach the voice host's UDP port 10579 can join voice chat. Use only on a trusted network.</description><files><file source="fomod\security\LipSyncTogether-Open.ini" destination="SKSE\Plugins\LipSyncTogether.ini" /></files><typeDescriptor><type name="Optional" /></typeDescriptor></plugin>
+      </plugins></group></optionalFileGroups>
+    </installStep>
+  </installSteps>
+
+  <conditionalFileInstalls><patterns>
+    <pattern><dependencies operator="And"><flagDependency flag="server" value="1" /></dependencies><files><folder source="Servers\184\SkyrimTogetherReborn" destination="SkyrimTogetherReborn" priority="1" /></files></pattern>
+  </patterns></conditionalFileInstalls>
+</config>

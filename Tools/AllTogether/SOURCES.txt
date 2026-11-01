@@ -1,0 +1,18 @@
+AllTogether SKSE bundle: what it is built from
+==============================================
+
+Launchers and servers: the Together Launcher's targets.txt (pinned in addons.lock), one launcher per Skyrim
+runtime, each built from the official Skyrim Together Reborn 1.8.4 source with the Plugin API host patch
+(Mods/TogetherLauncher/Host) and the four add-ons:
+
+  STR 1.8.4 (official, Nexus)      1.7.104 and 1.6.1170 54b3a858 (Tilted Phoques' v1.8.4)   version v1.8.4
+
+Each launcher reports exactly the version official 1.8.4 servers accept. The AllTogether server is built from
+the same source: the stock server plus Plugin API versions 1 and 2, which relay add-on messages to the
+players in range and store nothing.
+
+Add-ons (launcher side, pinned in addons.lock): Ragdoll/Physics Together, SkyParkour Together, RaceMenu Together
+and LipSync Together, all sending through the Plugin API rather than the script animation relay.
+
+SKSE plugins: unchanged from each add-on's release (Ragdoll Together 1.0.0, SkyParkour Together 1.0.1, RaceMenu
+Together 1.0.0, LipSync Together 0.8.0). Each is one DLL for every runtime.

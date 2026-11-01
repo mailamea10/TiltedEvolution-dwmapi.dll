@@ -1,0 +1,171 @@
+name: AllTogether SKSE bundle release
+
+# Builds every launcher in the Together Launcher's targets.txt with every add-on (and one AllTogether server per
+# Skyrim Together release), assembles the FOMOD and uploads it to the release. Inputs are pinned in
+# Tools/AllTogether/addons.lock. Runs only when started by hand: publishing is a decision, not a side effect of a push.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to upload the bundle to (created as a pre-release if missing)
+        required: true
+        default: alltogether-skse-bundle-2
+      asset:
+        description: File name of the bundle on the release
+        required: true
+        default: AllTogether-SKSE-Bundle-2.zip
+
+permissions:
+  contents: write
+
+concurrency:
+  group: alltogether-skse-bundle
+  cancel-in-progress: false
+
+jobs:
+  launcher:
+    name: Launcher ${{ matrix.id }}
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { id: 184-1.7.104, server: true }
+          - { id: 184-1.6.1170, server: false }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout the bundle
+        uses: actions/checkout@v7
+        with:
+          path: bundle
+
+      - name: Checkout the Together Launcher and the add-ons at their pinned commits
+        run: |
+          set -euo pipefail
+          grep -vE '^\s*(#|$)' bundle/Tools/AllTogether/addons.lock | while read -r kind branch commit folder; do
+            dir="src-$(basename "$folder")"
+            git init -q "$dir"
+            git -C "$dir" fetch -q --depth 1 "https://github.com/${GITHUB_REPOSITORY}.git" "$commit"
+            git -C "$dir" checkout -q --detach FETCH_HEAD
+            test "$(git -C "$dir" rev-parse HEAD)" = "$commit"
+            echo "$kind $dir/$folder" >> inputs.txt
+          done
+          cat inputs.txt
+
+      - name: Checkout a Skyrim Together tree
+        uses: actions/checkout@v7
+        with:
+          path: str
+          fetch-depth: 0
+          fetch-tags: false
+
+      - name: Restore xmake packages
+        id: pkgcache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/AppData/Local/.xmake/packages
+          key: windows-2022-xmake-pkgs-${{ matrix.id }}-${{ hashFiles('bundle/Tools/AllTogether/addons.lock') }}
+          restore-keys: |
+            windows-2022-xmake-pkgs-${{ matrix.id }}-
+            windows-2022-xmake-pkgs-
+
+      - name: Setup xmake
+        uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: 3.1.0
+          actions-cache-folder: '.xmake-cache'
+          actions-cache-key: windows-2022
+
+      - name: Configure MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Build the launcher
+        run: |
+          set -euo pipefail
+          # The checkout's own tags would compete with the pinned version.
+          git -C str tag -l | xargs -r git -C str tag -d > /dev/null
+          launcher=$(awk '$1 == "launcher" { print $2 }' inputs.txt)
+          addons=$(awk '$1 == "addon" { printf " --addon %s", $2 }' inputs.txt)
+          server=""
+          [ "${{ matrix.server }}" = "true" ] && server="--server"
+          python "$launcher/build_launcher.py" "${{ matrix.id }}" --tree str --out out $server $addons
+
+      - name: Save xmake packages
+        if: always() && steps.pkgcache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/AppData/Local/.xmake/packages
+          key: windows-2022-xmake-pkgs-${{ matrix.id }}-${{ hashFiles('bundle/Tools/AllTogether/addons.lock') }}
+
+      - name: Upload the launcher
+        uses: actions/upload-artifact@v7
+        with:
+          name: launcher-${{ matrix.id }}
+          path: out
+          if-no-files-found: error
+          retention-days: 14
+
+  bundle:
+    name: Assemble and upload the bundle
+    needs: launcher
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download every launcher
+        uses: actions/download-artifact@v7
+        with:
+          path: artifacts
+          pattern: launcher-*
+
+      - name: Merge the launchers and their manifests
+        run: |
+          set -euo pipefail
+          mkdir -p launchers
+          for dir in artifacts/launcher-*; do
+            for item in "$dir"/*; do
+              [ "$(basename "$item")" = LAUNCHER_MANIFEST.txt ] && continue
+              cp -r "$item" launchers/
+            done
+          done
+          cat artifacts/launcher-*/LAUNCHER_MANIFEST.txt > launchers/LAUNCHER_MANIFEST.txt
+          cat launchers/LAUNCHER_MANIFEST.txt
+
+      - name: Collect the add-on plugins from their releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p archives/ragdoll archives/lipsync archives/racemenu archives/skyparkour
+          gh release download ragdoll-together-v1.0.0 -D archives/ragdoll --pattern 'Ragdoll_Together_Physics_Sync-*.zip'
+          gh release download lipsync-together-v0.2.0 -D archives/lipsync --pattern 'LipSync_Together_Voice_Lip_Sync-0.8.0-*.zip'
+          gh release download racemenu-together-v1.0.0 -D archives/racemenu --pattern 'RaceMenu_Together_Appearance_Sync-1.0.0-*.zip'
+          gh release download skyparkour-together-v1.0.0 -D archives/skyparkour --pattern 'SkyParkour_Together_Parkour_Animations_Sync-1.0.1-*.zip'
+          python Tools/AllTogether/collect_plugins.py archives plugins
+
+      - name: Assemble the FOMOD
+        run: |
+          set -euo pipefail
+          python Tools/AllTogether/assemble_fomod.py launchers plugins package
+          cp Tools/AllTogether/SOURCES.txt Tools/AllTogether/addons.lock package/Docs/
+          (cd package && zip -qr "$GITHUB_WORKSPACE/${{ inputs.asset }}" .)
+          unzip -l "${{ inputs.asset }}" | tail -1
+
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${{ inputs.tag }}"
+          if ! gh release view "$tag" > /dev/null 2>&1; then
+            gh release create "$tag" --prerelease --target "$GITHUB_SHA" \
+              --title "AllTogether SKSE (Skyrim Together Add-ons Bundle 2)" --notes-file Tools/AllTogether/RELEASE_NOTES.md
+          fi
+          # Never deletes anything: an asset of the same name is replaced, every other asset stays.
+          gh release upload "$tag" "${{ inputs.asset }}" --clobber
+          gh release view "$tag" --json assets --jq '.assets[] | "\(.name) \(.size)"'

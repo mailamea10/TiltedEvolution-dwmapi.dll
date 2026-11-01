@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<fomod>
+  <Name>AllTogether SKSE (Skyrim Together Add-ons Bundle)</Name>
+  <Author>mailamea10</Author>
+  <Version MachineVersion="2.0.0">2.0.0</Version>
+  <Website>https://github.com/mailamea10/TiltedEvolution-dwmapi.dll/releases/tag/alltogether-skse-bundle-1</Website>
+  <Description>Ragdoll/Physics, LipSync, RaceMenu and SkyParkour Together with one Skyrim Together launcher for the official Skyrim Together Reborn 1.8.4 from Nexus on Skyrim 1.7.104 and 1.6.1170/1.6.1179, and an optional server that relays add-on messages. See the installed Docs for setup.</Description>
+  <Groups><element>Animation</element><element>Gameplay</element><element>Multiplayer</element></Groups>
+</fomod>

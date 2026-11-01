@@ -1,0 +1,93 @@
+AllTogether SKSE (Skyrim Together Add-ons Bundle)
+=================================================
+
+Use the FOMOD with Mod Organizer 2 or Vortex. It installs the SKSE plugins you
+pick, the Skyrim Together launcher for your Skyrim runtime, optionally the AllTogether server, and LipSync's relay setting.
+
+Installer choices
+-----------------
+1. Add-ons: any of Ragdoll/Physics Together, LipSync Together, RaceMenu
+   Together and SkyParkour Together.
+2. Skyrim runtime: 1.7.104 or 1.6.1170/1.6.1179. The bundle supports the
+   official Skyrim Together Reborn 1.8.4 from Nexus; every player and the
+   server use it.
+3. Server: if you host, install the AllTogether server (see below).
+4. LipSync voice relay access, if you picked LipSync Together.
+
+How the add-ons reach the other players
+---------------------------------------
+The add-ons send their data through Skyrim Together's Plugin API. A server
+that has version 2 of it (the AllTogether server from this installer)
+relays each message to the
+players near that character or NPC and stores nothing, however long the
+session runs.
+
+On a server without it:
+  - Ragdoll/Physics Together and RaceMenu Together stay off for that session.
+    The game's log (tp_client.log) says so once.
+  - LipSync Together and SkyParkour Together still work through the older
+    relay.
+Players who do not use the add-ons can join an AllTogether server as usual.
+
+Requirements and downloads
+--------------------------
+Skyrim Together Reborn, installed separately (the bundle supplies the launcher
+and optionally the server, not its UI, libraries or data):
+  STR 1.8.4: https://www.nexusmods.com/skyrimspecialedition/mods/69993
+
+SKSE for your exact Skyrim runtime: https://skse.silverlock.org/
+
+Address Library for SKSE Plugins (the file for your runtime; Skyrim Together
+needs it): https://www.nexusmods.com/skyrimspecialedition/mods/32444
+
+Only with LipSync Together: Mfg Fix NG for your runtime
+  https://www.nexusmods.com/skyrimspecialedition/mods/133568
+Only with RaceMenu Together: RaceMenu for your runtime
+  https://www.nexusmods.com/skyrimspecialedition/mods/19080
+Only with SkyParkour Together: SkyParkour
+  https://www.nexusmods.com/skyrimspecialedition/mods/132292
+
+Mod Organizer 2
+---------------
+MO2 starts SkyrimTogether.exe from the real folder on disk; mod priority alone
+does not replace it. After installing:
+
+1. Right-click AllTogether SKSE > Open in Explorer.
+2. Copy the files in its SkyrimTogetherReborn folder into your Skyrim Together
+   Reborn mod's SkyrimTogetherReborn folder, replacing them. Back up the
+   originals first. That is SkyrimTogether.exe, plus with the server option
+   SkyrimTogetherServer.exe and STServer.dll.
+3. Keep AllTogether SKSE enabled so its SKSE plugins stay active.
+4. Start the game with your usual MO2 entry for Skyrim Together Reborn. Do not
+   point MO2 at the launcher inside the AllTogether SKSE folder: it needs the
+   rest of Skyrim Together's files beside it and closes at once without them.
+
+Vortex
+------
+Install and deploy the FOMOD. Load AllTogether SKSE after Skyrim Together
+Reborn so its files win the conflict. Start through
+SkyrimTogetherReborn/SkyrimTogether.exe as usual.
+
+Hosting
+-------
+Start SkyrimTogetherServer.exe from your Skyrim Together folder as usual. With
+the AllTogether server, its log shows no difference; players' game logs say
+"Plugin API: the server relays messages about actors: yes".
+
+Troubleshooting
+---------------
+- Ragdolls or appearances do not show: check that the host runs the
+  AllTogether server for the same Skyrim Together version. tp_client.log says
+  whether the server relays them.
+- "Wrong version" when joining: the server does not run the official
+  Skyrim Together Reborn 1.8.4. Every player and the server need 1.8.4.
+- RaceMenu appearances differ in detail: everyone needs the same RaceMenu,
+  race/body, overlay and preset-related mods.
+- Characters move while stuck in an idle pose: every player needs the same
+  generated behaviour output (Nemesis or Pandora, whichever the mod list
+  uses), enabled in every MO2 profile.
+
+Uninstall
+---------
+MO2: restore the backed-up files in the Skyrim Together Reborn mod, then
+remove AllTogether SKSE. Vortex: remove the mod and redeploy.

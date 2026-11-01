@@ -1,0 +1,10 @@
+# What the bundle is built from, pinned by commit:
+#   <branch> <commit> <folder on that branch>
+# The launcher line is the Together Launcher (targets.txt, build_launcher.py, Host/); the others are the add-ons,
+# each with StrAddon/apply_addon.py. Their SKSE plugin DLLs come from each add-on's release (unchanged by this
+# bundle).
+launcher feature/together-launcher-v2 6ea0a62c2052f16d2c1fc208bf6b739d9ba1f581 Mods/TogetherLauncher
+addon feature/ragdoll-together-v2 3ae4dab161105c8b62ce19df444afa0680084c48 Mods/RagdollTogether
+addon feature/skyparkour-together-v2 baee6044a5ca7e0375d145a04d26c36b40e5dfe7 Mods/SkyParkourTogether
+addon feature/racemenu-together-v2 9a0e593983fb1bdcc34a0b743b0bbb471d4cfd2c Mods/RaceMenuTogether
+addon feature/lipsync-together-v2 a9c27e085df3785cdfd069ed1015f05b72cad85a Mods/LipSyncTogether
