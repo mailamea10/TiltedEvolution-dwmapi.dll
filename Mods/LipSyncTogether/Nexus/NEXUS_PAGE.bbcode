@@ -1,0 +1,36 @@
+[center][size=6][b]LipSync Together[/b][/size]
+[size=4]Voice Lip Sync and Proximity Voice Chat for Skyrim Together Reborn[/size][/center]
+
+Talk through your character. Your mouth follows your speech, and nearby players can hear your voice through the in-game proximity voice chat. Audio is Opus-encoded and sent only while you speak.
+
+[size=5][b]Features[/b][/size]
+[list]
+[*]Lip sync follows speech and ignores most background noise.
+[*]Optional proximity voice chat with automatic yell and whisper range.
+[*]An in-game settings window opens with [font=Courier New]Shift+V[/font]. Adjust the microphone, volume, range and hotkeys while playing.
+[*]FOMOD offers a [b]Secure[/b] relay that requires a key relayed through the Skyrim Together server, or the [b]Open[/b] relay mode as tested.
+[*]One SKSE plugin supports all included game runtimes.
+[/list]
+
+[size=5][b]Requirements[/b][/size]
+Every player needs Skyrim Together Reborn of the same version, SKSE for their Skyrim version, and Mfg Fix NG or Mfg Fix for that version. Mfg Fix is not included. Each player who wants to send or hear voice must install this mod and enable voice chat.
+
+[size=5][b]Supported versions[/b][/size]
+[list]
+[*]Official Skyrim Together Reborn 1.8.4: Skyrim 1.7.104 and 1.6.1170/1.6.1179.
+[/list]
+The installer asks for your game version. Everyone in a session uses the official 1.8.4.
+
+[size=5][b]Voice chat setup and privacy[/b][/size]
+Voice chat is enabled by default. The host's game runs the relay automatically when the Skyrim Together server is on the same PC. The relay uses UDP port 10579; allow it through the firewall and forward it on the router for internet play. If the host joined through its public address, set [font=Courier New]HostVoiceRelay=On[/font].
+
+Secure mode exchanges each player's random key through Skyrim Together and rejects relay connections without a matching key. Skyrim Together retains these keys until its server restarts, so former players can still connect until then. Open mode allows anyone who can reach the relay port to join. The key controls relay access; it does not encrypt audio. Voice audio is not recorded or stored, but network packets are unencrypted.
+
+[size=5][b]Installation[/b][/size]
+Install the FOMOD, then put its [font=Courier New]SkyrimTogetherReborn/SkyrimTogether.exe[/font] beside the rest of the Skyrim Together files. MO2 users must copy the launcher into the Skyrim Together Reborn mod folder (back up the original first). Vortex users should load this mod after Skyrim Together Reborn and deploy. See the included README for full steps and troubleshooting.
+
+[size=5][b]Compatibility[/b][/size]
+Compatible with SkyParkour Together and RaceMenu Together; all three share the same launcher. Other mods that replace [font=Courier New]SkyrimTogether.exe[/font] conflict.
+
+[size=5][b]Credits and source[/b][/size]
+Unofficial GPLv3 add-on. Thanks to the Mfg Fix authors, Tilted Phoques and Skyrim Together Reborn contributors, and absol89. No Mfg Fix files are included. [url=https://github.com/mailamea10/TiltedEvolution-dwmapi.dll/tree/release/lipsync-together/Mods/LipSyncTogether]Source code[/url].

@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://qconsulting.ca/fo3/ModConfig5.0.xsd">
+  <moduleName>LipSync Together (Voice Lip Sync)</moduleName>
+  <moduleImage path="fomod\images\banner.png" />
+
+  <requiredInstallFiles>
+    <folder source="00 Core" destination="" priority="0" />
+  </requiredInstallFiles>
+
+  <installSteps order="Explicit">
+    <installStep name="Game version">
+      <optionalFileGroups order="Explicit">
+        <group name="Which Skyrim do you play on? (Skyrim Together 1.8.4)" type="SelectExactlyOne">
+          <plugins order="Explicit">
+            <plugin name="Skyrim 1.7.104">
+              <description>Skyrim Special/Anniversary Edition 1.7.104 with the Skyrim Together Reborn 1.8.4 for 1.7.104 from Nexus (SKSE 2.3.x).
+
+Installs the Skyrim Together launcher with the LipSync Together add-on (SkyrimTogetherReborn/SkyrimTogether.exe). Mod Organizer 2 users: after installing, copy it into your Skyrim Together Reborn mod's SkyrimTogetherReborn folder (back up the original first); see the README.</description>
+              <image path="fomod\images\banner.png" />
+              <files>
+                <folder source="10 STR 1.8.4 - 1.7.104" destination="" priority="0" />
+              </files>
+              <typeDescriptor>
+                <type name="Optional" />
+              </typeDescriptor>
+            </plugin>
+            <plugin name="Skyrim 1.6.1170 / 1.6.1179">
+              <description>Skyrim Special/Anniversary Edition 1.6.1170 or 1.6.1179 with the Skyrim Together Reborn 1.8.4 for 1.6.1170 from Nexus (SKSE 2.2.6).
+
+Installs the Skyrim Together launcher with the LipSync Together add-on (SkyrimTogetherReborn/SkyrimTogether.exe). Mod Organizer 2 users: after installing, copy it into your Skyrim Together Reborn mod's SkyrimTogetherReborn folder (back up the original first); see the README.</description>
+              <image path="fomod\images\banner.png" />
+              <files>
+                <folder source="11 STR 1.8.4 - 1.6.1170" destination="" priority="0" />
+              </files>
+              <typeDescriptor>
+                <type name="Optional" />
+              </typeDescriptor>
+            </plugin>
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
+
+    <installStep name="Voice relay access">
+      <optionalFileGroups order="Explicit">
+        <group name="Who can join voice chat?" type="SelectExactlyOne">
+          <plugins order="Explicit">
+            <plugin name="Require a server-relayed key (recommended)">
+              <description>Uses a random session key relayed through Skyrim Together. The relay rejects clients without a key from this server. Skyrim Together retains keys until its server restarts, so former players can still connect until then.</description>
+              <files>
+                <file source="fomod\security\LipSyncTogether-Secure.ini" destination="SKSE\Plugins\LipSyncTogether.ini" />
+              </files>
+              <typeDescriptor>
+                <type name="Recommended" />
+              </typeDescriptor>
+            </plugin>
+            <plugin name="Open relay (as tested)">
+              <description>Anyone who can reach the host's voice relay port can join and hear voice chat. Use only on a trusted network.</description>
+              <files>
+                <file source="fomod\security\LipSyncTogether-Open.ini" destination="SKSE\Plugins\LipSyncTogether.ini" />
+              </files>
+              <typeDescriptor>
+                <type name="Optional" />
+              </typeDescriptor>
+            </plugin>
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
+  </installSteps>
+</config>

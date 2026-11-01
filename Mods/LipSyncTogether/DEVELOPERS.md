@@ -1,0 +1,51 @@
+# LipSync Together: building and combining
+
+Everything needed to put LipSync Together into a Skyrim Together tree, alone or next to our other add-ons.
+
+## Layout
+
+| Path | What |
+|---|---|
+| `Plugin/` | SKSE plugin (`build.bat` from an x64 VS prompt; fetches and statically builds pinned Opus on first run), default `LipSyncTogether.ini` |
+| `StrAddon/Code/client/` | add-on sources copied into the STR tree |
+| `StrAddon/apply_addon.py` | applies the add-on to an STR tree |
+| `fomod/`, `README.txt`, `RELEASE_NOTES.md`, `Nexus/` | packaging and docs |
+| `.github/workflows/lipsync-together-release.yml` | builds the plugin, downloads the shared launchers, publishes the FOMOD |
+
+## Applying the add-on
+
+```
+python Mods/LipSyncTogether/StrAddon/apply_addon.py <STR tree> [--protocol 1.8.4|1.8.4]
+```
+
+It is idempotent and only touches:
+- `Code/client/World.cpp`: include and `ctx().emplace<LipSyncTogetherService>(...)` after `MapService`.
+- `Code/client/Games/Misc/BSScript.cpp`: include `LipSyncTogether/LipSyncNatives.h` and call
+  `LipSyncTogether_OnNativeRegistered(apFunction);` just before the hook chains to `RealRegisterPapyrusFunction`.
+  Mfg Fix NG registers its natives with CommonLib, which keeps the callback in a `std::function`, so the add-on needs
+  the function object itself, not the address `PapyrusService` records. The add-on checks the MSVC `std::function`
+  layout and the RTTI signature before calling anything.
+- `--protocol 1.8.4` (the default) and `--protocol 1.8.3` switch the relay's object id to 0: the official
+  builds skip id 0.
+
+Both anchors exist on the launcher base, Tilted Phoques' v1.8.4 (`54b3a858`). Applying it next to SkyParkour Together, RaceMenu Together and Ragdoll Together in any order is fine.
+
+## Independence from the other add-ons
+
+- Own service (`LipSyncTogetherService`), own wire prefix `STRLS1|` on the script animation relay.
+- Exports `STRLipSync_HostApiVersion` from the launcher; the plugin exports `STRLipSync_GetDescriptor`
+  (API version 8, `LipSyncTogether/STRLipSyncAPI.h`; voice-key exchange uses `STRVK1|` over the same server relay).
+- No server change. Messages are one of 104 fixed mouth states per player plus a session voice-key message plus a session voice-key message plus a session voice-key message, because the server's string cache
+  keeps every distinct relayed string until it restarts.
+
+## Shared launcher
+
+LipSync Together is listed in `Mods/TogetherLauncher/addons.txt` on `release/together-launcher`. Pushing that
+branch rebuilds all seven launchers with every listed add-on and then runs every mod's release workflow, this one
+included. This workflow refuses to package a launcher whose manifest does not list `release/lipsync-together`.
+
+## Local test build
+
+On a feature/test branch: `python <this branch>/Mods/LipSyncTogether/StrAddon/apply_addon.py .`, then
+`.\Build-STR.ps1`, and copy `Plugin/build/LipSyncTogether.dll` and `LipSyncTogether.ini` into the mod's
+`SKSE/Plugins`.
