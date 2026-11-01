@@ -1,0 +1,9 @@
+# The launchers the Together Launcher builds, one per Skyrim Together release and Skyrim runtime:
+#   <id> <source repository> <commit> <version> <protocol> <runtime> <folder>
+# version:  exactly what that release's own builds report; servers refuse any other.
+# protocol: how the release relays add-on messages (apply_host.py / apply_addon.py --protocol).
+# runtime:  1.7.104 or 1.6.1170 (also runs 1.6.1179).
+# folder:   where the launcher goes in the release archives and the bundle's FOMOD (underscores become spaces).
+# The server for each release is built from its first target.
+184-1.7.104  https://github.com/mailamea10/AllTogether-TiltedEvolution.git  54b3a858e228dc8807ed65bc3f9ac3c3f81b610d  v1.8.4  1.8.4  1.7.104   10_STR_1.8.4_-_1.7.104
+184-1.6.1170 https://github.com/mailamea10/AllTogether-TiltedEvolution.git  54b3a858e228dc8807ed65bc3f9ac3c3f81b610d  v1.8.4  1.8.4  1.6.1170  11_STR_1.8.4_-_1.6.1170
